@@ -40,10 +40,10 @@
 * **体积问题**：全量明日方舟多媒体素材高达数十 GB，严禁随安装包分发。
 * **获取策略**：由本地解析器扫描当前剧情脚本，生成该关专属的资源依赖清单，按需下载。
 * **公开静态源（CDN）**：
-  * **背景图**：`https://static.prts.wiki/assets/bg/{image_name}.png`
-  * **立绘图**：`https://static.prts.wiki/assets/character/{char_id}.png`
-  * **音频/音乐**：`https://static.prts.wiki/assets/audio/{music_key}.mp3`
-  * *注：PRTS 静态资源路径稳定公开，直接通过规则拼接下载，不触发动态接口限制。*
+  * **背景与 CG**：当前实测为 `https://torappu.prts.wiki/assets/avg/background/{key}.png`、`avg/images/{key}.png`，先将标识转为小写，并读取 `background.json` 的 PPU 适配参数。
+  * **立绘**：读取 `https://torappu.prts.wiki/assets/avg/character.json`，通过 body/index 选取单图，或合成身体底图与 `faceRect` 指定的表情切片；不能用角色标识直接拼图片路径。
+  * **音乐与音效**：读取 `story_variables.json`，先解析 `$key`，再把 `Sound_Beta_2/...` 映射到 `https://torappu.prts.wiki/assets/audio/...mp3`。
+  * 以上是 2026-11-02 对 TL-1/END 的观察，具体证据与兼容边界见 [演出对齐记录](player_alignment.md)。不再使用此前未经验证的 `static.prts.wiki/assets/bg/...` 示例。
 
 ---
 
@@ -167,3 +167,9 @@ PRTS 的核心演出引擎（`ScenarioSimulator` / `StoryPlayer`）运行于浏�
 * **阶段 5：演出打磨与异常防护（持续迭代）**
   * 参考 PRTS 源码校准震屏幅度（Matrix 动画）和立绘位移动画。
   * 注入 `UnknownCommandHandler` 防御性代码，发布首个完全离线运行的 Android APK。
+
+## 当前实现状态
+
+已完成独立的 Flutter 播放器核心、剧情 DSL 解析、静态资源映射与缓存、指令调度、舞台绘制、对白交互、音频接口和选择分支。应用层负责输入与资源准备，通过 `StoryPlayer(story: prepared)` 接入；入口未内置关卡地址。实际数据源与效果依据见 [演出对齐记录](player_alignment.md)。
+
+关卡目录页面、缓存更新策略、Android/iOS 真机性能与断网重启验收仍待完成。上面的阶段计划不代表已经交付完全离线 APK；Unity 粒子效果、通讯窗口裁切和震屏轨迹也仍有明确的对齐边界。
