@@ -28,12 +28,12 @@
 
 所有的资源获取必须绕过第三方的动态私有 API，统一采用公开、稳定且随游戏发包自动更新的数据源。
 
-### 1. 剧情文本与结构大纲（GitHub 解包仓库）
-* **数据源仓库**：`Kengxxiao/ArknightsGameData`（全服同步，由自动化工作流随游戏发包持续维护）。
+### 1. 剧情文本与结构大纲（官方解包数据）
+* **数据源**：`Kengxxiao/ArknightsGameData`（全服同步，由自动化工作流随游戏发包持续维护）。PRTS 静态数据站同步了同一套解包文件，并返回 `Access-Control-Allow-Origin: *`，客户端统一从这里读取。
 * **核心依赖文件**：
-  * **剧情索引大纲**：`zh_CN/gamedata/excel/story_review_table.json`
+  * **剧情索引大纲**：`https://torappu.prts.wiki/gamedata/latest/excel/story_review_table.json`
     * 映射了所有主线、插曲、别传、故事集、干员密录的先后关系、关卡名与剧情脚本路径。
-  * **原始剧情脚本**：`zh_CN/gamedata/story/**/*.txt`
+  * **原始剧情脚本**：`https://torappu.prts.wiki/gamedata/latest/story/{storyTxt}.txt`
     * 鹰角原生的 DSL 文本，文件体积仅数 KB，包含所有台词、立绘变换、音效指令。
 
 ### 2. 媒体素材（立绘、背景、BGM、音效）
@@ -152,8 +152,8 @@ PRTS 的核心演出引擎（`ScenarioSimulator` / `StoryPlayer`）运行于浏�
 ## 七、 分步实施与落地路线图
 
 * **阶段 1：数据层与目录展示（约 0.5 天）**
-  * 抓取 `Kengxxiao/ArknightsGameData` 中的 `story_review_table.json`。
-  * 搭建基础 Flutter App，展示主线、活动与干员密录树状列表。
+  * 读取 PRTS 的 `story_review_table.json`，按章节汇总可展示的剧情条目。
+  * 搭建基础 Flutter App，用列表和搜索展示主线、活动与干员密录剧情。
 * **阶段 2：解析器与下载器开发（约 1 天）**
   * 编写纯 Dart 的正则 Lexer，把 `.txt` 转换成结构化 `List<StoryCommand>`。
   * 提取素材清单，对接 PRTS 静态 CDN 实现多线程并发下载与本地文件系统持久化。
@@ -170,6 +170,6 @@ PRTS 的核心演出引擎（`ScenarioSimulator` / `StoryPlayer`）运行于浏�
 
 ## 当前实现状态
 
-已完成独立的 Flutter 播放器核心、剧情 DSL 解析、静态资源映射与缓存、指令调度、舞台绘制、对白交互、音频接口和选择分支。应用层负责输入与资源准备，通过 `StoryPlayer(story: prepared)` 接入；入口未内置关卡地址。实际数据源与效果依据见 [演出对齐记录](player_alignment.md)。
+已完成独立的 Flutter 播放器核心、剧情 DSL 解析、静态资源映射与缓存、指令调度、舞台绘制、对白交互、音频接口和选择分支。首页展示 PRTS 剧情索引的章节列表并支持搜索，选中条目后下载脚本与素材，通过 `StoryPlayer(story: prepared)` 接入。对白字体与滑动遮罩纹理已打包进 `assets/`，不随剧情下载。实际数据源与效果依据见 [演出对齐记录](player_alignment.md)。
 
-关卡目录页面、缓存更新策略、Android/iOS 真机性能与断网重启验收仍待完成。上面的阶段计划不代表已经交付完全离线 APK；Unity 粒子效果、通讯窗口裁切和震屏轨迹也仍有明确的对齐边界。
+缓存更新策略、Android/iOS 真机性能与断网重启验收仍待完成。上面的阶段计划不代表已经交付完全离线 APK；Unity 粒子效果、通讯窗口裁切和震屏轨迹也仍有明确的对齐边界。

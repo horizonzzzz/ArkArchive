@@ -5,10 +5,11 @@ import '../data/media_catalog.dart';
 import '../stage_state.dart';
 
 class StagePainter extends CustomPainter {
-  StagePainter(this.state, this.catalog, this.textures, this.slideMaskShader);
+  StagePainter(this.state, this.catalog, this.textures, this.slideMask, this.slideMaskShader);
   final StageState state;
   final MediaCatalog catalog;
   final Map<Uri, ui.Image> textures;
+  final ui.Image? slideMask;
   final ui.FragmentShader? slideMaskShader;
   static const bounds = Rect.fromLTWH(0, 0, 1280, 720);
 
@@ -100,7 +101,7 @@ class StagePainter extends CustomPainter {
     final alpha = state.blockerAlpha.clamp(0.0, 1.0);
     if (alpha <= 0) return;
     if (['slider', 'verticalslider'].contains(state.blockerStyle)) {
-      final mask = textures[MediaCatalog.slideMaskUri];
+      final mask = slideMask;
       final shader = slideMaskShader;
       if (mask != null && shader != null) {
         final vertical = state.blockerStyle == 'verticalslider';

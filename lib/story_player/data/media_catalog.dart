@@ -21,8 +21,9 @@ class MediaCatalog {
   final Map<String, dynamic> characters;
   final Map<String, dynamic> backgroundPpu;
   final Uri assetBase;
-  static final fontUri = Uri.parse('https://static.prts.wiki/NotoSansHans-Medium.woff2');
-  static final slideMaskUri = Uri.parse('https://static.prts.wiki/widgets/production/slide_mask.BQ3hXFW7.png');
+  /// 对白字体与滑动遮罩随应用打包，不随剧情下载。
+  static const fontAsset = 'assets/fonts/NotoSansHans-Medium.ttf';
+  static const slideMaskAsset = 'assets/images/slide_mask.png';
 
   static Future<MediaCatalog> load(AssetStore store) async {
     final urls = ['https://torappu.prts.wiki/gamedata/latest/story/story_variables.json',
@@ -105,7 +106,6 @@ class MediaCatalog {
           if (uri != null) { assets.add(uri); } else { warnings.add('未解析音频：${c.value(key)}'); }
         }
       }
-      if (c.tag == 'blocker' && ['slider', 'verticalslider'].contains(c.value('style'))) assets.add(slideMaskUri);
     }
     return assets;
   }

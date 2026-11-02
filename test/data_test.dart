@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -24,6 +24,8 @@ class MemoryCache extends FileCache {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('立绘按 body/index 选择差分并定位 face_overlay，保留路径层级和美元符', () {
     final catalog = MediaCatalog(
       variables: {'music': 'Sound_Beta_2/Music/Test/loop'},
@@ -72,11 +74,18 @@ void main() {
     expect(catalog.character(r'actor#99$1'), isNull);
     final warnings = <String>[];
     final dependencies = catalog.dependencies(
-      StoryScript.parse(r'[charslot(slot="m",name="actor#2$1")]' '\n' r'[Blocker(style="slider",fadetime=0.5)]'),
+      StoryScript.parse(
+        r'[charslot(slot="m",name="actor#2$1")]'
+        '\n'
+        r'[Blocker(style="slider",fadetime=0.5)]',
+      ),
       warnings,
     );
-    expect(dependencies, hasLength(3));
-    expect(dependencies, contains(MediaCatalog.slideMaskUri));
+    expect(dependencies, hasLength(2));
+    expect(
+      dependencies.any((u) => u.path.endsWith('.png') && u.host.isNotEmpty),
+      isTrue,
+    );
     expect(warnings, isEmpty);
   });
 
@@ -128,11 +137,20 @@ void main() {
         return http.Response(
           jsonEncode({
             'chapter': {
+              'name': '测试章节',
               'infoUnlockDatas': [
                 {
                   'storyCode': 'TEST',
                   'storyName': '测试',
+                  'avgTag': '行动前',
                   'storyTxt': 'obt/test/story',
+                  'storyCanShow': 1,
+                },
+                {
+                  'storyCode': 'HIDDEN',
+                  'storyName': '隐藏',
+                  'storyTxt': 'obt/test/hidden',
+                  'storyCanShow': 0,
                 },
               ],
             },
@@ -149,8 +167,20 @@ void main() {
     );
     expect(story.title, '测试剧情');
     expect(story.script.commands.single.text, '对白');
-    final entries = await repository.loadIndex();
-    expect(entries.single.path, 'obt/test/story');
-    expect(entries.single.title, 'TEST · 测试');
+    final groups = await repository.loadIndex();
+    expect(groups.single.name, '测试章节');
+    expect(groups.single.entries.single.path, 'obt/test/story');
+    expect(groups.single.entries.single.title, 'TEST 测试 行动前');
+  });
+
+  test('字体与滑动遮罩随应用打包，运行时不下载', () async {
+    final font = await rootBundle.load(MediaCatalog.fontAsset);
+    expect(font.lengthInBytes, greaterThan(1000000));
+    // FontLoader 只接受 SFNT 容器，WOFF2 不会让字体真正生效。
+    expect(String.fromCharCodes(font.buffer.asUint8List(0, 4)), isNot('wOF2'));
+    expect(
+      (await rootBundle.load(MediaCatalog.slideMaskAsset)).lengthInBytes,
+      greaterThan(0),
+    );
   });
 }

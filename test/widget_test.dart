@@ -8,11 +8,13 @@ import 'package:arknights_story_player/story_player/ui/story_stage.dart';
 import 'package:arknights_story_player/story_player/ui/story_text.dart';
 
 void main() {
-  testWidgets('入口没有硬编码故事，等待输入', (tester) async {
+  testWidgets('入口从 PRTS 目录选择剧情，不内置关卡输入框', (tester) async {
     await tester.pumpWidget(const MyApp());
-    expect(find.byKey(const Key('story-source')), findsOneWidget);
-    expect(find.text('加载全部资源并打开'), findsOneWidget);
-    expect(find.byType(DropdownButton<int>), findsNothing);
+    expect(find.byKey(const Key('story-search')), findsOneWidget);
+    expect(find.text('正在从 PRTS 读取剧情目录…'), findsOneWidget);
+    expect(find.byKey(const Key('story-source')), findsNothing);
+    // 测试环境的 HTTP 一律返回 400，等待首次目录请求落定，避免留下未完成的异步。
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('点击先补全当前文本，再推进到下一句，最后结束', (tester) async {

@@ -62,11 +62,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
-
+  # 剧情对白字体与滑动遮罩纹理随应用打包，运行时不联网获取。
+  assets:
+    - assets/fonts/NotoSansHans-Medium.ttf
+    - assets/images/slide_mask.png
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
   shaders:

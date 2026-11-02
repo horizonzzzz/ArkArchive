@@ -22,6 +22,8 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   late final StoryEngine engine;
   final Map<Uri, ui.Image> textures = {};
   ui.FragmentShader? slideMaskShader;
+  ui.Image? slideMask;
+  static const fontFamily = 'StoryNotoSans';
   bool ready = false;
 
   @override
@@ -50,19 +52,15 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
         textures[uri] = frame.image;
       } catch (e) { engine.warn('图片解码失败：$uri：$e'); }
     }
-    final font = widget.story.assets.peek(MediaCatalog.fontUri);
-    if (uris.contains(MediaCatalog.slideMaskUri)) {
-      try {
-        final program = await ui.FragmentProgram.fromAsset('assets/shaders/slide_mask.frag');
-        slideMaskShader = program.fragmentShader();
-      } catch (e) {
-        engine.warn('滑动遮罩 shader 加载失败：$e');
-      }
-    }
-    if (font != null) {
-      try { await (FontLoader('StoryNotoSans')..addFont(Future.value(ByteData.sublistView(font)))).load(); }
-      catch (e) { engine.warn('字体加载失败：$e'); }
-    }
+    try {
+      slideMaskShader = (await ui.FragmentProgram.fromAsset('assets/shaders/slide_mask.frag')).fragmentShader();
+      final data = await rootBundle.load(MediaCatalog.slideMaskAsset);
+      final codec = await ui.instantiateImageCodec(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
+      slideMask = (await codec.getNextFrame()).image;
+      codec.dispose();
+    } catch (e) { engine.warn('滑动遮罩加载失败：$e'); }
+    try { await (FontLoader(fontFamily)..addFont(rootBundle.load(MediaCatalog.fontAsset))).load(); }
+    catch (e) { engine.warn('字体加载失败：$e'); }
     if (!mounted) return;
     setState(() => ready = true);
   }
@@ -96,7 +94,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
       IconButton(tooltip: '诊断', onPressed: () => _showLog(diagnostics: true), icon: Badge(isLabelVisible: engine.warnings.isNotEmpty, child: const Icon(Icons.info_outline))),
     ])),
     Expanded(child: ready ? Stack(alignment: Alignment.center, children: [
-      Positioned.fill(child: StoryStage(engine: engine, catalog: widget.story.catalog, textures: textures, slideMaskShader: slideMaskShader)),
+      Positioned.fill(child: StoryStage(engine: engine, catalog: widget.story.catalog, textures: textures, slideMask: slideMask, slideMaskShader: slideMaskShader, fontFamily: fontFamily)),
       AnimatedBuilder(animation: engine, builder: (context, _) => engine.cursor == 0 || engine.finished ? FilledButton.icon(onPressed: engine.finished ? engine.restart : engine.start, icon: Icon(engine.finished ? Icons.replay : Icons.play_arrow), label: Text(engine.finished ? '重新播放' : '开始播放')) : const SizedBox.shrink()),
     ]) : const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(), SizedBox(height: 16), Text('正在解码演出资源…')]))),
   ])));
@@ -104,6 +102,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   @override
   void dispose() {
     slideMaskShader?.dispose();
+    slideMask?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     engine.dispose();
     for (final texture in textures.values) { texture.dispose(); }

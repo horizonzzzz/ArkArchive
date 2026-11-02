@@ -21,7 +21,7 @@
 
 页面资源调度与映射代码见 [StoryPlayer.QBOFHASl.js](https://static.prts.wiki/widgets/production/StoryPlayer.QBOFHASl.js) 和 [context.DG_3DzZj.js](https://static.prts.wiki/widgets/production/context.DG_3DzZj.js)。文件名包含构建哈希，未来可能变化；它们仅作为本次对齐依据，应用不下载执行这些 JavaScript。
 
-公开游戏数据的 `story_review_table.json` 将本剧情定位到 `activities/act55side/level_act55side_01_end`。可直接加载[原始脚本](https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata/story/activities/act55side/level_act55side_01_end.txt)，不需要在播放器内预置关卡链接。
+公开游戏数据的 [story_review_table.json](https://torappu.prts.wiki/gamedata/latest/excel/story_review_table.json) 将本剧情定位到 `activities/act55side/level_act55side_01_end`。首页目录直接读取这张表（`storyCanShow=1` 的条目，按章节分组），再按 `storyTxt` 拼出[原始脚本](https://torappu.prts.wiki/gamedata/latest/story/activities/act55side/level_act55side_01_end.txt)。该静态站返回 `Access-Control-Allow-Origin: *`，Web 端同样可读；应用不需要内置关卡列表。
 
 ## 已核实的映射与布局
 
@@ -33,31 +33,31 @@
 | 表情合成 | `bakeFaceOverlayTexture` 先画完整身体，再把整张表情切片画入 `faceRect` | `StagePainter._character` |
 | 立绘大小与位置 | 逻辑舞台 1280×720，L/M/R 中心 x 为 440/640/840；左上角 x=`slotX-width/2+pos.x`，y=`720-height/2-pos.y` | `StagePainter._character` |
 | 角色焦点 | `applyCharacterSlotFocus` 将非焦点角色亮度设为 0.5；`focus="n"` 使全部变暗 | `StoryEngine._characterSlot` |
-| 主对白字体 | PRTS 网络字体是 `NotoSansHans-Medium.woff2`，weight=500，正文 24px、姓名最大 30px | 运行时下载同一 WOFF2 文件并交给 `FontLoader` |
+| 主对白字体 | PRTS 网络字体是 `NotoSansHans-Medium.woff2`，weight=500，正文 24px、姓名最大 30px | 转成 TTF 后打包为 `assets/fonts/NotoSansHans-Medium.ttf`，运行时交给 `FontLoader` |
 | 对白区域 | 底部区域高 182；姓名左边 20.7501、宽 312.3；正文左边 382.28、宽 735；姓名灰色、正文白色 | `StoryStage`，已移除原型的金色边框与姓名色 |
 | 打字机 | 默认每字 40ms；点击未完成文本先补全，再次点击推进 | `StoryEngine`、`storyTextSpans`；未显示字符仍参与排版 |
 | 背景与立绘过渡 | `fadetime` / `duration` 按秒；`block` 与 `isblock` 分别控制队列等待；非阻塞动画与后续对白并行 | 运行时可取消的动画调度 |
 | 音频 | BGM 前奏只播一次，循环体单独循环；默认 crossfade 为 0.4 秒；音效默认 channel 为 key，可独立停止 | `JustAudioOutput`，播放列表与双播放器淡化 |
 
-PRTS 当前生产代码将主对白字体定义为 `NotoSansHans-Medium`、weight=500，文件名为 `NotoSansHans-Medium.woff2`，并从 [PRTS 实际加载的地址](https://static.prts.wiki/NotoSansHans-Medium.woff2) 请求。Flutter 使用同一文件；该地址 HEAD 返回 200，但浏览器实测缺少允许跨域访问的响应头，Web 会记录加载失败并回退到系统字体。字体许可及各平台字形光栅化差异仍需独立确认。当前不把字体或游戏资源打入安装包。
+PRTS 当前生产代码将主对白字体定义为 `NotoSansHans-Medium`、weight=500；上游[原始文件](https://static.prts.wiki/NotoSansHans-Medium.woff2) 是 WOFF2。`FontLoader` 只接受 TTF/OTF 容器，Android、iOS 和桌面端都无法解码 WOFF2，因此仓库保存了用 fontTools 转出的 `assets/fonts/NotoSansHans-Medium.ttf`（约 8 MiB，未做子集裁剪），运行时从 `rootBundle` 读取，不再请求网络。字体为 Noto Sans 的 OFL 授权，可随应用分发；各平台字形光栅化差异仍需独立确认。
 
 ## 核心模块边界
 
 - `lib/main.dart`：仅启动应用。
-- `lib/app/`：主题、输入和资源加载进度；未来可替换成关卡选择页。
+- `lib/app/`：主题、PRTS 剧情目录列表与资源加载进度。
 - `lib/story_player/script.dart`：纯脚本解析，保留命令参数、原始文本和行号。
 - `lib/story_player/data/`：故事文档与目录、资源映射、按 URL 去重预加载、原生端原子写入缓存。Web 暂为内存缓存。
 - `lib/story_player/runtime/`：注册制指令处理、阻塞/并行动画、对白与选择分支、音频输出。未知命令记录诊断后继续。
 - `lib/story_player/ui/`：1280×720 舞台缩放、立绘合成、文本、播放控制与诊断。
 - `lib/story_player/story_player.dart`：供外部页面使用的导出入口。
 
-外部页面通过 `StoryRepository.load` 或自己构建 `StoryDocument`，然后调用 `prepare`，最后将 `PreparedStory` 传给 `StoryPlayer(story: prepared)`。播放器组件不读取 URL 输入、不查询关卡目录，也没有内置剧情列表。音频接口可注入静音实现，便于测试。
+外部页面用 `StoryRepository.loadIndex()` 取目录、`loadEntry()` 下载脚本，或直接用 `load(Uri)` 指定脚本地址，再调用 `prepare`，最后把 `PreparedStory` 传给 `StoryPlayer(story: prepared)`。播放器组件本身不读取 URL、不查询目录，也没有内置剧情列表；目录逻辑只在 `StoryRepository`。音频接口可注入静音实现，便于测试。
 
 ## 尚未完全对齐的效果
 
 1. **游戏动态效果**：本剧情含 7 条 `bgeffect` 和 3 条 `effect`。当前 PRTS 生产播放器对这些指令给出 `unsupported_command` 并跳过；官方变量表可核实名称映射（例如 `$eb_burn` → `AVG_fire_01`），但这不足以推出 Prefab 内部粒子曲线或 Shader。本实现明确记录未支持项，不按名称臆造粒子。
 2. **镜头震动**：已支持脚本强度、持续时间与衰减；具体轨迹与游戏随机序列尚未做逐帧校准。
-3. **滑动转场**：PRTS 生产播放器加载 `https://static.prts.wiki/widgets/production/slide_mask.BQ3hXFW7.png`，并在 shader 中使用 `slide=0.601`、`end=0.641`、横向 `extent=0.787`（纵向 `extent=1`）和 `progress=clamp((alpha-0.2)*1.25,0,1)`。Flutter 版本复用该纹理及公式；shader 像素测试验证了预乘透明度输出。Web 实测该纹理受 CORS 限制，加载失败时回退到线性遮罩；坐标朝向与光栅化仍需逐帧比较。
+3. **滑动转场**：PRTS 生产播放器加载 `https://static.prts.wiki/widgets/production/slide_mask.BQ3hXFW7.png`，并在 shader 中使用 `slide=0.601`、`end=0.641`、横向 `extent=0.787`（纵向 `extent=1`）和 `progress=clamp((alpha-0.2)*1.25,0,1)`。Flutter 版本复用该纹理及公式，纹理已保存为 `assets/images/slide_mask.png` 并从 `rootBundle` 读取；shader 像素测试验证了预乘透明度输出。坐标朝向与光栅化仍需逐帧比较，纹理缺失时回退到线性遮罩。
 4. **通讯窗口**：可按 channel 处理尺寸动画、头像和开关；遮罩边缘、头像裁切和嵌套窗口尚需游戏画面对照。
 5. **长尾指令**：复杂贴纸、动画标题、视频与特殊角色动作未承诺支持。运行中可通过诊断查看跳过项。
 6. **原生验收**：当前设备只有 Windows 与浏览器，没有连接 Android / iOS 真机。浏览器构建和测试不替代移动设备的音频衔接、横屏、飞行模式重启和帧率验收。Windows 的 `just_audio` 需要独立的平台实现，本轮以 Android/iOS/Web 为音频目标。
@@ -67,12 +67,12 @@ PRTS 当前生产代码将主对白字体定义为 `NotoSansHans-Medium`、weigh
 ## 本轮验证结果
 
 - `flutter analyze`：通过，无诊断。
-- `flutter test --reporter expanded`：15 项通过，1 项联网测试按默认配置跳过；包含滑动遮罩 shader 的像素输出回归。
+- `flutter test --reporter expanded`：16 项通过，1 项联网测试按默认配置跳过；包含滑动遮罩 shader 的像素输出回归和打包字体/纹理的可读性检查。
 - `flutter build web --release --no-web-resources-cdn`：通过，输出位于 `build/web/`。
 - `git diff --check`：将 CRLF 按 Windows 换行处理后通过。
-- 浏览器：TL-1 原始脚本完成加载并显示「开始播放」，点击后按钮消失；字体与滑动遮罩纹理被 CORS 拦截。后续自动化控制超时，未完成对白推进及整段播放验收。
+- 浏览器：TL-1 原始脚本完成加载并显示「开始播放」，点击后按钮消失。该轮字体与滑动遮罩纹理被 CORS 拦截；两项现已改为打包资源，尚未在浏览器重新跑完整演出验收。
 - 独立联网测试：GitHub 脚本入口因本机 DNS 解析失败退出；改用 PRTS TL-1/END 页面后通过。解析 639 条指令，检查 92 个静态资源并成功解码 63 张图片，解码内存约 134.3 MiB；未支持指令为 `bgeffect`、`effect`。这项检查验证资源下载与图片解码，不代表音频听感或完整演出验收。
 
 ## 资源与授权边界
 
-公共可访问不代表获准再分发。游戏文本、立绘、CG 与音频不提交到仓库或捆绑到安装包；开发时只按需请求公开源。用户自有资源的导入也不能被笼统描述为「零侵权风险」。发布前仍需核实上游服务使用条件与素材授权。
+公共可访问不代表获准再分发。游戏文本、立绘、CG 与音频不提交到仓库或捆绑到安装包；开发时只按需请求公开源。仓库内只有两类上游静态资源：OFL 授权的 Noto Sans 字体（转为 TTF）和滑动遮罩纹理，均用于渲染效果。用户自有资源的导入也不能被笼统描述为「零侵权风险」。发布前仍需核实上游服务使用条件与素材授权。

@@ -6,10 +6,11 @@ import 'stage_painter.dart';
 import 'story_text.dart';
 
 class StoryStage extends StatelessWidget {
-  const StoryStage({super.key, required this.engine, required this.catalog, required this.textures, this.fontFamily = 'StoryNotoSans', this.slideMaskShader});
+  const StoryStage({super.key, required this.engine, required this.catalog, required this.textures, this.slideMask, this.slideMaskShader, this.fontFamily = 'StoryNotoSans'});
   final StoryEngine engine;
   final MediaCatalog catalog;
   final Map<Uri, ui.Image> textures;
+  final ui.Image? slideMask;
   final String fontFamily;
   final ui.FragmentShader? slideMaskShader;
 
@@ -34,7 +35,7 @@ class StoryStage extends StatelessWidget {
       return FittedBox(fit: BoxFit.contain, child: SizedBox(width: 1280, height: 720,
         child: GestureDetector(key: const Key('story-stage'), behavior: HitTestBehavior.opaque, onTap: engine.advance,
           child: Stack(fit: StackFit.expand, children: [
-            CustomPaint(painter: StagePainter(s, catalog, textures, slideMaskShader)),
+            CustomPaint(painter: StagePainter(s, catalog, textures, slideMask, slideMaskShader)),
             if (s.dialogueVisible) IgnorePointer(child: Opacity(opacity: s.dialogueAlpha.clamp(0, 1), child: Stack(children: [
               Positioned(left: 0, right: 0, bottom: 0, height: 182, child: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black.withValues(alpha: .85)], stops: const [0, .6])))),
               Positioned(left: 20.75, width: 312.3, top: 622.9, child: Text(s.speaker, textAlign: TextAlign.right, textScaler: TextScaler.noScaling, style: base.copyWith(fontSize: nameSize, color: const Color(0xff929292)))),
