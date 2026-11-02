@@ -84,7 +84,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(backgroundColor: Colors.black, body: SafeArea(child: Column(children: [
+  Widget build(BuildContext context) => Scaffold(backgroundColor: Colors.black, body: SafeArea(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
     AnimatedBuilder(animation: engine, builder: (context, _) => Row(children: [
       IconButton(tooltip: '退出播放器', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back)),
       Expanded(child: Text(widget.story.document.title, maxLines: 1, overflow: TextOverflow.ellipsis)),

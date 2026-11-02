@@ -60,7 +60,7 @@ PRTS 当前生产代码将主对白字体定义为 `NotoSansHans-Medium`、weigh
 3. **滑动转场**：PRTS 生产播放器加载 `https://static.prts.wiki/widgets/production/slide_mask.BQ3hXFW7.png`，并在 shader 中使用 `slide=0.601`、`end=0.641`、横向 `extent=0.787`（纵向 `extent=1`）和 `progress=clamp((alpha-0.2)*1.25,0,1)`。Flutter 版本复用该纹理及公式，纹理已保存为 `assets/images/slide_mask.png` 并从 `rootBundle` 读取；shader 像素测试验证了预乘透明度输出。坐标朝向与光栅化仍需逐帧比较，纹理缺失时回退到线性遮罩。
 4. **通讯窗口**：可按 channel 处理尺寸动画、头像和开关；遮罩边缘、头像裁切和嵌套窗口尚需游戏画面对照。
 5. **长尾指令**：复杂贴纸、动画标题、视频与特殊角色动作未承诺支持。运行中可通过诊断查看跳过项。
-6. **原生验收**：当前设备只有 Windows 与浏览器，没有连接 Android / iOS 真机。浏览器构建和测试不替代移动设备的音频衔接、横屏、飞行模式重启和帧率验收。Windows 的 `just_audio` 需要独立的平台实现，本轮以 Android/iOS/Web 为音频目标。
+6. **原生验收**：Windows 已通过 `just_audio_windows` 接入音频平台实现，release 构建通过；尚未验收实际音频播放。Android / iOS 真机未连接，浏览器构建和测试不能替代移动设备的音频衔接、横屏、飞行模式重启和帧率验收。
 
 持久缓存目前按 URL 的 SHA-256 命名，保留媒体扩展名并在下载完成后原子重命名。不同 URL 的相同内容尚未做内容哈希去重；`latest` 元数据与脚本尚未建立版本更新/失效策略。缓存命中与纯内存模拟测试不能代替完整断网验收。
 
@@ -72,6 +72,14 @@ PRTS 当前生产代码将主对白字体定义为 `NotoSansHans-Medium`、weigh
 - `git diff --check`：将 CRLF 按 Windows 换行处理后通过。
 - 浏览器：TL-1 原始脚本完成加载并显示「开始播放」，点击后按钮消失。该轮字体与滑动遮罩纹理被 CORS 拦截；两项现已改为打包资源，尚未在浏览器重新跑完整演出验收。
 - 独立联网测试：GitHub 脚本入口因本机 DNS 解析失败退出；改用 PRTS TL-1/END 页面后通过。解析 639 条指令，检查 92 个静态资源并成功解码 63 张图片，解码内存约 134.3 MiB；未支持指令为 `bgeffect`、`effect`。这项检查验证资源下载与图片解码，不代表音频听感或完整演出验收。
+
+## 播放后黑屏修复
+
+Windows 与 Web 出现音乐和历史记录正常、舞台全黑且无法点击的问题，根因是 `StoryPlayer` 外层 `Column` 未提供紧的横向约束。开始按钮消失后，`Stack` 唯一的非定位子组件变为 `SizedBox.shrink()`，使 `Positioned.fill` 中的整个舞台缩为零宽。外层改用 `CrossAxisAlignment.stretch`，让舞台始终占满可用宽度。
+
+`test/story_player_layout_test.dart` 直接挂载完整播放器，覆盖开始按钮消失后的舞台宽度、点击补全文本和推进对白。旧代码可复现宽度期望 800、实际 0；单独测试 `StoryStage` 无法覆盖这一外层约束。
+
+修复后验证：`flutter test --reporter expanded` 为 17 项通过、1 项联网测试按配置跳过；`flutter analyze` 无诊断。Windows 与 Web 的真实关卡画面仍需运行复验。
 
 ## 资源与授权边界
 
