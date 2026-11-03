@@ -19,7 +19,7 @@
 - `assets/audio/avg/d_avg_battlefield_environment.mp3`。
 - `assets/audio/avg/d_avg_warmbonfire_loop.mp3`。
 
-页面资源调度与映射代码见 [StoryPlayer.QBOFHASl.js](https://static.prts.wiki/widgets/production/StoryPlayer.QBOFHASl.js) 和 [context.DG_3DzZj.js](https://static.prts.wiki/widgets/production/context.DG_3DzZj.js)。文件名包含构建哈希，未来可能变化；它们仅作为本次对齐依据，应用不下载执行这些 JavaScript。
+页面资源调度与映射代码见 [StoryPlayer.DH9HUkmm.js](https://static.prts.wiki/widgets/production/StoryPlayer.DH9HUkmm.js) 和 [context.DG_3DzZj.js](https://static.prts.wiki/widgets/production/context.DG_3DzZj.js)。文件名包含构建哈希，未来可能变化；它们仅作为本次对齐依据，应用不下载执行这些 JavaScript。
 
 公开游戏数据的 [story_review_table.json](https://torappu.prts.wiki/gamedata/latest/excel/story_review_table.json) 将本剧情定位到 `activities/act55side/level_act55side_01_end`。首页目录直接读取这张表（`storyCanShow=1` 的条目，按章节分组），再按 `storyTxt` 拼出[原始脚本](https://torappu.prts.wiki/gamedata/latest/story/activities/act55side/level_act55side_01_end.txt)。该静态站返回 `Access-Control-Allow-Origin: *`，Web 端同样可读；应用不需要内置关卡列表。
 
@@ -63,6 +63,67 @@ PRTS 当前生产代码将主对白字体定义为 `NotoSansHans-Medium`、weigh
 6. **原生验收**：Windows 已通过 `just_audio_windows` 接入音频平台实现，release 构建通过；尚未验收实际音频播放。Android / iOS 真机未连接，浏览器构建和测试不能替代移动设备的音频衔接、横屏、飞行模式重启和帧率验收。
 
 持久缓存目前按 URL 的 SHA-256 命名，保留媒体扩展名并在下载完成后原子重命名。不同 URL 的相同内容尚未做内容哈希去重；`latest` 元数据与脚本尚未建立版本更新/失效策略。缓存命中与纯内存模拟测试不能代替完整断网验收。
+
+## 指令覆盖审计（2026-11-03）
+
+本节以当时线上构建 `StoryPlayer.DH9HUkmm.js` 的指令分发表，以及 `story_review_table.json` 中的 2061 条 `storyTxt` 为样本，统计公开剧情脚本的指令分布。成功下载 2036 条（25 条返回 404），共 695,675 条指令行与 370,397 条对白行；只统计标签，不提交脚本和素材。
+
+参考端指令表有 58 个 tag，可执行 56 个（`bgeffect`、`effect` 直接给出 `unsupported_command`）。Flutter 侧注册 28 个，命中其中 27 个，29 个未实现。按指令行计已覆盖 95.9%，参考端可执行而本实现缺失的占 3.6%，参考端同样跳过的占 0.5%，两端都不认识的拼写错误占 0.3%。脚本级影响更集中：约 40% 的脚本至少缺一个效果。
+
+### 缺失且可按参考实现复现
+
+| 指令 | 参考端行为 | 脚本占比 | 次数 |
+|---|---|---|---|
+| `cameraeffect` | `Grayscale` 全屏灰度（`amount`/`initamount`/`keep`/`block`）与 `Colorinverse` 反色 | 31.5% | 2,152 |
+| `subtitle` | `x`/`y`/`width`/`size`/`alignment` 的旁白打字机，`multi` 可续接 | 30.0% | 8,107 |
+| `multiline` | 同一句对白多行续接，`end=true` 结束 | 24.1% | 1,968 |
+| `characteraction` | `move`/`jump`/`shake`/`zoom`/`exit`，含方向、`power`、随机角度与次数 | 22.0% | 4,599 |
+| `sticker` 家族 | 自由坐标富文本贴纸、打字机、`stickertween`/`timersticker`/`stickerclear` | 12.0% | 5,915 |
+| `animtext` | 仅 `group_location_stamp`：地点印章与 `<p=n>` 分段 | 6.4% | 264 |
+| `charactercutin` | 立绘切入与 7 种展开遮罩 | 5.4% | 650 |
+| `gridbg`/`verticalbg`/`largebg` | 多图拼接大场景、实色缝隙、`initposmode` | 4.9% / 0.6% / 2.4% | 226 / 32 / 123 |
+| `largebgtween`/`largeimgtween` | 大场景补间，含 `ease`/`loop` | 4.7% | 150 |
+| `cgitem`/`hidecgitem` | CG 道具层的透明度、位置、旋转与颜色动画 | 3.4% | 202 |
+| `avgdisplay` | 仅 `style=bg` 有实现 | 1.8% | 137 |
+| `showitem`/`hideitem` | 照片框/剪影框道具与相框 sprite | 1.2% | 24 / 25 |
+| `focusparam` | 聚焦层的 `blur` 与 `Grayscale`/`Colorinverse` | 0.8% | 30 |
+| `imagerotate` | 图片旋转与圈数 | 0.6% | 22 |
+| `theater` | 剧院模式：隐藏 UI 并强制自动播放 | 1.0% | 41 |
+| `video` | 全屏播放 `res`/`url`，播完恢复 UI | 0.3% | 7 |
+| `spellsticker` | `sami`/`fire` 两种特殊字体样式 | 0.3% | 17 |
+| `skipnode`/`skiptothis` | 跳过模式的分支节点 | 0.3% | 11 / 2 |
+
+### 已实现但语义或参数不全
+
+| 指令 | 缺口 | 语料证据 |
+|---|---|---|
+| `blocker` | 缺 `image` 与 `rfrom/gfrom/bfrom`；缺省 `a` 应为 1，当前按 0 处理（`story_engine.dart` 的 `_blocker`） | 缺 `a` 316 行；`image` 8 行 |
+| `curtain` | 只画 0/2/4/6 方向，缺 1/3/5/7、`a`、`grad`、`delay` | 方向 1/3/5/7 共 77 行；`grad` 394 行 |
+| `charslot` | `action=zoom/jump/shake` 与 `bstart/bend` 边缘黑化未实现，`action` 只用于判断 `setpos` | `action` 1,533 行；`bstart/bend` 约 3,900 行 |
+| `character` | 缺 `xpos1/ypos1`、`transtype`、`enter`、`blackstart/blackend` | — |
+| `camerashake` | 缺 `stop`、负数时长（=无限）、`randomness`；负时长当前不产生位移 | `duration=-1` 234 行；`stop` 13 行 |
+| `focusout` | 缺 `lbg`/`cgitem` 目标与 `id` 通道；缓动为线性，参考端用 smoothstep | `cgitem` 25、`lbg` 12 |
+| `interlude` | 只有矩形裁剪与头像；缺 6 种 `maskid` 模板、`type`、`slot`/`style`、`icharpos`/`icharscale`、`pfrom`/`pto`、`sfrom`/`sto`、`aduration` | `maskid` 192 行；`type=2/1` 共 110 行在当前实现中显示为空窗口 |
+| `background`/`image` | 缺 `tiled`、`width`/`height` 倍率；缺省 `screenadapt` 时参考端不缩放，本实现按 `coverall` 缩放 | `background.width` 188 行；抽样 `image` 中 71% 省略 `screenadapt` |
+| `imagetween`/`backgroundtween` | `loop` 只记录警告，`ease` 未实现 | — |
+| `decision`/`predicate` | 只保留最后一次选择，多决策分支会走错；缺 `disabled` 选项 | 395 个脚本含分支 |
+| `warp` | 拒绝回跳，参考端允许按标签跳转 | 7 行 |
+| `header` | 未消费元数据：`fit_mode=BLACK_MASK`（黑边）、标题、`is_video_only`、`is_tutorial`、`is_skippable` | 2,036 行 header 被忽略 |
+| 播放速度 | 缺 1×/2.5×/快速档，`delay` 与打字机不随档位缩放 | 固定 40ms |
+
+### 参考端同样不处理，无法逆向
+
+判据是参考 JS 自身对这些输入给出 `unsupported_command` 或 `unsupported_visual`，公开数据里只有名字：
+
+- `bgeffect`/`effect`：`ca=new Set(['bgeffect','effect'])`；`story_variables.json` 仅提供 `e_slash_01_l` → `AVG_daoguang_attack_01_large` 一类映射，对应 PNG 与 `.prefab` 路径均 404。语料 1,984 + 1,173 行。
+- `avgdisplay` 的 `bgeffect`/`animekv`/`effect` 样式（51 行）、`animtext` 除 `group_location_stamp` 外的名字、`cameraeffect=Chaos`（26 行）、`cgitem style=blocker`、非内置 `charslot` 槽位。
+- 镜头与立绘动作的随机轨迹使用 `Math.random()` 且无种子，只能做到统计意义上相似；Pixi Text（WOFF2）与 Skia（TTF）的换行和字距也不会逐像素一致。
+
+### 需要额外素材或平台能力
+
+- 视频：`/assets/video/**/*.mp4` 公开可访问（实测 HTTP 206），路径需小写；Flutter 需引入播放插件，Windows 桌面没有官方 `video_player` 实现。
+- 字体：`spellsticker` 用 `FZTYSK--GBK1-0.woff2`、`RoHMinSinkStd-UB.woff2`，`animtext` 用 `SourceHanSansCN-Heavy.woff2`；`FontLoader` 只接受 TTF/OTF，需转换并核对授权。
+- `showitem` 相框、`interlude` 的 6 套模板、`animtext` 印章 sprite 都在 widget bundle 中；`avg/cutin/` 目录尚未在 `MediaCatalog.image` 中映射。
 
 ## 本轮验证结果
 
