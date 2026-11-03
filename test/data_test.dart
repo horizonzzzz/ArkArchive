@@ -138,6 +138,7 @@ void main() {
           jsonEncode({
             'chapter': {
               'name': '测试章节',
+              'entryType': 'MAINLINE',
               'infoUnlockDatas': [
                 {
                   'storyCode': 'TEST',
@@ -171,6 +172,12 @@ void main() {
     expect(groups.single.name, '测试章节');
     expect(groups.single.entries.single.path, 'obt/test/story');
     expect(groups.single.entries.single.title, 'TEST 测试 行动前');
+    expect(groups.single.entryType, 'MAINLINE');
+    expect(groups.single.entries.single.code, 'TEST');
+    expect(groups.single.entries.single.name, '测试');
+    expect(groups.single.entries.single.tag, '行动前');
+    expect(const StoryGroup('旧调用', []).entryType, 'NONE');
+    expect(const StoryEntry('旧标题', 'old/path').name, isEmpty);
   });
 
   test('字体与滑动遮罩随应用打包，运行时不下载', () async {

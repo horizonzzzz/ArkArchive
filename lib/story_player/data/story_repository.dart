@@ -11,15 +11,19 @@ class StoryDocument {
 }
 
 class StoryEntry {
-  const StoryEntry(this.title, this.path);
+  const StoryEntry(this.title, this.path, {this.code = '', this.name = '', this.tag = ''});
   final String title;
   final String path;
+  final String code;
+  final String name;
+  final String tag;
 }
 
 class StoryGroup {
-  const StoryGroup(this.name, this.entries);
+  const StoryGroup(this.name, this.entries, {this.entryType = 'NONE'});
   final String name;
   final List<StoryEntry> entries;
+  final String entryType;
 }
 
 class StoryRepository {
@@ -53,9 +57,13 @@ class StoryRepository {
         final path = story['storyTxt']?.toString() ?? '';
         if (path.isEmpty || story['storyCanShow'] != 1) continue;
         final label = [story['storyCode'], story['storyName'], story['avgTag']].where((s) => s != null && s.toString().isNotEmpty).join(' ');
-        entries.add(StoryEntry(label, path));
+        entries.add(StoryEntry(label, path,
+          code: story['storyCode']?.toString() ?? '',
+          name: story['storyName']?.toString() ?? '',
+          tag: story['avgTag']?.toString() ?? '',
+        ));
       }
-      if (entries.isNotEmpty) result.add(StoryGroup(group['name']?.toString() ?? '${group['id']}', entries));
+      if (entries.isNotEmpty) result.add(StoryGroup(group['name']?.toString() ?? '${group['id']}', entries, entryType: group['entryType']?.toString() ?? 'NONE'));
     }
     return result;
   }
