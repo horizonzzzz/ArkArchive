@@ -24,6 +24,12 @@
       "sourceType": "github",
       "skillPath": "skills/flutter-fix-layout-issues/SKILL.md",
       "computedHash": "1aaba922c951159118f9b141788f7bb7b8167bdc0bd5c6f0738ebb90c29b9532"
+    },
+    "impeccable-flutter": {
+      "source": "tarcisiojr/impeccable-flutter",
+      "sourceType": "github",
+      "skillPath": "skill/SKILL.md",
+      "computedHash": "354a9ee3c0179140ea5d3008556824485c87f1880ee888d8708d7fb7483a6d7c"
     }
   }
 }

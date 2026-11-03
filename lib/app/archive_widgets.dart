@@ -3,7 +3,12 @@ import 'package:flutter/material.dart';
 import 'app_theme.dart';
 
 class ArchiveHeading extends StatelessWidget {
-  const ArchiveHeading(this.title, this.subtitle, {super.key, this.trailing});
+  const ArchiveHeading(
+    this.title, {
+    super.key,
+    this.subtitle = '',
+    this.trailing,
+  });
   final String title;
   final String subtitle;
   final Widget? trailing;
@@ -14,26 +19,35 @@ class ArchiveHeading extends StatelessWidget {
     children: [
       Container(
         width: 3,
-        height: 36,
-        margin: const EdgeInsets.only(right: 12),
+        height: 22,
+        margin: const EdgeInsets.only(right: 10),
         color: AppColors.cyan,
       ),
       Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              subtitle,
-              style: const TextStyle(
-                fontSize: 10,
-                letterSpacing: 2,
-                color: AppColors.muted,
+            if (subtitle.isNotEmpty) ...[
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontSize: 9,
+                  letterSpacing: 1.5,
+                  color: AppColors.muted,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
+              const SizedBox(height: 2),
+            ],
             Text(
               title,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: AppColors.text,
+              ),
             ),
           ],
         ),
@@ -47,7 +61,7 @@ class ArchivePanel extends StatelessWidget {
   const ArchivePanel({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(20),
+    this.padding = const EdgeInsets.all(18),
   });
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -55,10 +69,10 @@ class ArchivePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     padding: padding,
-    decoration: BoxDecoration(
-      color: AppColors.panel,
-      border: Border.all(color: AppColors.border),
-      borderRadius: BorderRadius.circular(3),
+    decoration: const BoxDecoration(
+      color: AppColors.raised,
+      border: Border.fromBorderSide(BorderSide(color: AppColors.border)),
+      borderRadius: BorderRadius.zero,
     ),
     child: child,
   );
@@ -71,12 +85,21 @@ class ArchiveTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
     decoration: BoxDecoration(
-      color: color.withValues(alpha: .09),
-      border: Border.all(color: color.withValues(alpha: .25)),
+      color: color.withValues(alpha: .10),
+      border: Border.all(color: color.withValues(alpha: .30)),
+      borderRadius: BorderRadius.zero,
     ),
-    child: Text(label, style: TextStyle(fontSize: 11, color: color)),
+    child: Text(
+      label,
+      style: TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.6,
+        color: color,
+      ),
+    ),
   );
 }
 
@@ -172,6 +195,11 @@ Future<void> showCachePreviewConfirmation(BuildContext context) =>
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: AppColors.raised,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.zero,
+          side: BorderSide(color: AppColors.border),
+        ),
         title: const Text('清空素材缓存'),
         content: const Text('此处预览清理确认流程。缓存管理尚未接入，确认后不会删除任何文件。'),
         actions: [

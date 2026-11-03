@@ -1,133 +1,189 @@
 # 《明日方舟》视觉设计与交互工程规范 (Arknights Design System Spec)
 
-> **定位**：本文档沉淀了《明日方舟》（Arknights / Rhodes Island OS）经典战术终端与剧情播放器的完整视觉风格、交互准则与 Flutter / Web 落地工程规范。
+> **定位**：本文档沉淀了《明日方舟》（Arknights / Rhodes Island OS）经典战术终端与剧情播放器的完整视觉风格、交互准则与 Flutter 落地工程规范。
 > **参考依据**：
-> - 社区成熟开源设计系统：PRTS 官方维基设计系统 [`@mooncellwiki/prts-design`](https://github.com/MooncellWiki/prts-design)、[`ak-ui`](https://ak-ui.yyj.moe/)、[`hikari`](https://github.com/celestia-island/hikari)
-> - 游戏学术/UX深度分析：《“舟味”从何而来？解析明日方舟设计美学》（腾讯游戏学堂 & 行业 UI 拆解）
-> - 官方解包与排版度量规范
+> - 鹰角网络官方网站：[`hypergryph.com`](https://www.hypergryph.com/)
+> - 明日方舟官方网站：[`ak.hypergryph.com`](https://ak.hypergryph.com/)
+> - 社区开源设计系统：PRTS 官方维基 [`@mooncellwiki/prts-design`](https://github.com/MooncellWiki/prts-design)、[`ak-ui`](https://ak-ui.yyj.moe/)
+> - 游戏学术/UX深度分析：腾讯游戏学堂《〈明日方舟〉UI/UX 分析——藏在「好看」背后的先进性》、站酷/机核视觉拆解与生产环境 CSS 实测提取。
 
 ---
 
-## 1. 核心设计哲学与风格基石（The "Ark" Aesthetics）
+## 1. 核心设计哲学与风格基石 (The "Ark" Aesthetics)
 
-业界常称的**“舟味”**，本质是**后现代战术机能风（Tactical / Industrial FUI）与极简瑞士平面排版（Swiss Style / Flat Design）的高度融合**：
+业界常称的**“舟味”**，本质是**后现代战术机能风（Tactical / Industrial FUI）、磁带盒未来主义（Cassette Futurism）与极简瑞士平面排版（Swiss Style / Flat Design）的高度融合**：
 
-1. **黑白为体、青为用 (Dark Terminal First)**：
-   - 全局界面以大面积灰黑、哑光碳黑与高对比冷灰打底；
-   - **罗德岛青（Cyan `#00E5FF`）** 作为唯一的系统最高级别聚焦色、超链接与主执行动作（Primary Action）；
-   - **预警黄（Hazard Yellow `#FFD600` / `#F6C344`）** 作为战术警示、次强调标签与重要侧边提示；
-   - **危险红（Danger Red `#FF5252`）** 极为克制，仅在破坏性删除、阻断警告与严重报错时出现。
-2. **硬朗几何与克制圆角 (Restrained Geometry)**：
-   - 拒绝大圆角与软绵绵的气泡质感；
-   - 按钮、卡片、标签统一使用 **0~2px 直角/微倒角**，或 **45度切角（Bevel Clip / `polygon`）**；
-   - 装饰语言：警示色条、45° 斜向安全警戒斑马线（Warning Stripes）、网点（Halftone Dots）、直角线框与小十字瞄准线（Crosshairs）。
-3. **高密度信息层级与排版秩序 (Typographic Hierarchy)**：
-   - 中文采用高质量无衬线屏显字体（思源黑体 / Noto Sans Hans SC），小字号配合高可读字间距；
-   - 英文与数字强制使用**高机械感等宽或工业大写无衬线**（Oswald, DIN, Chakra Petch, Roboto Mono）；
-   - 主标题普遍带有伴生的小号大写英文副标（如 `慈悲灯塔 / EPISODE 14`），强化战术终端的档案归档感。
-4. **质感与光影 (Tactical Light & Depth)**：
-   - 放弃廉价的高斯辉光，改用 **1px 微透明硬边界边框（`rgba(255,255,255,0.08)`）**；
-   - 背景层使用深度视差（Parallax）与局部的暗色遮罩模糊（`backdrop-filter: blur(12px)`），强化“战术面板悬浮于战场舞台之上”的层级深度。
+1. **冷峻工业与极高对比 (Cold Industrial Contrast)**：
+   - 绝非消费级 Web App 的彩色渐变与软绵绵圆角；
+   - 界面以纯黑、碳黑（`#121212`、`#181818`）与低反光灰阶构成沉稳低调的战术基底；
+   - 强调信息自身的高对比度与秩序感，极度克制彩色使用，杜绝无意义的高饱和杂色。
+2. **功能第一与反装饰主义 (Form Follows Function)**：
+   - 每一个点、线、方块、条纹都有其信息学或工程学意义，拒绝“为了好看而贴标签”；
+   - 追求操作面板的机械感、严谨度与坚固感（Robustness）。
+3. **左锚定与工业秩序排版 (Left-anchored Precision Layout)**：
+   - 摈弃大量居中堆叠的“互联网宣传页”套路，采用严谨的网格系统与左对齐信息主轴；
+   - 层次依托字体粗细、字号阶梯与 1px 微透明硬质细线划分，而非大面积投影或厚重阴影。
 
 ---
 
-## 2. 设计令牌定义 (Design Tokens)
+## 2. 严禁事项：反 AI 伪装与去 Slop 门禁 (Anti-AI Slop Quality Gate)
 
-### 2.1 色彩令牌 (Color Tokens)
+AI 在生成此类界面时极其容易陷入“刻板机能风”与“保姆话痨综合征”，导致界面充满廉价感。**开发与设计时必须无条件遵守以下“四绝红线”**：
+
+### ❌ 红线 1：严禁无意义的装饰性英文 (Zero Decorative English)
+- **现象**：在每个中文词汇旁边机械拼凑全大写英文（如在“剧情播放器”下拼 `STORY PLAYER / ARCHIVE`，在“5 幕”旁边拼 `5 SCENES`，在“设置”旁拼 `PREFERENCES`）。这种中英硬凑是典型的廉价 AI 假洋鬼子病。
+- **强制规则**：
+  - **绝不在普通中文旁边附赠英文翻译**；
+  - **英文仅允许出现在三处**：
+    1. **官方业务/档案代码**（如关卡代码 `14-1 BEF`、行动代号 `EPISODE 14`、干员名 `KAL'TSIT`）；
+    2. **工程终端协议与指标**（如协议状态 `PRTS-OS v4.1`、物理单位 `MB/s`、网络状态 `NET // OK`）；
+    3. **官方固有的不可替代入口名**（如官方板块 `BREAKING NEWS`、`ABOUT US`、`PROJECTS`）。
+
+### ❌ 红线 2：严禁鸡汤副标与抒情文案 (Zero Emotional Slogans)
+- **现象**：在标题下或卡片内增加文艺煽情小字（如 `在文字与声影之间，重温每一个故事。`、`探索未知的泰拉大地` 等）。
+- **强制规则**：
+  - 战术终端是客观、严肃、理性的操作界面，**完全没有标语、口号与感伤文青小作文**；
+  - 标题即业务实体名（如 `主线残卷`、`物资筹备`、`本地存储`），下方直接陈列数据或列表，绝不硬塞副标题。
+
+### ❌ 红线 3：严禁保姆式免责 Tips 与唠叨提示 (Zero Apologetic Microcopy)
+- **现象**：反复在界面上解释“尚未接入实际能力”、“此处仅供预览，确认后不会生效”、“等待接入存储统计”等免责小字。
+- **强制规则**：
+  - 未开发或不可用功能，直接以**禁用灰（Disabled）**、**战术锁定图标（`Icons.lock_outline`）**或横杠（`—`）表示；
+  - 严禁用两行浅灰色小字向操作员反复解释小作文，界面应当干脆利落。
+
+### ❌ 红线 4：严禁移动互联网常见套路 (Zero Generic Mobile Tropes)
+- 严禁 Material 3 默认的大圆角胶囊（Pill Chips，`radius: 20px+`）；
+- 严禁在标题上方加带 ✨ Sparkle 图标的胶囊小帽子（Eyebrow Chips）；
+- 严禁彩色大弥散阴影（Colored Glow / BoxShadow Blur > 16px）；
+- 严禁无意义的卡片嵌套卡片（Cards inside Cards）。
+
+---
+
+## 3. 设计令牌定义 (Design Tokens)
+
+依据鹰角官网（`hypergryph.com`）与明日方舟官网（`ak.hypergryph.com`）提取的生产级 CSS 色彩规范全面纠偏：
+
+### 3.1 色彩令牌 (Color Tokens)
 
 ```scss
-// 主体终端背景色板 (Dark Surfaces)
---ak-bg-root:         #0a0d12; // 终端最深底色
---ak-bg-primary:      #12161f; // 核心工作区与主窗口底色
---ak-bg-secondary:    #181d26; // 侧边栏、卡片背景色
---ak-bg-surface:      #1f2633; // 关卡列表行、条目卡片未激活态
---ak-bg-hover:        #283242; // 条目悬停色
---ak-bg-tertiary:     #2a3444; // 进度条底色、搜索框输入底色
+// ==========================================
+// 1. 核心高光与战术信号色 (Corrected Semantic Signals)
+// ==========================================
 
-// 语义强调与战术色彩 (Semantic Signals)
---ak-cyan:            #00e5ff; // 罗德岛科技青 (主执行/已选高亮/活动链接)
---ak-cyan-dark:       #0097a7; // 青色按压态 / 激活边框
---ak-cyan-glow:       rgba(0, 229, 255, 0.25); // 选中行泛光
---ak-cyan-bg:         rgba(0, 229, 255, 0.12); // 青色半透明标签底色
+// 罗德岛科技蓝青 (Rhodes Cyan)
+// 纠偏：彻底废弃刺眼的通用霓虹 #00e5ff，采用官网生产环境高频标准色
+--ak-cyan:            #18d1ff; // 官网核心强调色 (Buttons / Active Lines / Key Tags)
+--ak-cyan-deep:       #06bbff; // 次级悬停/按压态深青
+--ak-cyan-dark:       #0097a7; // 边框常态 / 弱指示
+--ak-cyan-bg:         rgba(24, 209, 255, 0.10); // 极淡微透高亮底色
 
---ak-yellow:          #f6c344; // 警示黄 / 支线活动金 / 稀有度次高
---ak-yellow-bg:       rgba(246, 195, 68, 0.12);
+// 战术预警黄 (Hazard Yellow)
+--ak-yellow:          #ffd600; // 战术警告 / 推荐选段 / 次重要强调
+--ak-yellow-fluor:    #f3ff00; // 鹰角官网标志性荧光黄 (超高亮视觉点缀，仅用于单点高光)
+--ak-yellow-bg:       rgba(255, 214, 0, 0.12);
 
---ak-green:           #00e676; // 已缓存离线 / 校验通过 (Emerald Green)
---ak-green-bg:        rgba(0, 230, 118, 0.15);
+// 状态与指令色
+--ak-green:           #8fc31f; // 官网/游戏校验通过绿 (Emerald/Olive Green)，已缓存/通信畅通
+--ak-green-bg:        rgba(143, 195, 31, 0.15);
+--ak-red:             #ff4444; // 致命警告/删除动作 (Signal Red)
+--ak-red-bg:          rgba(255, 68, 68, 0.12);
 
---ak-red:             #ff5252; // 警告红 / 清空缓存 / 致命错误 (Signal Red)
---ak-red-bg:          rgba(255, 82, 82, 0.12);
+// ==========================================
+// 2. 终端深色表面与灰阶 (Surfaces & Industrial Grayscale)
+// 纠偏：摆脱蓝紫杂色偏色，回归纯正的冷感碳黑与矿物灰阶
+// ==========================================
 
-// 文本与排版对比阶梯 (Typography Text Colors)
---ak-text-primary:    #ffffff; // 关卡主标题、剧情正文
---ak-text-secondary:  #a2b0c2; // 关卡副标、副标题、大纲描述
---ak-text-muted:      #64748b; // 纯英文代码、无版权标注、未激活占位符
---ak-border-base:     #2b3545; // 界面标准 1px 分隔线
---ak-border-subtle:   rgba(255, 255, 255, 0.06);
+--ak-bg-root:         #000000; // 纯黑环境底色
+--ak-bg-primary:      #121212; // 主工作区、主窗口底色
+--ak-bg-surface:      #181818; // 侧边导航、顶栏底色
+--ak-bg-card:         #242424; // 关卡列表行、卡片常态背景
+--ak-bg-hover:        #292929; // 列表悬停/按压选中色
+--ak-bg-tertiary:     #333333; // 搜索框/输入框底色、进度槽底色
+
+// ==========================================
+// 3. 文本与边界对比阶梯 (Typography & Border Ranks)
+// ==========================================
+
+--ak-text-primary:    #ffffff; // 一级文字、关键指令
+--ak-text-regular:    #d2d2d2; // 常规正文、关卡名称
+--ak-text-secondary:  #ababab; // 描述信息、次级标签
+--ak-text-muted:      #585858; // 纯代号、未激活占位、时间戳 (严禁灰底灰字)
+
+--ak-border-base:     #333333; // 标准 1px 细线边界
+--ak-border-subtle:   rgba(255, 255, 255, 0.08); // 极细半透明辅助分隔线
+--ak-border-active:   #18d1ff; // 激活项高亮边框
 ```
 
-### 2.2 几何与网格系统 (Geometry & Spacing)
+### 3.2 几何与网格系统 (Geometry & Spacing)
 
 - **圆角规则**：
-  - 核心原则：**极小圆角或纯直角（Sharp Edges）**。
-  - 普通按钮/输入框：`border-radius: 2px ~ 4px`；
-  - 弹层浮板/主窗口外框：`border-radius: 6px`（最大不超过 8px）；
-  - 关卡代号角标（Badge）：`border-radius: 0px`（纯直角），左侧或顶部附带 2px 细色标。
-- **排版字体栈**：
-  - 中文主文本：`"Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif`
-  - 战术代号、数字、仪表：`"Chakra Petch", "DIN Alternate", "Roboto Mono", monospace`
+  - 核心原则：**极硬直角（Sharp Edges）为主，微倒角为辅**；
+  - 关卡条目、状态徽标、代号角标：**`0px`（纯直角）**；
+  - 常规交互按钮、输入框、微型弹窗：**`border-radius: 2px`**（最大不超过 `4px`）；
+  - 关键战术按钮：采用 **45° 战术切角（`BeveledRectangleBorder`，切角尺寸 3px~5px）**。
+- **工业边框与点缀线**：
+  - 边框宽度固定为 **`1px`**，绝不使用 2px+ 粗钝描边；
+  - 允许在卡片左边缘放置 **2px 宽度的实心强调色竖条（`18d1ff` 或 `#ffd600`）**。
+
+### 3.3 字体族谱与阶梯 (Typography Stack)
+
+- **中文字体**：
+  - 优先选择：`"Source Han Sans"`, `"Noto Sans SC"`, `"PingFang SC"`, `"Microsoft YaHei"`, `sans-serif`；
+  - 特点：笔画硬朗、字重清晰、中正严谨。
+- **代号与数字（战术机械感字体）**：
+  - 优先选择：`"Bender"`, `"Novecentosanswide"`, `"Oswald"`, `"Chakra Petch"`, `"DIN Alternate"`, `"Roboto Mono"`, `monospace`；
+  - 特点：紧凑窄体或横向延展宽体，充满仪器仪表工业感。
 
 ---
 
-## 3. 典型交互组件规范 (Component Specifications)
+## 4. 典型交互组件规范 (Component Specifications)
 
-### 3.1 战术关卡条目卡片 (Stage Item Card)
-- **静态形态**：高度 52px~56px，深灰底色，左侧为亮青色等宽字体的关卡代号（如 `14-1 BEF`），中间展示关卡标题与出场人物，右侧固定展示离线状态徽标与圆形极简播放入口。
-- **状态徽标（Status Badge）**：
-  - `已离线`：青绿微透明胶囊（`#00e676`），前置 `✓` 符号；
-  - `未缓存`：暗灰幽灵标签（Ghost Tag），不显示虚假预估大小；
-  - `缓存中`：青色旋转雷达环（Spinner）配合“缓存中”动态呼吸文本。
+### 4.1 战术关卡条目行 (Stage Item Row)
+- **形态**：高度固定 48px~54px，纯色深灰底色（`#242424`），纯直角；
+- **左侧**：关卡代号（如 `14-1`、`CW-EX-1`），字体采用高可读等宽/Bender 风格，颜色为 `#18d1ff`；
+- **中间**：剧情标题（`#ffffff`），无多余修饰；
+- **右侧**：
+  - 离线状态：绿色直角小方块或 `[CACHED]` 极简标识（`#8fc31f`）；
+  - 播放按钮：极简方框或 45° 倒角按钮，点击立即响应。
 
-### 3.2 批量管理操作浮条 (Batch Action Bar)
-- **移动端**：勾选后以弹性贝塞尔曲线（`cubic-bezier(0.16, 1, 0.3, 1)`）自手机屏幕底部向上滑出；
-  - 背景使用深色战术磨砂（`rgba(15, 23, 42, 0.94)`）与顶部 1px 青色边界；
-  - 点击【立即缓存】后，原地平滑展开多关卡总进度条，动态显示 `已下载 X/N` 与 `实时带宽 MB/s`，下载完成自动伴随轻微绿色闪烁收起。
-- **桌面端**：常驻于各章节详情工作区顶栏，包含全选 Checkbox、已勾选幕数统计、一键缓存与批量释放缓存按钮。
+### 4.2 顶栏与左侧导航 (Tactical Navigation Hub)
+- **顶栏**：高度 44px~48px，深色底色带底部 1px 细分割线（`#333333`）；
+- **导航项**：
+  - 选中态：左侧或底侧带 2px `#18d1ff` 高亮线，文字纯白；
+  - 未选中态：文字 `#ababab`，无背景；
+  - **严禁**在导航标题下方硬挂一行字号为 8px 的假英文单词。
 
-### 3.3 在线点播缓冲转场 (Streaming Preload Modal)
-- **触发条件**：用户在未缓存状态下直接点击关卡的 ▶ 播放按钮；
-- **交互过程**：
-  1. 瞬间唤起全屏 80% 暗色半透明战术遮罩，底层内容保持 `blur(10px)`；
-  2. 画面中央展示罗德岛通信雷达指示环；
-  3. 下方紧凑显示流式抓取当前资源（如 `GET .../char_002_amiya.png (3.1 MB)`）与整体依赖百分比（0%~100%）；
-  4. 缓冲加载完毕瞬间，移动端执行平滑旋转至横屏全屏并进入舞台，避免任何黑屏突兀跳变。
+### 4.3 批量操作条 (Action Deck)
+- 吸附于视口底部或右侧，背景为 `#181818` 配合顶部 1px 青色光硬线；
+- 操作按钮：直角实心青色按钮（`#18d1ff` 底、黑字）或直角线框按钮；
+- 统计信息直接显示真实数字（如 `已选择 3 幕`），不加修饰词。
 
 ---
 
-## 4. 动效与过渡标准 (Motion & Transition Curves)
+## 5. 动效与过渡标准 (Motion & Transition Curves)
 
-明日方舟的动效绝非“慢条斯理的弹性”，而是**快速、干脆、机械利落（Swift & Snappy）**：
+明日方舟的终端动效特征是**干脆利落、机械切变（Snappy & Tactical）**：
 
 | 动效场景 | 持续时长 (Duration) | 缓动曲线 (Easing Curve) | 动效形式 |
 | :--- | :--- | :--- | :--- |
-| **按钮悬停 / 点击反馈** | `120ms` | `ease-out` | 背景色快速亮化、1px 边框青色渐显、微缩放 (`scale(0.98)`) |
-| **手风琴折叠展开** | `220ms` | `cubic-bezier(0.2, 0.8, 0.2, 1)` | 垂直高度裁剪展开，右侧尖角图标旋转 180° |
-| **批量操作条滑入** | `260ms` | `cubic-bezier(0.16, 1, 0.3, 1)` | 底部向上平移 100% ➔ 0%，透明度 0 ➔ 1 |
-| **手机横竖屏切换转场** | `400ms` | `cubic-bezier(0.4, 0.0, 0.2, 1)` | 旋转平滑补间，对白 HUD 与对白字标淡入 |
-| **打字机对白字符吐字** | `30ms ~ 50ms / 字` | 线性 (`linear`) | 光标方块周期性闪烁（0.8s 循环），可随快速点击瞬时跳过 |
+| **按钮按压 / 悬停** | `100ms` | `Curves.easeOut` | 背景色快速亮化、边框即刻高亮、无夸张弹性 |
+| **抽屉 / 侧边栏滑出**| `200ms` | `Cubic(0.16, 1, 0.3, 1)` | 机械利落平移，伴随 1px 细线边界切入 |
+| **关卡列表展开** | `180ms` | `Curves.fastOutSlowIn` | 垂直硬性裁切展开，箭头图标 90°/180° 瞬转 |
+| **缓冲与雷达扫描** | `1200ms` | 线性 (`Curves.linear`) | 单色旋转圆环，周期性雷达刻度扫描 |
 
 ---
 
-## 5. Flutter 跨平台工程落地指引 (Flutter Parity)
+## 6. Flutter 跨平台工程落地映射 (Flutter Parity Guide)
 
-后续在将本规范实装至 `arknights_story_player` 代码库时，建议采用以下架构：
+在编写或优化 Flutter 代码时，必须贯彻以下具体写法：
 
-1. **色彩与主题映射 (`lib/story_player/theme/`)**：
-   - 编写 `ArknightsThemeData`，继承 Flutter `ThemeExtension<ArknightsThemeData>`，统一分发 `--ak-*` 系列颜色、间距与字体。
-2. **切角与直角装饰组件 (`BeveledBorder`)**：
-   - 充分利用 Flutter 自带的 `BeveledRectangleBorder` 替代 Material 3 默认的 `RoundedRectangleBorder`，原生实现 45° 战术切角按钮。
-3. **音频与触觉反馈**：
-   - 在移动端点击关键交互项时，引入轻微的触觉敲击（`HapticFeedback.lightImpact()`），还原游戏内触碰金属机械面板的手感。
-4. **资源预加载与流式准备**：
-   - 复用现有的 `StoryRepository.prepare(document, onProgress: (done, total) => ...)` 回调，直接与 Loading 弹层的 `LinearProgressIndicator` 建立响应式状态绑定。
+1. **废弃默认 Material 3 形状**：
+   - 按钮必须配置 `shape: BeveledRectangleBorder(borderRadius: BorderRadius.circular(3))` 或 `shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero)`；
+   - 严禁使用默认的大圆角 `ElevatedButton` 或 `Card`。
+2. **色彩完全统一至常量类 (`AppColors`)**：
+   - 将原代码中散落的 `Colors.cyan`、`Color(0xFF00E5FF)` 全部替换为标准的 `AppColors.cyan`（`#18D1FF`）；
+   - 将背景色统一为 `#121212`、`#181818`、`#242424` 的层级阶梯。
+3. **文本排版清理**：
+   - 彻底删除代码中所有形式为 `Text('STORY PLAYER / ARCHIVE', style: TextStyle(fontSize: 8, ...))` 的假洋鬼子装饰；
+   - 彻底删除“在文字与声影之间…”等鸡汤副标；
+   - 保证文字对齐以 `CrossAxisAlignment.start` 为主，营造出坚实的阅读基线。
