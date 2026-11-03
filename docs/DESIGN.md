@@ -70,12 +70,12 @@ AI 在生成此类界面时极其容易陷入“刻板机能风”与“保姆�
 // 1. 核心高光与战术信号色 (Corrected Semantic Signals)
 // ==========================================
 
-// 罗德岛科技蓝青 (Rhodes Cyan)
-// 纠偏：彻底废弃刺眼的通用霓虹 #00e5ff，采用官网生产环境高频标准色
---ak-cyan:            #18d1ff; // 官网核心强调色 (Buttons / Active Lines / Key Tags)
---ak-cyan-deep:       #06bbff; // 次级悬停/按压态深青
---ak-cyan-dark:       #0097a7; // 边框常态 / 弱指示
---ak-cyan-bg:         rgba(24, 209, 255, 0.10); // 极淡微透高亮底色
+// 终端反白高亮与指示色 (Terminal Inverse White & Indicator)
+// 纠偏：彻底摒弃破坏方舟末日战术质感的科幻商业蓝/青色，采用方舟游戏内终端标准反白高对比块
+--ak-active:           #ffffff; // 核心选中/主操作按钮底色（高对比反显黑字）
+--ak-on-active:        #000000; // 反白块上的文字/图标色
+--ak-indicator:        #ffffff; // 侧边栏/标尺左侧指示条
+--ak-terminal-white:   #f0f2f5; // 战术代号、HUD 数值高亮冷白
 
 // 战术预警黄 (Hazard Yellow)
 --ak-yellow:          #ffd600; // 战术警告 / 推荐选段 / 次重要强调
@@ -111,7 +111,7 @@ AI 在生成此类界面时极其容易陷入“刻板机能风”与“保姆�
 
 --ak-border-base:     #333333; // 标准 1px 细线边界
 --ak-border-subtle:   rgba(255, 255, 255, 0.08); // 极细半透明辅助分隔线
---ak-border-active:   #18d1ff; // 激活项高亮边框
+--ak-border-active:   #ffffff; // 激活项高亮边框（或亮灰 #505256）
 ```
 
 ### 3.2 几何与网格系统 (Geometry & Spacing)
@@ -181,8 +181,8 @@ AI 在生成此类界面时极其容易陷入“刻板机能风”与“保姆�
    - 按钮必须配置 `shape: BeveledRectangleBorder(borderRadius: BorderRadius.circular(3))` 或 `shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero)`；
    - 严禁使用默认的大圆角 `ElevatedButton` 或 `Card`。
 2. **色彩完全统一至常量类 (`AppColors`)**：
-   - 将原代码中散落的 `Colors.cyan`、`Color(0xFF00E5FF)` 全部替换为标准的 `AppColors.cyan`（`#18D1FF`）；
-   - 将背景色统一为 `#121212`、`#181818`、`#242424` 的层级阶梯。
+   - 彻底废除青蓝色强调，切换为高对比黑白反白（`AppColors.active`、`AppColors.onActive`、`AppColors.indicator`）；
+   - 将背景色统一为深炭黑与机能灰阶（`AppColors.canvas` `#0F0F10`、`AppColors.panel` `#18191A`、`AppColors.surface` `#232425`）。
 3. **文本排版清理**：
    - 彻底删除代码中所有形式为 `Text('STORY PLAYER / ARCHIVE', style: TextStyle(fontSize: 8, ...))` 的假洋鬼子装饰；
    - 彻底删除“在文字与声影之间…”等鸡汤副标；

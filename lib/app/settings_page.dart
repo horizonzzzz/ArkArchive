@@ -101,7 +101,7 @@ class _SettingsPageState extends State<SettingsPage> {
       children: [
         Row(
           children: [
-            Icon(icon, color: AppColors.cyan, size: 18),
+            Icon(icon, color: AppColors.terminalWhite, size: 18),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -192,7 +192,7 @@ class _SettingsPageState extends State<SettingsPage> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: const BoxDecoration(
             color: AppColors.canvas,
-            border: Border(left: BorderSide(color: AppColors.cyan, width: 2)),
+            border: Border(left: BorderSide(color: AppColors.indicator, width: 2)),
           ),
           child: const Text(
             '「罗德岛各部门注意，准备进入预定作战区域。」',
@@ -219,7 +219,7 @@ class _SettingsPageState extends State<SettingsPage> {
             style: TextStyle(fontSize: 13, color: AppColors.text),
           ),
         ),
-        ArchiveTag('0 MB', color: AppColors.cyan),
+        ArchiveTag('0 MB', color: AppColors.terminalWhite),
       ],
     ),
     const SizedBox(height: 10),
@@ -355,7 +355,12 @@ class _SettingsPageState extends State<SettingsPage> {
             Expanded(child: Text(title, style: const TextStyle(fontSize: 13))),
             Text(
               label,
-              style: const TextStyle(color: AppColors.cyan, fontSize: 12),
+              style: const TextStyle(
+                fontFamily: AppTypography.bender,
+                color: AppColors.terminalWhite,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
         ),

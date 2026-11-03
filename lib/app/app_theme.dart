@@ -1,33 +1,56 @@
 import 'package:flutter/material.dart';
 
 abstract final class AppColors {
-  static const canvas = Color(0xff000000);
-  static const panel = Color(0xff121212);
-  static const surface = Color(0xff181818);
-  static const raised = Color(0xff242424);
-  static const hover = Color(0xff292929);
-  static const tertiary = Color(0xff333333);
-  static const border = Color(0xff333333);
-  static const borderSubtle = Color(0x14ffffff);
-  static const cyan = Color(0xff18d1ff);
-  static const cyanDeep = Color(0xff06bbff);
-  static const cyanDark = Color(0xff0097a7);
+  static const canvas = Color(0xff0f0f10);
+  static const panel = Color(0xff18191a);
+  static const surface = Color(0xff232425);
+  static const raised = Color(0xff2d2e30);
+  static const hover = Color(0xff36383a);
+  static const tertiary = Color(0xff313131);
+  static const border = Color(0xff333538);
+  static const borderSubtle = Color(0x1fffffff);
+  static const borderLight = Color(0xff505256);
+
+  /// 终端反白高亮块（白底黑字反转）
+  static const active = Color(0xffffffff);
+  static const onActive = Color(0xff000000);
+
+  /// 终端指示色（高对比白/亮灰指示条，彻底摒弃商业蓝）
+  static const indicator = Color(0xffffffff);
+
+  /// 终端点缀亮灰/银白（用于战术代号、高亮标记）
+  static const terminalWhite = Color(0xfff0f2f5);
+
+  /// 功能强调与警示（仅用于特别任务、网络警告与错误）
   static const yellow = Color(0xffffd600);
   static const yellowFluor = Color(0xfff3ff00);
   static const green = Color(0xff8fc31f);
+  static const danger = Color(0xffff4444);
+
   static const text = Color(0xffffffff);
   static const secondary = Color(0xffd2d2d2);
-  static const subtext = Color(0xffababab);
-  static const muted = Color(0xff585858);
-  static const danger = Color(0xffff4444);
+  static const subtext = Color(0xffa2a4a7);
+  static const muted = Color(0xff5c5e62);
+}
+
+abstract final class AppTypography {
+  static const bender = 'Bender';
+  static const sans = 'ArchiveSans';
+
+  /// 战术代码样式（用于章节号 14-1, CW-1、协议序号 01, 02）
+  static const tacticalCode = TextStyle(
+    fontFamily: bender,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 1.2,
+  );
 }
 
 ThemeData buildAppTheme() {
   final scheme = const ColorScheme.dark(
-    primary: AppColors.cyan,
-    onPrimary: AppColors.canvas,
-    secondary: AppColors.yellow,
-    onSecondary: AppColors.canvas,
+    primary: AppColors.active,
+    onPrimary: AppColors.onActive,
+    secondary: AppColors.terminalWhite,
+    onSecondary: AppColors.onActive,
     surface: AppColors.panel,
     onSurface: AppColors.text,
     onSurfaceVariant: AppColors.secondary,
@@ -40,15 +63,15 @@ ThemeData buildAppTheme() {
   return ThemeData(
     colorScheme: scheme,
     scaffoldBackgroundColor: AppColors.canvas,
-    fontFamily: 'ArchiveSans',
+    fontFamily: AppTypography.sans,
     textTheme: ThemeData.dark().textTheme.apply(
-      fontFamily: 'ArchiveSans',
+      fontFamily: AppTypography.sans,
       bodyColor: AppColors.text,
       displayColor: AppColors.text,
     ),
     dividerColor: AppColors.border,
-    focusColor: AppColors.cyan.withValues(alpha: .24),
-    hoverColor: AppColors.cyan.withValues(alpha: .08),
+    focusColor: AppColors.borderLight.withValues(alpha: .36),
+    hoverColor: Colors.white.withValues(alpha: .04),
     appBarTheme: const AppBarTheme(
       backgroundColor: AppColors.panel,
       surfaceTintColor: Colors.transparent,
@@ -65,14 +88,14 @@ ThemeData buildAppTheme() {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: AppColors.cyan, width: 1.5),
+        borderSide: BorderSide(color: AppColors.active, width: 1.5),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         shape: shape,
-        backgroundColor: AppColors.cyan,
-        foregroundColor: AppColors.canvas,
+        backgroundColor: AppColors.active,
+        foregroundColor: AppColors.onActive,
         minimumSize: const Size(44, 44),
         textStyle: const TextStyle(
           fontWeight: FontWeight.w700,
@@ -93,7 +116,7 @@ ThemeData buildAppTheme() {
       style: TextButton.styleFrom(
         shape: shape,
         minimumSize: const Size(44, 44),
-        foregroundColor: AppColors.cyan,
+        foregroundColor: AppColors.text,
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
@@ -105,16 +128,16 @@ ThemeData buildAppTheme() {
     checkboxTheme: CheckboxThemeData(
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       side: const BorderSide(color: AppColors.muted),
-      checkColor: const WidgetStatePropertyAll(AppColors.canvas),
+      checkColor: const WidgetStatePropertyAll(AppColors.onActive),
       fillColor: WidgetStateProperty.resolveWith(
         (states) =>
-            states.contains(WidgetState.selected) ? AppColors.cyan : null,
+            states.contains(WidgetState.selected) ? AppColors.active : null,
       ),
     ),
     chipTheme: const ChipThemeData(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       side: BorderSide(color: AppColors.border),
-      selectedColor: Color(0x2418d1ff),
+      selectedColor: AppColors.active,
       backgroundColor: AppColors.surface,
       labelStyle: TextStyle(fontSize: 12),
     ),
@@ -135,6 +158,9 @@ ThemeData buildAppTheme() {
     sliderTheme: const SliderThemeData(
       trackHeight: 3,
       thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
+      activeTrackColor: AppColors.active,
+      inactiveTrackColor: AppColors.tertiary,
+      thumbColor: AppColors.active,
     ),
     tooltipTheme: const TooltipThemeData(
       waitDuration: Duration(milliseconds: 450),

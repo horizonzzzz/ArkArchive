@@ -21,7 +21,7 @@ class ArchiveHeading extends StatelessWidget {
         width: 3,
         height: 22,
         margin: const EdgeInsets.only(right: 10),
-        color: AppColors.cyan,
+        color: AppColors.indicator,
       ),
       Expanded(
         child: Column(

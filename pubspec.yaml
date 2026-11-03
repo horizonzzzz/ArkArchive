@@ -66,7 +66,10 @@ flutter:
   # 剧情对白字体与滑动遮罩纹理随应用打包，运行时不联网获取。
   assets:
     - assets/fonts/NotoSansHans-Medium.ttf
+    - assets/fonts/Bender.otf
     - assets/images/slide_mask.png
+    - assets/images/logo_rhodes.png
+    - assets/images/logo_babel.png
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
   shaders:
@@ -76,7 +79,10 @@ flutter:
       fonts:
         - asset: assets/fonts/NotoSansHans-Medium.ttf
           weight: 500
-
+    - family: Bender
+      fonts:
+        - asset: assets/fonts/Bender.otf
+          weight: 700
 
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package

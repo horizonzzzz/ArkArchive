@@ -57,19 +57,20 @@ class _CachePageState extends State<CachePage> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        const Row(
+                        Row(
                           crossAxisAlignment: CrossAxisAlignment.baseline,
                           textBaseline: TextBaseline.alphabetic,
                           children: [
                             Text(
-                              '—',
+                              '0',
                               style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.cyan,
+                                fontFamily: AppTypography.bender,
+                                fontSize: 32,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.terminalWhite,
                               ),
                             ),
-                            SizedBox(width: 6),
+                            const SizedBox(width: 6),
                             Text(
                               'MB',
                               style: TextStyle(
@@ -163,7 +164,7 @@ class _CachePageState extends State<CachePage> {
                       children: [
                         const Icon(
                           Icons.description_outlined,
-                          color: AppColors.cyan,
+                          color: AppColors.subtext,
                           size: 18,
                         ),
                         const SizedBox(width: 12),

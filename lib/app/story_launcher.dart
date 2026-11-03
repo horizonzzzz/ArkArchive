@@ -205,7 +205,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                               const Icon(
                                 Icons.radar,
                                 size: 48,
-                                color: AppColors.cyan,
+                                color: AppColors.muted,
                               ),
                               const SizedBox(height: 20),
                               const Text(
@@ -292,22 +292,28 @@ class _StoryLauncherState extends State<StoryLauncher> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 24, 16, 20),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 16, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.terminal, size: 20, color: AppColors.cyan),
-                          SizedBox(width: 8),
-                          Text(
+                          Image.asset(
+                            'assets/images/logo_rhodes.png',
+                            width: 22,
+                            height: 22,
+                            fit: BoxFit.contain,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
                             'PRTS',
                             style: TextStyle(
                               fontSize: 12,
-                              fontWeight: FontWeight.w800,
+                              fontFamily: AppTypography.bender,
+                              fontWeight: FontWeight.w700,
                               letterSpacing: 2,
-                              color: AppColors.cyan,
+                              color: AppColors.terminalWhite,
                             ),
                           ),
                         ],
@@ -346,7 +352,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                       selected: _page == i,
                       child: Material(
                         color: _page == i
-                            ? AppColors.cyan.withValues(alpha: .08)
+                            ? AppColors.raised
                             : Colors.transparent,
                         child: InkWell(
                           onTap: () => setState(() => _page = i),
@@ -355,7 +361,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                               border: Border(
                                 left: BorderSide(
                                   color: _page == i
-                                      ? AppColors.cyan
+                                      ? AppColors.indicator
                                       : Colors.transparent,
                                   width: 3,
                                 ),
@@ -371,7 +377,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                   _navigation[i].$1,
                                   size: 18,
                                   color: _page == i
-                                      ? AppColors.cyan
+                                      ? AppColors.text
                                       : AppColors.subtext,
                                 ),
                                 const SizedBox(width: 10),
@@ -380,8 +386,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                     _navigation[i].$2,
                                     style: TextStyle(
                                       color: _page == i
-                                          ? AppColors.cyan
-                                          : AppColors.text,
+                                          ? AppColors.text
+                                          : AppColors.subtext,
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -390,12 +396,13 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                 Text(
                                   _navigation[i].$3,
                                   style: TextStyle(
-                                    fontSize: 10,
-                                    fontFamily: 'monospace',
+                                    fontSize: 12,
+                                    fontFamily: AppTypography.bender,
                                     color: _page == i
-                                        ? AppColors.cyan
+                                        ? AppColors.terminalWhite
                                         : AppColors.muted,
                                     fontWeight: FontWeight.w700,
+                                    letterSpacing: 1,
                                   ),
                                 ),
                               ],
@@ -440,8 +447,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
                         'SYS // ONLINE',
                         style: TextStyle(
                           fontSize: 9,
+                          fontFamily: AppTypography.bender,
                           letterSpacing: 1.5,
-                          color: AppColors.cyanDark,
+                          color: AppColors.muted,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -638,7 +646,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
         showCheckmark: false,
         labelStyle: TextStyle(
           fontSize: 12,
-          color: _category == i ? AppColors.cyan : AppColors.secondary,
+          fontWeight: _category == i ? FontWeight.w700 : FontWeight.w400,
+          color: _category == i ? AppColors.onActive : AppColors.secondary,
         ),
         materialTapTargetSize: MaterialTapTargetSize.padded,
       ),
@@ -718,12 +727,12 @@ class _StoryLauncherState extends State<StoryLauncher> {
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
-                color: active ? AppColors.cyan : Colors.transparent,
+                color: active ? AppColors.indicator : Colors.transparent,
                 width: 3,
               ),
-              top: const BorderSide(color: AppColors.border),
-              right: const BorderSide(color: AppColors.border),
-              bottom: const BorderSide(color: AppColors.border),
+              top: BorderSide(color: active ? AppColors.borderLight : AppColors.border),
+              right: BorderSide(color: active ? AppColors.borderLight : AppColors.border),
+              bottom: BorderSide(color: active ? AppColors.borderLight : AppColors.border),
             ),
           ),
           child: Column(
@@ -732,7 +741,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
               Text(
                 _categories[_categoryOf(group)],
                 style: TextStyle(
-                  color: active ? AppColors.cyan : AppColors.muted,
+                  color: active ? AppColors.terminalWhite : AppColors.muted,
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.8,
@@ -762,7 +771,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                   Icon(
                     Icons.chevron_right,
                     size: 16,
-                    color: active ? AppColors.cyan : AppColors.muted,
+                    color: active ? AppColors.text : AppColors.muted,
                   ),
                 ],
               ),
@@ -805,7 +814,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.8,
-                                color: AppColors.cyan,
+                                color: AppColors.terminalWhite,
                               ),
                             ),
                             const SizedBox(height: 6),
@@ -867,7 +876,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                   children: [
                     ArchiveTag(
                       _categories[_categoryOf(group)],
-                      color: AppColors.cyan,
+                      color: AppColors.terminalWhite,
                     ),
                     const SizedBox(width: 10),
                     Text(
@@ -977,7 +986,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   Widget _stageRow(StoryEntry entry, bool selecting) => Material(
     key: ValueKey(entry.path),
     color: _selected.contains(entry.path)
-        ? AppColors.cyan.withValues(alpha: .08)
+        ? AppColors.surface
         : Colors.transparent,
     child: InkWell(
       onTap: () {
@@ -996,7 +1005,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
           border: Border(
             left: BorderSide(
               color: _selected.contains(entry.path)
-                  ? AppColors.cyan
+                  ? AppColors.indicator
                   : Colors.transparent,
               width: 3,
             ),
@@ -1024,10 +1033,11 @@ class _StoryLauncherState extends State<StoryLauncher> {
                         Text(
                           entry.code,
                           style: const TextStyle(
-                            color: AppColors.cyan,
+                            fontFamily: AppTypography.bender,
+                            color: AppColors.terminalWhite,
                             fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                            letterSpacing: 0.5,
+                            fontSize: 14,
+                            letterSpacing: 1.0,
                           ),
                         ),
                       if (entry.tag.isNotEmpty)
@@ -1054,7 +1064,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
               onPressed: () => _open(entry),
               icon: const Icon(
                 Icons.play_arrow,
-                color: AppColors.cyan,
+                color: AppColors.terminalWhite,
                 size: 22,
               ),
             ),
@@ -1069,7 +1079,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
     decoration: const BoxDecoration(
       color: AppColors.surface,
-      border: Border(top: BorderSide(color: AppColors.cyan, width: 2)),
+      border: Border(top: BorderSide(color: AppColors.active, width: 2)),
     ),
     child: Row(
       children: [
