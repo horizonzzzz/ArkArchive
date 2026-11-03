@@ -60,7 +60,7 @@ PRTS 当前生产代码将主对白字体定义为 `NotoSansHans-Medium`、weigh
 3. **滑动转场**：PRTS 生产播放器加载 `https://static.prts.wiki/widgets/production/slide_mask.BQ3hXFW7.png`，并在 shader 中使用 `slide=0.601`、`end=0.641`、横向 `extent=0.787`（纵向 `extent=1`）和 `progress=clamp((alpha-0.2)*1.25,0,1)`。Flutter 版本复用该纹理及公式，纹理已保存为 `assets/images/slide_mask.png` 并从 `rootBundle` 读取；shader 像素测试验证了预乘透明度输出。坐标朝向与光栅化仍需逐帧比较，纹理缺失时回退到线性遮罩。
 4. **通讯窗口**：可按 channel 处理尺寸动画、头像和开关；遮罩边缘、头像裁切和嵌套窗口尚需游戏画面对照。
 5. **长尾指令**：复杂贴纸、动画标题、视频与特殊角色动作未承诺支持。运行中可通过诊断查看跳过项。
-6. **原生验收**：Windows 已通过 `just_audio_windows` 接入音频平台实现，release 构建通过；尚未验收实际音频播放。Android / iOS 真机未连接，浏览器构建和测试不能替代移动设备的音频衔接、横屏、飞行模式重启和帧率验收。
+6. **原生验收**：Windows 使用 `just_audio_windows` 上游固定提交，已对 TL-2「子遗的道路」行动后开场进行真实音频复测：首句对白出现，30 次 500ms 心跳持续正常，循环音效指令执行完成。修复了 BGM 索引监听重复设置循环模式导致的微任务反馈环；正式入口 release 构建通过。尚未完成整章长时间播放与听感验收。Android / iOS 真机未连接，浏览器构建和测试不能替代移动设备的音频衔接、横屏、飞行模式重启和帧率验收。
 
 持久缓存目前按 URL 的 SHA-256 命名，保留媒体扩展名并在下载完成后原子重命名。不同 URL 的相同内容尚未做内容哈希去重；`latest` 元数据与脚本尚未建立版本更新/失效策略。缓存命中与纯内存模拟测试不能代替完整断网验收。
 

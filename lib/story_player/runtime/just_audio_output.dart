@@ -75,7 +75,8 @@ class JustAudioOutput implements StoryAudio {
       final loop = channel == 'music' || c.flag('loop');
       await track.player.setLoopMode(loop && sources.length == 1 ? LoopMode.one : LoopMode.off);
       if (loop && sources.length > 1) {
-        track.indexSubscription = track.player.currentIndexStream.listen((index) {
+        // setLoopMode 会重发相同索引，去重避免微任务反馈环阻塞界面。
+        track.indexSubscription = track.player.currentIndexStream.distinct().listen((index) {
           if (index == sources.length - 1 && !track.released) unawaited(track.player.setLoopMode(LoopMode.one));
         });
       }

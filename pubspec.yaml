@@ -37,7 +37,11 @@ dependencies:
 
   http: ^1.3.0
   just_audio: ^0.10.6
-  just_audio_windows: ^0.2.3
+  just_audio_windows:
+    git:
+      url: https://github.com/bdlukaa/just_audio_windows.git
+      ref: 501f2ddddf2cdd9241213bcdaf05227a6c6a7c10
+      path: just_audio_windows
   path_provider: ^2.1.6
   crypto: ^3.0.8
   html: ^0.15.7
