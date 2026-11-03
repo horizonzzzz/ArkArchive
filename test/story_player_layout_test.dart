@@ -13,7 +13,7 @@ void main() {
     final assets = AssetStore();
     addTearDown(assets.close);
     final story = PreparedStory(
-      StoryDocument(title: '布局回归', script: StoryScript.parse('第一句\n第二句')),
+      StoryDocument(title: '布局回归', script: StoryScript.parse('[header(is_autoable=false)]\n第一句\n第二句')),
       MediaCatalog(variables: {}, characters: {}, backgroundPpu: {}),
       assets,
       [],
@@ -32,6 +32,9 @@ void main() {
       }
     });
     expect(find.text('开始播放'), findsOneWidget);
+    expect(tester.widget<TextButton>(find.widgetWithText(TextButton, '手动')).onPressed, isNull);
+    expect(tester.widget<TextButton>(find.widgetWithText(TextButton, '手动')).onLongPress, isNull);
+    expect(tester.widget<IconButton>(find.byWidgetPredicate((w) => w is IconButton && w.tooltip == '自动播放')).onPressed, isNull);
     await tester.tap(find.text('开始播放'));
     await tester.pump();
     final stage = tester.widget<StoryStage>(find.byType(StoryStage));

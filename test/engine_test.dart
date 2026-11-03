@@ -59,10 +59,10 @@ void main() {
   test('分支只执行所选值，空 Predicate 恢复公共剧情', () async {
     final engine = StoryEngine(
       StoryScript.parse('''
-[Decision(options="左;右",values="a;b")]
-[Predicate(references="a")]
+[Decision(options="左;右",values="1;2")]
+[Predicate(references="1")]
 [name="甲"]左边
-[Predicate(references="b")]
+[Predicate(references="2")]
 [name="乙"]右边
 [Predicate]
 共同结尾
@@ -72,7 +72,7 @@ void main() {
     addTearDown(engine.dispose);
     await engine.start();
     expect(engine.state.choices, hasLength(2));
-    await engine.choose('b');
+    await engine.choose('2');
     expect(engine.state.text, '右边');
     await engine.advance();
     await engine.advance();

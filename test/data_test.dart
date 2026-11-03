@@ -190,4 +190,18 @@ void main() {
       greaterThan(0),
     );
   });
+  test('图片遮罩和数值枚举 avgdisplay 进入静态依赖，重复 URL 去重', () {
+    final catalog = MediaCatalog(variables: {}, characters: {}, backgroundPpu: {});
+    final dependencies = catalog.dependencies(StoryScript.parse('''
+[blocker(image="mask",a=1)]
+[cgitem(image="mask")]
+[avgdisplay(style=5,slot=1,name="snow")]
+[avgdisplay(style="bg",slot="bgover",name="snow")]
+[avgdisplay(style=3,slot=1,name="unsupported")]
+'''), []);
+    expect(dependencies, {
+      catalog.image('mask', cg: true),
+      catalog.image('snow'),
+    });
+  });
 }

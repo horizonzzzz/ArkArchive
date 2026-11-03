@@ -70,6 +70,7 @@ flutter:
     - assets/images/slide_mask.png
     - assets/images/logo_rhodes.png
     - assets/images/logo_babel.png
+    - assets/images/prts_ui/
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
   shaders:

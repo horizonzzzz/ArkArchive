@@ -32,7 +32,14 @@ class MediaCatalog {
     return MediaCatalog(variables: tables[0], characters: tables[1], backgroundPpu: tables[2]);
   }
 
-  Uri image(String key, {bool cg = false}) => assetBase.resolve('avg/${cg ? 'images/' : 'background/'}${key.toLowerCase()}.png');
+  Uri image(String key, {bool cg = false, String kind = ''}) {
+    final dir = kind.isNotEmpty
+        ? kind
+        : cg
+        ? 'images'
+        : 'background';
+    return assetBase.resolve('avg/$dir/${key.toLowerCase()}.png');
+  }
   Uri _characterUri(String path) => assetBase.resolve('avg/characters/${path.split('/').map(Uri.encodeComponent).join('/')}.png');
   Uri? audio(String key) {
     if (key.isEmpty) return null;
@@ -88,22 +95,59 @@ class MediaCatalog {
 
   Set<Uri> dependencies(StoryScript script, List<String> warnings) {
     final assets = <Uri>{};
+    void addImage(String key, String kind) {
+      if (key.isEmpty) return;
+      assets.add(image(key, kind: kind));
+    }
+
     for (final c in script.commands) {
-      if (['background', 'image'].contains(c.tag) && c.value('image').isNotEmpty) assets.add(image(c.value('image'), cg: c.tag == 'image'));
-      if (['charslot', 'character', 'interlude'].contains(c.tag)) {
+      if (['background', 'image'].contains(c.tag) && c.value('image').isNotEmpty) {
+        assets.add(image(c.value('image'), cg: c.tag == 'image'));
+      }
+      if (['gridbg', 'verticalbg', 'largebg', 'largeimg'].contains(c.tag)) {
+        final group = c.value('imagegroup').isNotEmpty ? c.value('imagegroup') : c.value('cggroup');
+        final kind = c.value('imagegroup').isNotEmpty ? 'background' : 'images';
+        for (final key in group.split('/').where((s) => s.trim().isNotEmpty)) {
+          addImage(key, kind);
+        }
+      }
+      if (['charslot', 'character', 'interlude', 'charactercutin'].contains(c.tag)) {
         for (final key in ['name', 'name2']) {
           final name = c.value(key);
           if (name.isEmpty || name == 'char_empty') continue;
-          final art = character(name);
-          if (art == null) { warnings.add('第 ${c.line} 行：未找到立绘 $name'); }
-          else { assets.addAll(art.assets); }
+          final isInterludeAvatar = c.tag == 'interlude' && c.number('type').toInt() == 3;
+          if (isInterludeAvatar || c.tag != 'interlude') {
+            final art = character(name);
+            if (art == null) {
+              warnings.add('第 ${c.line} 行：未找到立绘 $name');
+            } else {
+              assets.addAll(art.assets);
+            }
+          }
         }
+      }
+      if (c.tag == 'interlude') {
+        final type = c.number('type').toInt();
+        final name = c.value('name');
+        if (name.isNotEmpty && type != 3) {
+          addImage(name, type == 2 ? 'background' : 'cutin');
+        }
+      }
+      if (['cgitem', 'showitem', 'blocker'].contains(c.tag)) {
+        addImage(c.value('image'), 'images');
+      }
+      if (c.tag == 'avgdisplay' && c.value('name').isNotEmpty && ['bg', '5'].contains(c.value('style'))) {
+        assets.add(image(c.value('name')));
       }
       if (['playmusic', 'playsound'].contains(c.tag)) {
         for (final key in ['key', 'intro']) {
           if (c.value(key).isEmpty) continue;
           final uri = audio(c.value(key));
-          if (uri != null) { assets.add(uri); } else { warnings.add('未解析音频：${c.value(key)}'); }
+          if (uri != null) {
+            assets.add(uri);
+          } else {
+            warnings.add('未解析音频：${c.value(key)}');
+          }
         }
       }
     }

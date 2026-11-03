@@ -75,7 +75,7 @@ PRTS 当前生产代码将主对白字体定义为 `NotoSansHans-Medium`、weigh
 | 指令 | 参考端行为 | 脚本占比 | 次数 |
 |---|---|---|---|
 | `cameraeffect` | `Grayscale` 全屏灰度（`amount`/`initamount`/`keep`/`block`）与 `Colorinverse` 反色 | 31.5% | 2,152 |
-| `subtitle` | `x`/`y`/`width`/`size`/`alignment` 的旁白打字机，`multi` 可续接 | 30.0% | 8,107 |
+| `subtitle` | `x`/`y`/`width`/`size`/`alignment` 的旁白打字机，`multi` 合并历史记录，舞台文字逐条替换 | 30.0% | 8,107 |
 | `multiline` | 同一句对白多行续接，`end=true` 结束 | 24.1% | 1,968 |
 | `characteraction` | `move`/`jump`/`shake`/`zoom`/`exit`，含方向、`power`、随机角度与次数 | 22.0% | 4,599 |
 | `sticker` 家族 | 自由坐标富文本贴纸、打字机、`stickertween`/`timersticker`/`stickerclear` | 12.0% | 5,915 |
@@ -108,7 +108,7 @@ PRTS 当前生产代码将主对白字体定义为 `NotoSansHans-Medium`、weigh
 | `imagetween`/`backgroundtween` | `loop` 只记录警告，`ease` 未实现 | — |
 | `decision`/`predicate` | 只保留最后一次选择，多决策分支会走错；缺 `disabled` 选项 | 395 个脚本含分支 |
 | `warp` | 拒绝回跳，参考端允许按标签跳转 | 7 行 |
-| `header` | 未消费元数据：`fit_mode=BLACK_MASK`（黑边）、标题、`is_video_only`、`is_tutorial`、`is_skippable` | 2,036 行 header 被忽略 |
+| `header` | 未消费元数据：标题、`is_video_only`、`is_tutorial`、`is_skippable` | 2,036 行 header 被忽略 |
 | 播放速度 | 缺 1×/2.5×/快速档，`delay` 与打字机不随档位缩放 | 固定 40ms |
 
 ### 参考端同样不处理，无法逆向
@@ -142,6 +142,75 @@ Windows 与 Web 出现音乐和历史记录正常、舞台全黑且无法点击�
 
 修复后验证：`flutter test --reporter expanded` 为 17 项通过、1 项联网测试按配置跳过；`flutter analyze` 无诊断。Windows 与 Web 的真实关卡画面仍需运行复验。
 
+## 2026-11-03 第二轮：按参考端补齐指令覆盖
+
+以 StoryPlayer.DH9HUkmm.js 的 58 指令分发表（`sa`）与真实脚本样本为依据重写引擎与绘制层，并逐指令核对参考端语义：时长是否随速度档缩放（`delay`、`fadetime` 类随 `animateRatio` 缩放；`imagetween`、`cgitem`、`showitem` 的 duration 不缩放）、缺省值、阻塞等待与淡出期间的可见性。
+
+### 本轮实现
+
+- 速度系统：`button_auto` 三档、`quick_play` 四档与缺省速度的完整切换；打字机延迟按档位换算。
+- `curtain`：8 方向半平面遮罩（对角 1/3/5/7 用固定锚点 Vi）、`grad` 前缘渐隐、`delay`、`a`/`afrom`/`ato`。
+- `charslot`/`character`：move/jump/shake/zoom/exit 动作系统（jump 为 easeOutCubic 抛物线，shake 复刻参考端随机折线算法）、`bstart`/`bend` 顶部黑化、`enter` 方向滑入、`xpos`、`blackstart`/`blackend`。
+- `gridbg`/`verticalbg`/`largebg`/`largeimg` 多图拼接（含 `initposmode`）与 `largebgtween`/`largeimgtween`。
+- `imagetween` 的 `ease` 目录与 `loop`；`imagerotate`；`background`/`image` 的 `tiled`、`width`/`height` 倍率与缺省 `screenadapt` 不缩放。
+- `camerashake`：`stop`、负时长无限震动、`randomness` 与阻塞等待；`cameraeffect` 非 Chaos；`focusout`/`focusparam`（smoothstep，目标含 `lbg` 与 `cgitem:id`，聚焦滤镜按层作用）。
+- `decision`：`&` 前缀禁用选项、`values` 按 parseInt 解析（缺省 0）、多决策（选择后 references 复位）；`predicate` 的 references 与所选值按整数比较，空 references 放行，未选择（值 0）时放行全部。
+- `interlude`：6 种 `maskid` 简化窗口、type 1/2/3 元素参数化（`r` 槽默认摆位 -140,-63）、`tsfrom`/`tsto` 比例动画（参考端 startScaleEntry 语义：tsto 有效才触发、tsfrom 缺省 0）、clear 按 dialog/非 dialog 分别走 alpha 淡出与比例收拢。
+- `showitem`/`hideitem`：photo 九宫格相框与 cutin 窗口（7 种展开遮罩）；全屏压暗板绘制在窗口裁剪之外、alpha 随窗口展开度；cutin 窗口宽度缺省取图片宽度（无图回退 100）。
+- `charactercutin`：show/update/hide 全路径；hide 用窗口自身 fadestyle 收拢。
+- `cgitem`/`hidecgitem`：pos/scale/rot/color/alpha 通道独立时长与延迟；时长<=0 时忽略延迟、直接置终值；时长>0 时先落初值、延迟期间保持初值；scale 按 sfrom/sto 数值比较判定；隐藏带 ease。
+- `subtitle`/`sticker` 家族：`stickertween` 步进队列、`timersticker`/`timerclear`、`stickerclear` 150ms 池淡出。
+- `animtext`（group_location_stamp）：5 秒关键帧时间线，外框（frame_outer）缩放 25→140.01 且 2.5s 后淡出、图标组 4.5~5s 额外淡出、文本左中锚定随时间线滑动；文本分段按参考端字重（900/500）。
+- `avgdisplay`（style=bg）、`header` 元数据消费（`is_video_only` 直接结束、`is_skippable` 缺省 `!is_tutorial`）、`warp` 允许回跳、`skipnode`/`skiptothis`（跳到结尾时重置 showitem 槽位）、theater 模式。
+- 播放结束清理：清 animtext 印章、avgdisplay 与 showitem 槽位（参考端 finishPlayback）。
+
+### 通用修复：淡出期间保持可见
+
+`hidecgitem`、`hideitem`、`charactercutin`（无 name）、`interlude clear`、`stickerclear` 此前先从场景移除再淡出，导致对象瞬间消失。现统一为淡出期间保持绘制、结束后移除，并以 `hideEpoch` 会话哨兵对齐参考端 sessionId/hideEpoch 语义（连续隐藏时仅最后一次淡出负责移除；更新命令使在途淡出失效）。`hidecgitem` 同时补上 ease 参数。
+
+### 本轮跳过（维持审计结论）
+
+- `bgeffect`/`effect`：参考端 `unsupported_command`。
+- `cameraeffect=Chaos`、`avgdisplay` 非 bg 样式、`animtext` 非 group_location_stamp 名字：参考端 `unsupported_visual`。
+- `video`：Windows 无官方播放插件，需平台能力评估后再议。
+- `spellsticker`/`spellstickerclear`：依赖商业字体 FZTYSK/RoHMinSink，无法获取授权（播放时警告一次）。
+- `animtextclean`：不在参考端 58 指令分发表内，按 unknown_command 处理。
+
+### 简化与残余差距
+
+- interlude 对话模板（interlude_dialog_*）用提取的公共框精灵近似；波形动画、square_show 关键帧与 unknown-char 占位图未复刻。
+- 印章与 interlude 名称文字用 Noto 字体近似参考端商业字体；shake 等随机轨迹为统计意义上相似。
+- `charactercutin` 同窗口多立绘交叉淡出按单立绘替换处理。
+- 真实关卡端到端演出验收（浏览器/桌面运行）仍待执行。
+
+### 打包 UI 素材来源
+
+`assets/images/prts_ui/` 的 11 张贴图提取自 PRTS 播放器 widget JS 内嵌的 base64 PNG（stamp_*、interlude_*、icon_back、showitem_*），与已入库的滑动遮罩纹理同源：均为社区复刻的界面装饰素材，非游戏原始资源。
+
+### 验证
+
+- `flutter analyze`：无诊断。
+- `flutter test`：29 项通过、1 项联网测试按配置跳过（需显式 STORY_REFERENCE_URL）。
+- `flutter build web --release --no-web-resources-cdn`：通过，输出 `build/web/`。
+
+## 2026-11-03 审查修复：计时、取消与中间帧
+
+- 所有打字机累计值统一为毫秒；自动等待统一换算为微秒，并在当前文字打完后开始计时。旁白与阻塞贴纸保留等待输入状态，自动模式可继续推进。
+- 补间统一在帧调度器中执行逐帧缓动、延迟和循环；延迟可暂停、可取消。循环按参考端 `Cr.run` 的 `elapsed % duration / duration` 从起点重复；零时长直接置终值，`loop` 与 `block` 同时为真时忽略阻塞。重播、替换补间和替换图层不会复活旧循环。
+- `imagetween`/`backgroundtween`/大场景补间按数值读取各坐标轴；CG 通道等待各自延迟后才动画，阻塞等待延迟加动画的完整时长。
+- 贴纸队列跳过未开始步骤；通讯窗口更新使旧 clear 会话失效并恢复可见；大场景清除在淡出完成后移除。
+- 反色矩阵按 Flutter 的 0～255 平移量换算；印章以秒读取关键帧。图片遮罩和 `avgdisplay(style=5)` 纳入静态依赖。
+- `is_autoable=false` 同时约束引擎模式切换与界面按钮。`fit_mode` 仍只保留元数据：重新核对生产 JS 后，确认参考端自身也没有消费 `fitMode`，不额外臆造黑边裁剪。
+- `subtitle.multi` 按参考端日志聚合器合并历史，舞台上的文本与坐标仍逐条替换；`sticker.multi` 同时续接可见文字与历史，已显示字符不会重新打字。
+
+回归用例位于 `test/alignment_runtime_test.dart`、`test/alignment_painter_test.dart`、`test/data_test.dart` 与 `test/story_player_layout_test.dart`，验证中间时刻、重播取消、循环重复、像素结果和禁用按钮。
+
+本轮最终验证：
+
+- `flutter test --reporter expanded`：58 项通过，1 项联网测试按默认配置跳过（需显式设置 `STORY_REFERENCE_URL`）；相比修复前新增 29 项回归。
+- `flutter analyze`：通过，无诊断。
+- `flutter build web --release --no-web-resources-cdn`：通过，产物位于 `build/web/`，Wasm dry run 也通过；尚未执行实际 Wasm 构建或设备演出验收。
+
 ## 资源与授权边界
 
-公共可访问不代表获准再分发。游戏文本、立绘、CG 与音频不提交到仓库或捆绑到安装包；开发时只按需请求公开源。仓库内只有两类上游静态资源：OFL 授权的 Noto Sans 字体（转为 TTF）和滑动遮罩纹理，均用于渲染效果。用户自有资源的导入也不能被笼统描述为「零侵权风险」。发布前仍需核实上游服务使用条件与素材授权。
+公共可访问不代表获准再分发。游戏文本、立绘、CG 与音频不提交到仓库或捆绑到安装包；开发时只按需请求公开源。仓库内只有三类上游静态资源：OFL 授权的 Noto Sans 字体（转为 TTF）、滑动遮罩纹理，以及从 PRTS widget JS 提取的界面装饰贴图（`assets/images/prts_ui/`，详见上一节），均用于渲染效果。用户自有资源的导入也不能被笼统描述为「零侵权风险」。发布前仍需核实上游服务使用条件与素材授权。
