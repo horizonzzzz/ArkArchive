@@ -7,9 +7,9 @@ class FileCache {
   Future<web.Cache> get _cache =>
       web.window.caches.open('story-assets-v1').toDart;
 
-
   Future<String?> location() async => null;
-  Future<void> setDirectory(String parentPath) async => throw UnsupportedError('浏览器不支持选择缓存目录');
+  Future<void> setDirectory(String parentPath) async =>
+      throw UnsupportedError('浏览器不支持选择缓存目录');
   Future<void> openDirectory() async => throw UnsupportedError('浏览器不支持打开缓存目录');
 
   Future<int> size() async {
@@ -18,14 +18,25 @@ class FileCache {
     var bytes = 0;
     for (final key in keys) {
       final response = await cache.match(key).toDart;
-      if (response != null) bytes += (await response.arrayBuffer().toDart).toDart.lengthInBytes;
+      if (response != null) {
+        bytes += (await response.arrayBuffer().toDart).toDart.lengthInBytes;
+      }
     }
     return bytes;
+  }
+
+  Future<void> clear({Set<Uri> keep = const {}}) async {
+    final cache = await _cache;
+    final retained = keep.map((uri) => uri.toString()).toSet();
+    for (final key in (await cache.keys().toDart).toDart) {
+      if (!retained.contains(key.url)) await cache.delete(key).toDart;
+    }
   }
 
   Future<void> delete(Uri uri) async {
     await (await _cache).delete(uri.toString().toJS).toDart;
   }
+
   Future<Uint8List?> read(Uri uri) async {
     final response = await (await _cache).match(uri.toString().toJS).toDart;
     if (response == null) return null;

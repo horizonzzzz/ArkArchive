@@ -139,7 +139,14 @@ ThemeData buildAppTheme() {
       side: BorderSide(color: AppColors.border),
       selectedColor: AppColors.active,
       backgroundColor: AppColors.surface,
-      labelStyle: TextStyle(fontSize: 12),
+      labelStyle: TextStyle(fontSize: 12, color: AppColors.secondary),
+      secondaryLabelStyle: TextStyle(fontSize: 12, color: AppColors.onActive),
+      checkmarkColor: AppColors.onActive,
+    ),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(
+      color: AppColors.terminalWhite,
+      linearTrackColor: AppColors.tertiary,
+      linearMinHeight: 6,
     ),
     navigationBarTheme: const NavigationBarThemeData(
       backgroundColor: AppColors.panel,

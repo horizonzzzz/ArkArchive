@@ -4,7 +4,22 @@ import 'app_theme.dart';
 import 'archive_widgets.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, required this.concurrency, required this.onConcurrencyChanged, required this.isMobile, required this.isDesktop, required this.wifiOnly, required this.onWifiOnlyChanged, required this.caching, required this.onOpenDirectory, required this.onMoveDirectory, required this.directoryBusy, this.cacheBytes, this.cacheLocation});
+  const SettingsPage({
+    super.key,
+    required this.concurrency,
+    required this.onConcurrencyChanged,
+    required this.isMobile,
+    required this.isDesktop,
+    required this.wifiOnly,
+    required this.onWifiOnlyChanged,
+    required this.caching,
+    required this.onOpenDirectory,
+    required this.onMoveDirectory,
+    required this.directoryBusy,
+    required this.onClearCache,
+    this.cacheBytes,
+    this.cacheLocation,
+  });
   final int concurrency;
   final ValueChanged<int> onConcurrencyChanged;
   final bool isMobile;
@@ -17,6 +32,7 @@ class SettingsPage extends StatefulWidget {
   final VoidCallback onOpenDirectory;
   final VoidCallback onMoveDirectory;
   final bool directoryBusy;
+  final VoidCallback onClearCache;
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
@@ -201,7 +217,9 @@ class _SettingsPageState extends State<SettingsPage> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: const BoxDecoration(
             color: AppColors.canvas,
-            border: Border(left: BorderSide(color: AppColors.indicator, width: 2)),
+            border: Border(
+              left: BorderSide(color: AppColors.indicator, width: 2),
+            ),
           ),
           child: const Text(
             '「罗德岛各部门注意，准备进入预定作战区域。」',
@@ -222,33 +240,57 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     if (widget.isMobile) const Divider(height: 20),
     Text(
-      widget.cacheBytes == null ? '缓存占用：无法读取' : '缓存占用：${(widget.cacheBytes! / 1048576).toStringAsFixed(1)} MB',
+      widget.cacheBytes == null
+          ? '缓存占用：无法读取'
+          : '缓存占用：${(widget.cacheBytes! / 1048576).toStringAsFixed(1)} MB',
       style: const TextStyle(fontSize: 12, color: AppColors.muted),
     ),
     if (widget.isDesktop) ...[
       const Divider(height: 20),
-      const Text('本地媒体缓存目录', style: TextStyle(fontSize: 13, color: AppColors.text)),
-      const SizedBox(height: 8),
-      SelectableText(widget.cacheLocation ?? '无法读取', style: const TextStyle(fontSize: 12, color: AppColors.muted)),
-      const SizedBox(height: 8),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        OutlinedButton.icon(onPressed: widget.directoryBusy ? null : widget.onOpenDirectory, icon: const Icon(Icons.folder_open, size: 16), label: const Text('打开目录')),
-        OutlinedButton.icon(onPressed: widget.directoryBusy ? null : widget.onMoveDirectory, icon: const Icon(Icons.drive_file_move_outline, size: 16), label: const Text('更改目录')),
-      ]),
-    ],
-      const SizedBox(height: 8),
-      _slider(
-        '并发下载数',
-        widget.concurrency.toDouble(),
-        1,
-        8,
-        '${widget.concurrency.toDouble().round()}',
-        widget.directoryBusy ? null : (value) => widget.onConcurrencyChanged(value.round()),
-        divisions: 7,
+      const Text(
+        '本地媒体缓存目录',
+        style: TextStyle(fontSize: 13, color: AppColors.text),
       ),
+      const SizedBox(height: 8),
+      SelectableText(
+        widget.cacheLocation ?? '无法读取',
+        style: const TextStyle(fontSize: 12, color: AppColors.muted),
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          OutlinedButton.icon(
+            onPressed: widget.directoryBusy ? null : widget.onOpenDirectory,
+            icon: const Icon(Icons.folder_open, size: 16),
+            label: const Text('打开目录'),
+          ),
+          OutlinedButton.icon(
+            onPressed: widget.directoryBusy ? null : widget.onMoveDirectory,
+            icon: const Icon(Icons.drive_file_move_outline, size: 16),
+            label: const Text('更改目录'),
+          ),
+        ],
+      ),
+    ],
+    const SizedBox(height: 8),
+    _slider(
+      '并发下载数',
+      widget.concurrency.toDouble(),
+      1,
+      8,
+      '${widget.concurrency.toDouble().round()}',
+      widget.directoryBusy
+          ? null
+          : (value) => widget.onConcurrencyChanged(value.round()),
+      divisions: 7,
+    ),
     const SizedBox(height: 14),
     OutlinedButton.icon(
-      onPressed: () => showCachePreviewConfirmation(context),
+      onPressed: widget.directoryBusy || widget.caching
+          ? null
+          : widget.onClearCache,
       icon: const Icon(Icons.delete_outline, size: 17, color: AppColors.danger),
       label: const Text('清空素材缓存', style: TextStyle(color: AppColors.danger)),
     ),

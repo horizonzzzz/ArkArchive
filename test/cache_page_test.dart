@@ -67,6 +67,7 @@ void main() {
   for (final mobile in [true, false]) {
     testWidgets(mobile ? '移动端只显示 Wi-Fi 设置' : '桌面端只显示缓存目录', (tester) async {
       var wifi = false;
+      var cleared = false;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -81,6 +82,7 @@ void main() {
                   onWifiOnlyChanged: (value) => update(() => wifi = value),
                   caching: false,
                   onOpenDirectory: () {},
+                  onClearCache: () => cleared = true,
                   onMoveDirectory: () {},
                   directoryBusy: false,
                   cacheBytes: 1024,
@@ -94,6 +96,9 @@ void main() {
       expect(find.text('仅在 Wi-Fi 下下载'), mobile ? findsOneWidget : findsNothing);
       expect(find.text('本地媒体缓存目录'), mobile ? findsNothing : findsOneWidget);
       expect(find.text('C:/cache'), mobile ? findsNothing : findsOneWidget);
+      await tester.ensureVisible(find.text('清空素材缓存'));
+      await tester.tap(find.text('清空素材缓存'));
+      expect(cleared, isTrue);
       if (mobile) {
         final row = find
             .ancestor(of: find.text('仅在 Wi-Fi 下下载'), matching: find.byType(Row))

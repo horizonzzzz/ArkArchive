@@ -190,33 +190,3 @@ void showPreviewMessage(BuildContext context, String feature) {
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text('$feature尚未接入，本次仅预览界面。')));
 }
-
-Future<void> showCachePreviewConfirmation(BuildContext context) =>
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.raised,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero,
-          side: BorderSide(color: AppColors.border),
-        ),
-        title: const Text('清空素材缓存'),
-        content: const Text('此处预览清理确认流程。缓存管理尚未接入，确认后不会删除任何文件。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              showPreviewMessage(context, '缓存清理');
-            },
-            child: const Text(
-              '确认预览',
-              style: TextStyle(color: AppColors.danger),
-            ),
-          ),
-        ],
-      ),
-    );

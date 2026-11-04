@@ -1,19 +1,22 @@
 import 'dart:io';
 import 'dart:convert';
+
 import 'package:flutter/services.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
 class FileCache {
   FileCache({Future<Directory> Function()? supportDirectory})
-      : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
+    : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
 
   final Future<Directory> Function() _supportDirectory;
   Future<Directory>? _directory;
   Future<Directory>? _activeFolder;
+  final Map<Uri, Future<void>> _writes = {};
 
   Future<Directory> _root() => _directory ??= _supportDirectory();
-  Future<File> _config() async => File('${(await _root()).path}/story_cache_directory.json');
+  Future<File> _config() async =>
+      File('${(await _root()).path}/story_cache_directory.json');
 
   Future<Directory> _folder() async {
     final folder = _activeFolder ??= _resolveFolder();
@@ -31,7 +34,8 @@ class FileCache {
       final path = jsonDecode(await config.readAsString()) as String;
       final selected = Directory(path);
       if (Platform.isMacOS) {
-        await const MethodChannel('story_cache_directory').invokeMethod<void>('restore', selected.parent.absolute.path);
+        await const MethodChannel('story_cache_directory')
+            .invokeMethod<void>('restore', selected.parent.absolute.path);
       }
       if (!await selected.exists()) throw FileSystemException('缓存目录不存在', path);
       return selected;
@@ -43,17 +47,26 @@ class FileCache {
 
   Future<void> setDirectory(String parentPath) async {
     final parent = Directory(parentPath);
-    if (!await parent.exists()) throw FileSystemException('选择的目录不存在', parentPath);
+    if (!await parent.exists()) {
+      throw FileSystemException('选择的目录不存在', parentPath);
+    }
     final source = await _folder();
-    final target = Directory('${parent.absolute.path}${Platform.pathSeparator}story_assets');
+    final target = Directory(
+      '${parent.absolute.path}${Platform.pathSeparator}story_assets',
+    );
     if (await target.exists()) {
       final current = await source.resolveSymbolicLinks();
       final selected = await target.resolveSymbolicLinks();
-      if (Platform.isWindows ? current.toLowerCase() == selected.toLowerCase() : current == selected) return;
+      if (Platform.isWindows
+          ? current.toLowerCase() == selected.toLowerCase()
+          : current == selected) {
+        return;
+      }
       throw FileSystemException('目标已包含 story_assets 目录，未覆盖任何文件', target.path);
     }
     if (Platform.isMacOS) {
-      await const MethodChannel('story_cache_directory').invokeMethod<void>('save', parent.absolute.path);
+      await const MethodChannel('story_cache_directory')
+          .invokeMethod<void>('save', parent.absolute.path);
     }
     final scratch = await parent.createTemp('.story_assets-');
     var copied = false;
@@ -69,7 +82,9 @@ class FileCache {
       copied = true;
       final config = await _config();
       await config.parent.create(recursive: true);
-      final temp = File('${config.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
+      final temp = File(
+        '${config.path}.${DateTime.now().microsecondsSinceEpoch}.tmp',
+      );
       try {
         await temp.writeAsString(jsonEncode(target.absolute.path), flush: true);
         await temp.rename(config.path);
@@ -107,6 +122,21 @@ class FileCache {
     return bytes;
   }
 
+  Future<void> clear({Set<Uri> keep = const {}}) async {
+    final retained = <String>{};
+    for (final uri in keep) {
+      retained.add((await _file(uri)).uri.pathSegments.last);
+    }
+    await for (final entity in (await _folder()).list(followLinks: false)) {
+      final name = entity.uri.pathSegments.last;
+      if (entity is File &&
+          RegExp(r'^[a-f0-9]{64}\.[a-zA-Z0-9]{1,8}$').hasMatch(name) &&
+          !retained.contains(name)) {
+        await entity.delete();
+      }
+    }
+  }
+
   Future<void> delete(Uri uri) async {
     final file = await _file(uri);
     if (await file.exists()) await file.delete();
@@ -115,14 +145,29 @@ class FileCache {
   Future<File> _file(Uri uri) async {
     final folder = await _folder();
     final name = sha256.convert(utf8.encode(uri.toString()));
-    final extension = RegExp(r'\.[a-zA-Z0-9]{1,8}$').firstMatch(uri.path)?.group(0) ?? '.bin';
+    final extension =
+        RegExp(r'\.[a-zA-Z0-9]{1,8}$').firstMatch(uri.path)?.group(0) ?? '.bin';
     return File('${folder.path}/$name$extension');
   }
+
   Future<Uint8List?> read(Uri uri) async {
     final file = await _file(uri);
     return await file.exists() ? file.readAsBytes() : null;
   }
+
   Future<void> write(Uri uri, Uint8List bytes) async {
+    // Windows 不允许同时替换同一个文件，同一 URI 必须依次写入。
+    final previous = _writes[uri] ?? Future<void>.value();
+    final write = previous.catchError((_) {}).then((_) => _write(uri, bytes));
+    _writes[uri] = write;
+    try {
+      await write;
+    } finally {
+      if (identical(_writes[uri], write)) _writes.remove(uri);
+    }
+  }
+
+  Future<void> _write(Uri uri, Uint8List bytes) async {
     final file = await _file(uri);
     final scratch = await file.parent.createTemp('.write-');
     try {
@@ -133,6 +178,7 @@ class FileCache {
       await scratch.delete(recursive: true);
     }
   }
+
   Future<Uri> playableUri(Uri uri) async {
     final file = await _file(uri);
     return await file.exists() ? file.uri : uri;

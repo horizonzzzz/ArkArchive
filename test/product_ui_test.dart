@@ -140,6 +140,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.entryCalls, 2);
     expect(find.text('缓存完成，共 2 幕。'), findsOneWidget);
+    expect(find.text('待缓存 (0)'), findsOneWidget);
     await tester.tap(find.text('已离线'));
     await tester.pumpAndSettle();
     expect(find.text(_main.title), findsOneWidget);
@@ -149,8 +150,6 @@ void main() {
     repo.pending!.completeError(const FormatException('脚本缺失'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('剧情馆').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('取消选择'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('mobile-batch-bar')), findsNothing);
   });

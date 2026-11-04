@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 
@@ -44,6 +45,13 @@ class _StoryLauncherState extends State<StoryLauncher> {
   int _cachedTotal = 0;
   String? _cacheMessage;
   final Map<String, CacheJob> _cacheJobs = {};
+  Completer<void>? _cacheQueueChanged;
+
+  void _wakeCacheQueue() {
+    _cacheQueueChanged?.complete();
+    _cacheQueueChanged = null;
+  }
+
   bool _deletingCache = false;
   bool _movingDirectory = false;
 
@@ -80,10 +88,22 @@ class _StoryLauncherState extends State<StoryLauncher> {
   Future<void> _refreshCacheInfo() async {
     try {
       final size = await _repository.store.cacheSize();
-      final location = _repository.store.isDesktop ? await _repository.store.cacheLocation() : null;
-      if (mounted) setState(() { _cacheBytes = size; _cacheLocation = location; });
+      final location = _repository.store.isDesktop
+          ? await _repository.store.cacheLocation()
+          : null;
+      if (mounted) {
+        setState(() {
+          _cacheBytes = size;
+          _cacheLocation = location;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() { _cacheBytes = null; _cacheLocation = null; });
+      if (mounted) {
+        setState(() {
+          _cacheBytes = null;
+          _cacheLocation = null;
+        });
+      }
     }
   }
 
@@ -92,14 +112,22 @@ class _StoryLauncherState extends State<StoryLauncher> {
     try {
       await _repository.store.setWifiOnly(value);
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wi-Fi 设置无法保存，本次运行仍然生效。')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Wi-Fi 设置无法保存，本次运行仍然生效。')));
+      }
     }
   }
+
   Future<void> _openCacheDirectory() async {
     try {
       await _repository.store.openCacheDirectory();
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('无法打开缓存目录：$error')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('无法打开缓存目录：$error')));
+      }
     }
   }
 
@@ -111,79 +139,147 @@ class _StoryLauncherState extends State<StoryLauncher> {
       if (path == null || !mounted) return;
       await _repository.store.moveCacheDirectory(path);
       await _refreshCacheInfo();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('缓存目录已切换，原目录文件仍然保留。')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('缓存目录已切换，原目录文件仍然保留。')));
+      }
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('无法切换缓存目录：$error')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('无法切换缓存目录：$error')));
+      }
     } finally {
       if (mounted) setState(() => _movingDirectory = false);
     }
   }
+
   Future<void> _changeConcurrency(int value) async {
     setState(() => _repository.store.concurrency = value);
+    _wakeCacheQueue();
     try {
       await _repository.store.setConcurrency(value);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('并发设置无法保存，当前值仅在本次运行中生效。')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('并发设置无法保存，当前值仅在本次运行中生效。')));
       }
     }
   }
 
   Future<void> _cacheSelected() async {
-    if (_busy || _caching || _deletingCache || _movingDirectory || _selectedEntries.isEmpty) return;
-    final jobs = {for (final entry in _selectedEntries) entry.path: CacheJob(entry)}.values.toList();
+    if (_busy ||
+        _caching ||
+        _deletingCache ||
+        _movingDirectory ||
+        _selectedEntries.isEmpty) {
+      return;
+    }
+    setState(() => _caching = true);
+    try {
+      await _repository.store.checkCacheNetwork();
+    } on WifiRequired catch (notice) {
+      if (mounted) {
+        setState(() {
+          _caching = false;
+          _cacheMessage = '$notice';
+        });
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$notice')));
+      }
+      return;
+    }
+    if (!mounted) return;
+    final jobs = {
+      for (final entry in _selectedEntries) entry.path: CacheJob(entry),
+    }.values.toList();
+    var wifiInterrupted = false;
     setState(() {
-      _cacheJobs..clear()..addEntries(jobs.map((job) => MapEntry(job.entry.path, job)));
-      _caching = true;
+      _cacheJobs
+        ..clear()
+        ..addEntries(jobs.map((job) => MapEntry(job.entry.path, job)));
       _cachedDone = 0;
       _cachedTotal = jobs.length;
       _cacheMessage = null;
       _page = 1;
     });
     Future<void> worker(CacheJob job) async {
-        try {
-          await job.control.checkpoint();
-          job.started = true;
-          job.status = CacheJobStatus.downloading;
-          if (mounted) setState(() => _cached.remove(job.entry.path));
-          final errors = await _repository.cacheEntry(job.entry, control: job.control, onProgress: (done, total) {
+      try {
+        await job.control.checkpoint();
+        job.started = true;
+        job.status = CacheJobStatus.downloading;
+        if (mounted) setState(() {});
+        final errors = await _repository.cacheEntry(
+          job.entry,
+          control: job.control,
+          onProgress: (done, total) {
             job.done = done;
             job.total = total;
             if (mounted) setState(() {});
-          });
-          await job.control.checkpoint();
-          if (errors.isEmpty) {
-            job.status = CacheJobStatus.completed;
-            _cached.add(job.entry.path);
-          } else {
-            job.status = CacheJobStatus.failed;
-            job.error = errors.join('；');
-          }
-        } on CacheCancelled {
-          job.status = CacheJobStatus.cancelled;
-          if (job.started) {
-            try {
-              await _repository.forgetCachedStory(job.entry);
-            } catch (error) {
-              job.error = '无法删除离线记录：$error';
-              job.status = CacheJobStatus.failed;
-            }
-          }
-        } catch (error) {
+          },
+        );
+        await job.control.checkpoint();
+        if (errors.isEmpty) {
+          job.status = CacheJobStatus.completed;
+          _cached.add(job.entry.path);
+          _selected.remove(job.entry.path);
+        } else {
           job.status = CacheJobStatus.failed;
-          job.error = '$error';
+          job.error = errors.join('；');
         }
-        if (mounted) setState(() => _cachedDone++);
+      } on WifiRequired {
+        wifiInterrupted = true;
+        job.status = CacheJobStatus.waiting;
+      } on CacheCancelled {
+        job.status = CacheJobStatus.cancelled;
+        if (job.started) {
+          try {
+            await _repository.forgetCachedStory(job.entry);
+          } catch (error) {
+            job.error = '无法删除离线记录：$error';
+            job.status = CacheJobStatus.failed;
+          }
+        }
+      } catch (error) {
+        job.status = CacheJobStatus.failed;
+        job.error = '$error';
+      }
+      if (mounted) setState(() => _cachedDone++);
     }
-    await Future.wait(jobs.map(worker));
+
+    final pending = jobs.toList();
+    final running = <Future<void>>{};
+    while (pending.isNotEmpty || running.isNotEmpty) {
+      if (wifiInterrupted) pending.clear();
+      while (running.length < _repository.store.concurrency) {
+        final job = pending.where((job) => !job.control.paused).firstOrNull;
+        if (job == null) break;
+        pending.remove(job);
+        late final Future<void> task;
+        task = worker(job).whenComplete(() => running.remove(task));
+        running.add(task);
+      }
+      if (pending.isEmpty && running.isEmpty) break;
+      final changed = _cacheQueueChanged ??= Completer<void>();
+      await Future.any([...running, changed.future]);
+    }
     _repository.store.releaseMemory();
     await _refreshCacheInfo();
     if (!mounted) return;
-    final failures = jobs.where((job) => job.status == CacheJobStatus.failed).toList();
-    final complete = jobs.where((job) => job.status == CacheJobStatus.completed).length;
+    final failures = jobs
+        .where((job) => job.status == CacheJobStatus.failed)
+        .toList();
+    final complete = jobs
+        .where((job) => job.status == CacheJobStatus.completed)
+        .length;
     setState(() {
       _caching = false;
-      _cacheMessage = failures.isEmpty ? '缓存完成，共 $complete 幕。' : '部分剧情缓存失败：\n${failures.map((job) => '${job.entry.title}：${job.error}').join('\n')}';
+      _cacheMessage = [
+        if (wifiInterrupted) '${const WifiRequired()}',
+        '缓存完成，共 $complete 幕。',
+        if (failures.isNotEmpty)
+          '部分剧情缓存失败：\n${failures.map((job) => '${job.entry.title}：${job.error}').join('\n')}',
+      ].join('\n');
     });
   }
 
@@ -191,12 +287,15 @@ class _StoryLauncherState extends State<StoryLauncher> {
     setState(() {
       if (job.control.paused) {
         job.control.resume();
-        job.status = job.started ? CacheJobStatus.downloading : CacheJobStatus.waiting;
+        job.status = job.started
+            ? CacheJobStatus.downloading
+            : CacheJobStatus.waiting;
       } else {
         job.control.pause();
         job.status = CacheJobStatus.paused;
       }
     });
+    _wakeCacheQueue();
   }
 
   void _removeCacheJob(CacheJob job) {
@@ -206,29 +305,56 @@ class _StoryLauncherState extends State<StoryLauncher> {
       _cacheJobs.remove(job.entry.path);
       _selected.remove(job.entry.path);
     });
+    _wakeCacheQueue();
   }
-  Future<void> _deleteCached(StoryEntry entry) async {
+
+  Future<void> _deleteCached(List<StoryEntry> entries) async {
     if (_caching || _busy || _deletingCache || _movingDirectory) return;
-    final confirm = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
-      title: const Text('删除离线剧情？'),
-      content: Text('删除 ${entry.title} 的离线记录和独占素材，共用素材将保留。'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除')),
-      ],
-    ));
-    if (confirm != true || !mounted || _caching || _busy || _deletingCache || _movingDirectory) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除离线剧情？'),
+        content: Text('删除选中的 ${entries.length} 幕剧情的离线记录和独占素材，共用素材将保留。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true ||
+        !mounted ||
+        _caching ||
+        _busy ||
+        _deletingCache ||
+        _movingDirectory) {
+      return;
+    }
     setState(() => _deletingCache = true);
     try {
-      final reclaimed = await _repository.deleteCachedStory(entry);
+      var reclaimed = true;
+      for (final entry in entries) {
+        if (!await _repository.deleteCachedStory(entry)) reclaimed = false;
+        _cacheJobs.remove(entry.path);
+      }
       final cached = await _repository.cachedStories();
       if (!mounted) return;
-      setState(() { _cached = cached; _cacheJobs.remove(entry.path); });
+      setState(() => _cached = cached);
       if (!reclaimed) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('离线记录已删除；缺少素材清单，文件已保留。')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('离线记录已删除；缺少素材清单，文件已保留。')));
       }
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除未完全完成：$error')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('删除未完全完成：$error')));
+      }
       try {
         final cached = await _repository.cachedStories();
         if (mounted) setState(() => _cached = cached);
@@ -238,6 +364,70 @@ class _StoryLauncherState extends State<StoryLauncher> {
       await _refreshCacheInfo();
     }
   }
+
+  Future<void> _clearCache() async {
+    if (_caching || _busy || _deletingCache || _movingDirectory) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('清空素材缓存？'),
+        content: const Text(
+          '删除所有已下载的剧情脚本、图片和音频，并清除离线记录。保留剧情目录和下载设置，之后播放需要重新下载。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              '清空缓存',
+              style: TextStyle(color: AppColors.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true ||
+        !mounted ||
+        _caching ||
+        _busy ||
+        _deletingCache ||
+        _movingDirectory) {
+      return;
+    }
+    setState(() => _deletingCache = true);
+    try {
+      await _repository.clearCache();
+      _cacheJobs.clear();
+      if (mounted) {
+        setState(() => _cacheMessage = null);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('素材缓存已清空。')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('清理未完全完成：$error')));
+      }
+    } finally {
+      try {
+        final cached = await _repository.cachedStories();
+        if (mounted) setState(() => _cached = cached);
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('无法刷新离线记录，请重新打开应用确认。')));
+        }
+      } finally {
+        if (mounted) setState(() => _deletingCache = false);
+        await _refreshCacheInfo();
+      }
+    }
+  }
+
   Future<void> _loadIndex() async {
     setState(() => _indexError = null);
     try {
@@ -257,7 +447,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
   Future<void> _open(StoryEntry entry) async {
     if (_busy || _deletingCache || _movingDirectory) return;
     if (_caching) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请等待批量缓存完成后播放。')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('请等待批量缓存完成后播放。')));
       return;
     }
     setState(() {
@@ -294,7 +485,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
       if (mounted) {
         setState(() => _playError = '加载失败：$e');
         if (_page == 1) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('加载失败：$e')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('加载失败：$e')));
         }
       }
     } finally {
@@ -330,11 +522,14 @@ class _StoryLauncherState extends State<StoryLauncher> {
 
   List<StoryEntry> get _selectedEntries => [
     for (final group in _groups ?? const <StoryGroup>[])
-      ...group.entries.where((entry) => _selected.contains(entry.path)),
+      ...group.entries.where(
+        (entry) =>
+            _selected.contains(entry.path) && !_cached.contains(entry.path),
+      ),
   ];
 
   void _toggle(StoryEntry entry, bool selected) => setState(() {
-    if (selected) {
+    if (selected && !_cached.contains(entry.path)) {
       _selected.add(entry.path);
     } else {
       _selected.remove(entry.path);
@@ -342,10 +537,11 @@ class _StoryLauncherState extends State<StoryLauncher> {
   });
 
   void _selectAll(List<StoryEntry> entries) => setState(() {
-    if (entries.every((entry) => _selected.contains(entry.path))) {
-      _selected.removeAll(entries.map((entry) => entry.path));
+    final available = entries.where((entry) => !_cached.contains(entry.path));
+    if (available.every((entry) => _selected.contains(entry.path))) {
+      _selected.removeAll(available.map((entry) => entry.path));
     } else {
-      _selected.addAll(entries.map((entry) => entry.path));
+      _selected.addAll(available.map((entry) => entry.path));
     }
   });
 
@@ -374,7 +570,13 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                 _library(desktop),
                                 CachePage(
                                   selected: _selectedEntries,
-                                  cached: [for (final group in _groups ?? <StoryGroup>[]) ...group.entries.where((entry) => _cached.contains(entry.path))],
+                                  cached: [
+                                    for (final group
+                                        in _groups ?? <StoryGroup>[])
+                                      ...group.entries.where(
+                                        (entry) => _cached.contains(entry.path),
+                                      ),
+                                  ],
                                   caching: _caching,
                                   done: _cachedDone,
                                   total: _cachedTotal,
@@ -403,7 +605,12 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                   cacheLocation: _cacheLocation,
                                   onOpenDirectory: _openCacheDirectory,
                                   onMoveDirectory: _moveCacheDirectory,
-                                  directoryBusy: _movingDirectory || _caching || _deletingCache || _busy,
+                                  onClearCache: _clearCache,
+                                  directoryBusy:
+                                      _movingDirectory ||
+                                      _caching ||
+                                      _deletingCache ||
+                                      _busy,
                                 ),
                               ],
                             ),
@@ -956,9 +1163,15 @@ class _StoryLauncherState extends State<StoryLauncher> {
                 color: active ? AppColors.indicator : Colors.transparent,
                 width: 3,
               ),
-              top: BorderSide(color: active ? AppColors.borderLight : AppColors.border),
-              right: BorderSide(color: active ? AppColors.borderLight : AppColors.border),
-              bottom: BorderSide(color: active ? AppColors.borderLight : AppColors.border),
+              top: BorderSide(
+                color: active ? AppColors.borderLight : AppColors.border,
+              ),
+              right: BorderSide(
+                color: active ? AppColors.borderLight : AppColors.border,
+              ),
+              bottom: BorderSide(
+                color: active ? AppColors.borderLight : AppColors.border,
+              ),
             ),
           ),
           child: Column(
@@ -1142,18 +1355,14 @@ class _StoryLauncherState extends State<StoryLauncher> {
                   children: [
                     _selectAllControl(entries),
                     FilledButton.icon(
-                      onPressed: _selected.isEmpty
-                          ? null
-                          : _cacheSelected,
+                      onPressed: _selected.isEmpty ? null : _cacheSelected,
                       icon: const Icon(Icons.download_outlined, size: 17),
                       label: Text('缓存选中项 (${_selected.length})'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: _selected.isEmpty
-                          ? null
-                          : () => showCachePreviewConfirmation(context),
-                      icon: const Icon(Icons.delete_outline, size: 17),
-                      label: const Text('删除缓存'),
+                      onPressed: () => setState(() => _page = 1),
+                      icon: const Icon(Icons.download_done_outlined, size: 17),
+                      label: const Text('管理离线剧情'),
                     ),
                   ],
                 ),
@@ -1180,12 +1389,13 @@ class _StoryLauncherState extends State<StoryLauncher> {
   }
 
   Widget _selectAllControl(List<StoryEntry> entries) {
+    entries = entries.where((entry) => !_cached.contains(entry.path)).toList();
     final count = entries
         .where((entry) => _selected.contains(entry.path))
         .length;
     return MergeSemantics(
       child: InkWell(
-        onTap: () => _selectAll(entries),
+        onTap: entries.isEmpty ? null : () => _selectAll(entries),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1196,7 +1406,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                   ? true
                   : null,
               tristate: true,
-              onChanged: (_) => _selectAll(entries),
+              onChanged: entries.isEmpty ? null : (_) => _selectAll(entries),
             ),
             const Text(
               '全选本章',
@@ -1224,7 +1434,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
       },
       onLongPress: () => setState(() {
         _selectMode = true;
-        _selected.add(entry.path);
+        if (!_cached.contains(entry.path)) _selected.add(entry.path);
       }),
       child: Container(
         decoration: BoxDecoration(
@@ -1244,7 +1454,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
               Checkbox(
                 value: _selected.contains(entry.path),
                 semanticLabel: '选择 ${entry.title}',
-                onChanged: (value) => _toggle(entry, value ?? false),
+                onChanged: _cached.contains(entry.path)
+                    ? null
+                    : (value) => _toggle(entry, value ?? false),
               ),
             Expanded(
               child: Column(
@@ -1266,6 +1478,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
                             letterSpacing: 1.0,
                           ),
                         ),
+                      if (_cached.contains(entry.path))
+                        const ArchiveTag('已缓存', color: AppColors.terminalWhite),
                       if (entry.tag.isNotEmpty)
                         ArchiveTag(entry.tag, color: AppColors.subtext),
                     ],
@@ -1339,7 +1553,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
 
   @override
   void dispose() {
-    for (final job in _cacheJobs.values) { job.control.cancel(); }
+    for (final job in _cacheJobs.values) {
+      job.control.cancel();
+    }
+    _wakeCacheQueue();
     _search.dispose();
     _ownedAssets?.close();
     super.dispose();
