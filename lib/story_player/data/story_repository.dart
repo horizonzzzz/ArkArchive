@@ -55,7 +55,9 @@ class StoryRepository {
       final entries = <StoryEntry>[];
       for (final story in (group['infoUnlockDatas'] as List? ?? const [])) {
         final path = story['storyTxt']?.toString() ?? '';
-        if (path.isEmpty || story['storyCanShow'] != 1) continue;
+        // storyCanShow 只表示游戏内“剧情回顾”是否列出该条目：主线与干员密录在该处恒为 0。
+        // 存档播放不依赖它，因此只按 storyTxt 是否可用过滤。
+        if (path.isEmpty) continue;
         final label = [story['storyCode'], story['storyName'], story['avgTag']].where((s) => s != null && s.toString().isNotEmpty).join(' ');
         entries.add(StoryEntry(label, path,
           code: story['storyCode']?.toString() ?? '',

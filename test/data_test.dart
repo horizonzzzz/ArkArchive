@@ -123,7 +123,7 @@ void main() {
     expect(await retry.load(other), [4]);
   });
 
-  test('PRTS HTML 从 datas_txt 提取脚本；索引使用实际 storyTxt 而非预置关卡', () async {
+  test('PRTS HTML 从 datas_txt 提取脚本；索引使用实际 storyTxt 且不按 storyCanShow 过滤', () async {
     final store = AssetStore(
       cache: MemoryCache(),
       client: MockClient((r) async {
@@ -170,12 +170,13 @@ void main() {
     expect(story.script.commands.single.text, '对白');
     final groups = await repository.loadIndex();
     expect(groups.single.name, '测试章节');
-    expect(groups.single.entries.single.path, 'obt/test/story');
-    expect(groups.single.entries.single.title, 'TEST 测试 行动前');
+    // storyCanShow=0 的主线与干员密录同样进目录，否则整类剧情会被滤掉。
+    expect(groups.single.entries.map((e) => e.path), ['obt/test/story', 'obt/test/hidden']);
+    expect(groups.single.entries.first.title, 'TEST 测试 行动前');
     expect(groups.single.entryType, 'MAINLINE');
-    expect(groups.single.entries.single.code, 'TEST');
-    expect(groups.single.entries.single.name, '测试');
-    expect(groups.single.entries.single.tag, '行动前');
+    expect(groups.single.entries.first.code, 'TEST');
+    expect(groups.single.entries.first.name, '测试');
+    expect(groups.single.entries.first.tag, '行动前');
     expect(const StoryGroup('旧调用', []).entryType, 'NONE');
     expect(const StoryEntry('旧标题', 'old/path').name, isEmpty);
   });
