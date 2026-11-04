@@ -51,3 +51,6 @@ app.*.map.json
 .pi
 .unipi
 .agents
+
+# Build and staging artifacts
+/dist/
