@@ -57,9 +57,13 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
-if(MSVC AND TARGET just_audio_windows_plugin)
-  # The plugin source is UTF-8, but MSVC otherwise uses the active code page.
-  target_compile_options(just_audio_windows_plugin PRIVATE /utf-8)
+if(MSVC)
+  # 插件源码使用 UTF-8，避免 MSVC 按系统代码页读取。
+  foreach(PLUGIN_TARGET just_audio_windows_plugin connectivity_plus_plugin)
+    if(TARGET ${PLUGIN_TARGET})
+      target_compile_options(${PLUGIN_TARGET} PRIVATE /utf-8)
+    endif()
+  endforeach()
 endif()
 
 # === Installation ===

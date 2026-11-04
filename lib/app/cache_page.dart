@@ -3,11 +3,24 @@ import 'package:flutter/material.dart';
 import '../story_player/data/story_repository.dart';
 import 'app_theme.dart';
 import 'archive_widgets.dart';
+import 'cache_job.dart';
 
 class CachePage extends StatefulWidget {
-  const CachePage({super.key, required this.selected, required this.onBrowse});
+  const CachePage({super.key, required this.selected, required this.cached, required this.onBrowse, required this.onCache, required this.onOpen, required this.jobs, required this.onToggleJob, required this.onRemoveJob, required this.onDeleteCached, required this.deleting, required this.caching, required this.done, required this.total, this.message});
   final List<StoryEntry> selected;
+  final List<StoryEntry> cached;
   final VoidCallback onBrowse;
+  final VoidCallback onCache;
+  final ValueChanged<StoryEntry> onOpen;
+  final Map<String, CacheJob> jobs;
+  final ValueChanged<CacheJob> onToggleJob;
+  final ValueChanged<CacheJob> onRemoveJob;
+  final ValueChanged<StoryEntry> onDeleteCached;
+  final bool deleting;
+  final bool caching;
+  final int done;
+  final int total;
+  final String? message;
 
   @override
   State<CachePage> createState() => _CachePageState();
@@ -20,6 +33,8 @@ class _CachePageState extends State<CachePage> {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final padding = constraints.maxWidth < 600 ? 16.0 : 28.0;
+      final pending = <String, StoryEntry>{for (final entry in widget.selected) entry.path: entry, for (final job in widget.jobs.values) job.entry.path: job.entry}.values.toList();
+      final entries = _tab == 1 ? widget.cached : pending;
       return CustomScrollView(
         key: const PageStorageKey('cache-scroll'),
         slivers: [
@@ -31,79 +46,16 @@ class _CachePageState extends State<CachePage> {
                 children: [
                   const ArchiveHeading('离线与缓存'),
                   const SizedBox(height: 20),
-                  ArchivePanel(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Row(
-                          children: [
-                            Text(
-                              '本地素材空间',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
-                            ),
-                            Spacer(),
-                            Text(
-                              'STORAGE',
-                              style: TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 10,
-                                color: AppColors.muted,
-                                letterSpacing: 1.2,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Text(
-                              '0',
-                              style: TextStyle(
-                                fontFamily: AppTypography.bender,
-                                fontSize: 32,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.terminalWhite,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'MB',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.muted,
-                                fontFamily: 'monospace',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Container(height: 3, color: AppColors.surface),
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            const ArchiveTag('文本 · 0 B'),
-                            const ArchiveTag('图片 · 0 B'),
-                            const ArchiveTag('音频 · 0 B'),
-                            OutlinedButton.icon(
-                              onPressed: () =>
-                                  showCachePreviewConfirmation(context),
-                              icon: const Icon(Icons.delete_outline, size: 16),
-                              label: const Text('清理缓存'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
+                  if (widget.caching) ...[
+                    LinearProgressIndicator(value: widget.total == 0 ? null : widget.done / widget.total),
+                    const SizedBox(height: 8),
+                    Text('已处理 ${widget.done} / ${widget.total} 幕'),
+                    const SizedBox(height: 16),
+                  ],
+                  if (widget.message != null) ...[
+                    SelectableText(widget.message!),
+                    const SizedBox(height: 16),
+                  ],
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -125,7 +77,7 @@ class _CachePageState extends State<CachePage> {
               ),
             ),
           ),
-          if (_tab == 1 || widget.selected.isEmpty)
+          if (entries.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
               child: _tab == 1
@@ -152,8 +104,11 @@ class _CachePageState extends State<CachePage> {
             SliverPadding(
               padding: EdgeInsets.symmetric(horizontal: padding),
               sliver: SliverList.builder(
-                itemCount: widget.selected.length,
-                itemBuilder: (context, index) => Padding(
+                itemCount: entries.length,
+                itemBuilder: (context, index) {
+                  final entry = entries[index];
+                  final job = _tab == 0 ? widget.jobs[entry.path] : null;
+                  return Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: ArchivePanel(
                     padding: const EdgeInsets.symmetric(
@@ -169,30 +124,60 @@ class _CachePageState extends State<CachePage> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Text(
-                            widget.selected[index].title,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.text,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(entry.title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.text)),
+                              if (job != null) ...[
+                                const SizedBox(height: 6),
+                                LinearProgressIndicator(value: job.total == 0 ? (job.status == CacheJobStatus.completed ? 1 : 0) : job.done / job.total),
+                                const SizedBox(height: 4),
+                                Text(job.status == CacheJobStatus.paused ? '已暂停' : job.status == CacheJobStatus.failed ? '失败：${job.error}' : job.status == CacheJobStatus.completed ? '已完成' : job.total == 0 ? '准备中' : '${job.done} / ${job.total}', style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+                              ],
+                            ],
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const ArchiveTag('待缓存', color: AppColors.yellow),
+                        if (job == null)
+                          ArchiveTag(_tab == 1 ? '已缓存' : '待缓存', color: _tab == 1 ? AppColors.terminalWhite : AppColors.yellow),
+                        if (job != null && (job.status == CacheJobStatus.waiting || job.status == CacheJobStatus.downloading || job.status == CacheJobStatus.paused))
+                          IconButton(
+                            tooltip: '${job.control.paused ? '恢复' : '暂停'} ${entry.title}',
+                            onPressed: () => widget.onToggleJob(job),
+                            icon: Icon(job.control.paused ? Icons.play_arrow : Icons.pause),
+                          ),
+                        if (job != null && job.status != CacheJobStatus.completed)
+                          IconButton(
+                            tooltip: '删除任务 ${entry.title}',
+                            onPressed: () => widget.onRemoveJob(job),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        if (_tab == 1)
+                          IconButton(
+                            tooltip: '播放 ${entry.title}',
+                            onPressed: widget.caching ? null : () => widget.onOpen(entry),
+                            icon: const Icon(Icons.play_arrow),
+                          ),
+                        if (_tab == 1)
+                          IconButton(
+                            tooltip: '删除缓存 ${entry.title}',
+                            onPressed: widget.caching || widget.deleting ? null : () => widget.onDeleteCached(entry),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
                       ],
                     ),
                   ),
-                ),
+                );
+                },
               ),
             ),
-            SliverToBoxAdapter(
+            if (_tab == 0) SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(padding, 8, padding, 16),
                 child: FilledButton.icon(
-                  onPressed: () => showPreviewMessage(context, '批量缓存'),
+                  onPressed: widget.caching ? null : widget.onCache,
                   icon: const Icon(Icons.download_outlined, size: 18),
-                  label: Text('缓存 ${widget.selected.length} 幕（预览）'),
+                  label: Text('缓存 ${widget.selected.length} 幕'),
                 ),
               ),
             ),

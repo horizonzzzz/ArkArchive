@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:html/parser.dart' as html;
 import '../script.dart';
 import 'asset_store.dart';
+import 'cache_control.dart';
 import 'media_catalog.dart';
 
 class StoryDocument {
@@ -33,6 +34,111 @@ class StoryRepository {
   static final indexUri = Uri.parse('https://torappu.prts.wiki/gamedata/latest/excel/story_review_table.json');
   static final storyBase = Uri.parse('https://torappu.prts.wiki/gamedata/latest/story/');
 
+  static final _offlineIndexUri = Uri.parse('https://local.invalid/offline-stories-v1');
+  Future<void> _indexWrite = Future.value();
+  Future<MediaCatalog>? _cacheCatalog;
+
+  Future<MediaCatalog> _loadCacheCatalog() async {
+    final future = _cacheCatalog ??= store.runCacheDownload(() => MediaCatalog.load(store));
+    try {
+      return await future;
+    } catch (_) {
+      if (identical(_cacheCatalog, future)) _cacheCatalog = null;
+      rethrow;
+    }
+  }
+  Uri _manifestUri(String path) => Uri.https('local.invalid', '/story-cache-manifest-v1', {'story': path});
+
+  Future<Set<Uri>?> _readManifest(String path) async {
+    final data = await store.readCache(_manifestUri(path));
+    if (data == null) return null;
+    final values = (jsonDecode(utf8.decode(data)) as List).cast<String>();
+    return values.map(Uri.parse).toSet();
+  }
+
+  Future<void> _changeCachedStories(void Function(Set<String>) change) {
+    final write = _indexWrite.catchError((_) {}).then((_) async {
+      final entries = await cachedStories();
+      change(entries);
+      await store.writeCache(_offlineIndexUri, utf8.encode(jsonEncode(entries.toList())));
+    });
+    _indexWrite = write;
+    return write;
+  }
+
+  Future<Set<String>> cachedStories() async {
+    final data = await store.readCache(_offlineIndexUri);
+    if (data == null) return {};
+    return (jsonDecode(utf8.decode(data)) as List).cast<String>().toSet();
+  }
+
+  Future<void> forgetCachedStory(StoryEntry entry) => _changeCachedStories((entries) => entries.remove(entry.path));
+
+  Future<bool> deleteCachedStory(StoryEntry entry) {
+    final deletion = _indexWrite.catchError((_) {}).then((_) async {
+      final entries = await cachedStories();
+      if (!entries.remove(entry.path)) return false;
+      Set<Uri>? owned;
+      var safeToReclaim = true;
+      try {
+        owned = await _readManifest(entry.path);
+        if (owned == null) safeToReclaim = false;
+      } catch (_) {
+        safeToReclaim = false;
+      }
+      final shared = <Uri>{indexUri, ...MediaCatalog.tableUris};
+      for (final path in entries) {
+        try {
+          final manifest = await _readManifest(path);
+          if (manifest == null) {
+            safeToReclaim = false;
+          } else {
+            shared.addAll(manifest);
+          }
+        } catch (_) {
+          safeToReclaim = false;
+        }
+      }
+      await store.writeCache(_offlineIndexUri, utf8.encode(jsonEncode(entries.toList())));
+      if (safeToReclaim && owned != null) {
+        for (final uri in owned.difference(shared)) {
+          await store.deleteCache(uri);
+        }
+      }
+      await store.deleteCache(_manifestUri(entry.path));
+      return safeToReclaim;
+    });
+    _indexWrite = deletion.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return deletion;
+  }
+
+  Future<List<String>> cacheEntry(StoryEntry entry, {CacheControl? control, void Function(int, int)? onProgress}) => store.runCacheDownload(() async {
+    await control?.checkpoint();
+    await _changeCachedStories((entries) => entries.remove(entry.path));
+    final document = await loadEntry(entry);
+    if (!document.script.commands.any((c) => c.tag == 'dialogue' || c.text.isNotEmpty)) {
+      throw const FormatException('脚本中没有可播放内容');
+    }
+    final catalog = await _loadCacheCatalog();
+    final warnings = <String>[];
+    final assets = catalog.dependencies(document.script, warnings);
+    final errors = [...warnings];
+    errors.addAll(await store.preload({indexUri, storyBase.resolve('${entry.path}.txt'), ...MediaCatalog.tableUris, ...assets}, onProgress: onProgress));
+    await control?.checkpoint();
+    if (errors.isEmpty) {
+      final manifest = {indexUri, storyBase.resolve('${entry.path}.txt'), ...MediaCatalog.tableUris, ...assets};
+      await store.writeCache(_manifestUri(entry.path), utf8.encode(jsonEncode(manifest.map((uri) => uri.toString()).toList())));
+      await control?.checkpoint();
+      await _changeCachedStories((entries) {
+        if (control?.cancelled != true) entries.add(entry.path);
+      });
+      if (control?.cancelled == true) {
+        await _changeCachedStories((entries) => entries.remove(entry.path));
+        throw const CacheCancelled();
+      }
+    }
+    return errors;
+  }, control: control);
   Future<StoryDocument> load(Uri uri, {String? title}) async {
     final text = utf8.decode(await store.load(uri));
     if (uri.host == 'prts.wiki' || uri.host == 'www.prts.wiki') {

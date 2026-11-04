@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:arknights_story_player/app/app_theme.dart';
 import 'package:arknights_story_player/app/story_launcher.dart';
 import 'package:arknights_story_player/story_player/story_player.dart';
+import 'package:arknights_story_player/story_player/data/file_cache.dart';
+import 'package:arknights_story_player/story_player/data/cache_control.dart';
 
 const _main = StoryEntry('14-1 余火 行动前', 'main/14-1', code: '14-1', name: '余火', tag: '行动前');
 const _after = StoryEntry('14-1 余火 行动后', 'main/14-1-end', code: '14-1', name: '余火', tag: '行动后');
@@ -16,18 +18,33 @@ const _groups = [
   StoryGroup('一些选择', [StoryEntry('干员密录', 'memory/1')]),
 ];
 
+class _MemoryCache extends FileCache {
+  final data = <Uri, Uint8List>{};
+  @override
+  Future<void> delete(Uri uri) async { data.remove(uri); }
+  @override
+  Future<int> size() async => data.values.fold<int>(0, (sum, bytes) => sum + bytes.length);
+  @override
+  Future<String?> location() async => null;
+  @override
+  Future<Uint8List?> read(Uri uri) async => data[uri];
+  @override
+  Future<void> write(Uri uri, Uint8List bytes) async { data[uri] = bytes; }
+}
 class _Repository extends StoryRepository {
-  _Repository() : super(AssetStore());
+  _Repository() : super(AssetStore(cache: _MemoryCache()));
   int indexCalls = 0;
   int entryCalls = 0;
   int prepareCalls = 0;
   bool failIndex = false;
+  bool cacheIndex = false;
   Completer<StoryDocument>? pending;
 
   @override
   Future<List<StoryGroup>> loadIndex() async {
     indexCalls++;
     if (failIndex) throw const FormatException('目录暂不可用');
+    if (cacheIndex) await store.writeCache(StoryRepository.indexUri, Uint8List(1048576));
     return _groups;
   }
 
@@ -41,6 +58,15 @@ class _Repository extends StoryRepository {
   Future<PreparedStory> prepare(StoryDocument document, {void Function(int, int)? onProgress}) async {
     prepareCalls++;
     throw StateError('本测试不应准备或下载资源');
+  }
+
+  @override
+  Future<Set<String>> cachedStories() async => {};
+
+  @override
+  Future<List<String>> cacheEntry(StoryEntry entry, {CacheControl? control, void Function(int, int)? onProgress}) async {
+    entryCalls++;
+    return [];
   }
 }
 
@@ -73,6 +99,13 @@ void main() {
     });
   }
 
+  testWidgets('首次下载目录后刷新设置中的缓存占用', (tester) async {
+    await _mount(tester, repository: _Repository()..cacheIndex = true);
+    await tester.tap(find.text('系统设置').last);
+    await tester.pumpAndSettle();
+    expect(find.text('缓存占用：1.0 MB'), findsOneWidget);
+  });
+
   testWidgets('分类和搜索保留真实条目，未知分类不丢失', (tester) async {
     await _mount(tester, size: const Size(1440, 900));
     await tester.tap(find.byKey(const Key('category-2')));
@@ -96,28 +129,25 @@ void main() {
     expect(find.text('没有匹配的剧情'), findsOneWidget);
   });
 
-  testWidgets('移动端展开、全选与缓存预览不触发网络操作', (tester) async {
+  testWidgets('移动端选择并批量缓存，显示已缓存剧情', (tester) async {
     final repo = await _mount(tester);
     await tester.tap(find.text('批量管理'));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsLabel('全选本章').first);
     await tester.pumpAndSettle();
     expect(find.text('已选 2 幕'), findsOneWidget);
-    await tester.tap(find.text('缓存（预览）'));
+    await tester.tap(find.text('缓存'));
     await tester.pumpAndSettle();
-    expect(find.text('批量缓存尚未接入，本次仅预览界面。'), findsOneWidget);
-    expect(repo.entryCalls, 0);
-    expect(repo.prepareCalls, 0);
-    await tester.tap(find.text('离线与缓存').last);
+    expect(repo.entryCalls, 2);
+    expect(find.text('缓存完成，共 2 幕。'), findsOneWidget);
+    await tester.tap(find.text('已离线'));
     await tester.pumpAndSettle();
-    expect(find.text('待缓存 (2)'), findsOneWidget);
     expect(find.text(_main.title), findsOneWidget);
-    await tester.tap(find.text('清理缓存'));
+    await tester.tap(find.byTooltip('播放 ${_main.title}'));
+    await tester.pump();
+    expect(repo.entryCalls, 3);
+    repo.pending!.completeError(const FormatException('脚本缺失'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('确认预览'));
-    await tester.pumpAndSettle();
-    expect(find.text('缓存清理尚未接入，本次仅预览界面。'), findsOneWidget);
-    expect(repo.prepareCalls, 0);
     await tester.tap(find.text('剧情馆').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('取消选择'));

@@ -16,19 +16,28 @@ class CharacterArt {
 /// 只在数据适配层记录 PRTS 的资源规则，播放器运行时不感知服务地址。
 class MediaCatalog {
   MediaCatalog({required this.variables, required this.characters, required this.backgroundPpu, Uri? assetBase})
-      : assetBase = assetBase ?? Uri.parse('https://torappu.prts.wiki/assets/');
+      : assetBase = assetBase ?? Uri.parse('https://torappu.prts.wiki/assets/'),
+        _characterKeys = {for (final key in characters.keys) key.toLowerCase(): key};
   final Map<String, dynamic> variables;
   final Map<String, dynamic> characters;
+  final Map<String, String> _characterKeys;
   final Map<String, dynamic> backgroundPpu;
   final Uri assetBase;
   /// 对白字体与滑动遮罩随应用打包，不随剧情下载。
   static const fontAsset = 'assets/fonts/NotoSansHans-Medium.ttf';
   static const slideMaskAsset = 'assets/images/slide_mask.png';
 
+  static final tableUris = [
+    Uri.parse('https://torappu.prts.wiki/gamedata/latest/story/story_variables.json'),
+    Uri.parse('https://torappu.prts.wiki/assets/avg/character.json'),
+    Uri.parse('https://torappu.prts.wiki/assets/avg/background.json'),
+  ];
+
   static Future<MediaCatalog> load(AssetStore store) async {
-    final urls = ['https://torappu.prts.wiki/gamedata/latest/story/story_variables.json',
-      'https://torappu.prts.wiki/assets/avg/character.json', 'https://torappu.prts.wiki/assets/avg/background.json'];
-    final tables = await Future.wait(urls.map((u) async => jsonDecode(utf8.decode(await store.load(Uri.parse(u)))) as Map<String, dynamic>));
+    final tables = <Map<String, dynamic>>[];
+    for (final uri in tableUris) {
+      tables.add(jsonDecode(utf8.decode(await store.load(uri))) as Map<String, dynamic>);
+    }
     return MediaCatalog(variables: tables[0], characters: tables[1], backgroundPpu: tables[2]);
   }
 
@@ -53,10 +62,10 @@ class MediaCatalog {
   }
 
   CharacterArt? character(String key) {
-    final match = RegExp(r'^([^#@$]+)(?:#(\d+)|@([^$]+))?(?:\$(\d+))?$').firstMatch(key.toLowerCase());
+    final match = RegExp(r'^([^#@$]+)(?:#(\d+)|@([^$]+))?(?:\$(\d+))?$').firstMatch(key.trim().toLowerCase());
     if (match == null) return null;
     final base = match[1]!;
-    final data = characters[base] as Map<String, dynamic>?;
+    final data = characters[_characterKeys[base]] as Map<String, dynamic>?;
     if (data == null) return null;
     final items = (data['array'] as List).cast<Map<String, dynamic>>();
     if (items.isEmpty) return null;

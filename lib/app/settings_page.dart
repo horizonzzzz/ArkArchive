@@ -4,8 +4,19 @@ import 'app_theme.dart';
 import 'archive_widgets.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
-
+  const SettingsPage({super.key, required this.concurrency, required this.onConcurrencyChanged, required this.isMobile, required this.isDesktop, required this.wifiOnly, required this.onWifiOnlyChanged, required this.caching, required this.onOpenDirectory, required this.onMoveDirectory, required this.directoryBusy, this.cacheBytes, this.cacheLocation});
+  final int concurrency;
+  final ValueChanged<int> onConcurrencyChanged;
+  final bool isMobile;
+  final bool isDesktop;
+  final bool wifiOnly;
+  final ValueChanged<bool> onWifiOnlyChanged;
+  final bool caching;
+  final int? cacheBytes;
+  final String? cacheLocation;
+  final VoidCallback onOpenDirectory;
+  final VoidCallback onMoveDirectory;
+  final bool directoryBusy;
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
@@ -17,13 +28,11 @@ class _SettingsPageState extends State<SettingsPage> {
     '音效与环境 SFX': 85,
     '语音 Voice（预留）': 80,
   };
-  bool _wifiOnly = true;
   bool _offline = false;
   bool _skipConfirmation = true;
   bool _landscape = true;
   double _autoDelay = 2;
   double _typewriter = 40;
-  double _concurrency = 4;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -204,59 +213,39 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _storage(
     bool wide,
   ) => _section('存储与缓存', '03 // STORAGE', Icons.storage_outlined, [
-    _toggle(
-      '仅在 Wi-Fi 下下载',
-      '节约移动蜂窝网络数据流量',
-      _wifiOnly,
-      (value) => setState(() => _wifiOnly = value),
+    if (widget.isMobile)
+      _toggle(
+        '仅在 Wi-Fi 下下载',
+        '限制批量缓存使用移动网络',
+        widget.wifiOnly,
+        widget.caching ? null : widget.onWifiOnlyChanged,
+      ),
+    if (widget.isMobile) const Divider(height: 20),
+    Text(
+      widget.cacheBytes == null ? '缓存占用：无法读取' : '缓存占用：${(widget.cacheBytes! / 1048576).toStringAsFixed(1)} MB',
+      style: const TextStyle(fontSize: 12, color: AppColors.muted),
     ),
-    const Divider(height: 20),
-    const Row(
-      children: [
-        Expanded(
-          child: Text(
-            '素材空间占用',
-            style: TextStyle(fontSize: 13, color: AppColors.text),
-          ),
-        ),
-        ArchiveTag('0 MB', color: AppColors.terminalWhite),
-      ],
-    ),
-    const SizedBox(height: 10),
-    Container(height: 3, color: AppColors.surface),
-    if (wide) ...[
+    if (widget.isDesktop) ...[
       const Divider(height: 20),
-      const Text(
-        '本地媒体缓存目录',
-        style: TextStyle(fontSize: 13, color: AppColors.text),
-      ),
+      const Text('本地媒体缓存目录', style: TextStyle(fontSize: 13, color: AppColors.text)),
       const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          OutlinedButton.icon(
-            onPressed: () => showPreviewMessage(context, '打开缓存目录'),
-            icon: const Icon(Icons.folder_open, size: 16),
-            label: const Text('打开目录'),
-          ),
-          OutlinedButton(
-            onPressed: () => showPreviewMessage(context, '迁移缓存'),
-            child: const Text('更改目录'),
-          ),
-        ],
-      ),
+      SelectableText(widget.cacheLocation ?? '无法读取', style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+      const SizedBox(height: 8),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        OutlinedButton.icon(onPressed: widget.directoryBusy ? null : widget.onOpenDirectory, icon: const Icon(Icons.folder_open, size: 16), label: const Text('打开目录')),
+        OutlinedButton.icon(onPressed: widget.directoryBusy ? null : widget.onMoveDirectory, icon: const Icon(Icons.drive_file_move_outline, size: 16), label: const Text('更改目录')),
+      ]),
+    ],
       const SizedBox(height: 8),
       _slider(
         '并发下载数',
-        _concurrency,
+        widget.concurrency.toDouble(),
         1,
         8,
-        '${_concurrency.round()}',
-        (value) => setState(() => _concurrency = value),
+        '${widget.concurrency.toDouble().round()}',
+        widget.directoryBusy ? null : (value) => widget.onConcurrencyChanged(value.round()),
         divisions: 7,
       ),
-    ],
     const SizedBox(height: 14),
     OutlinedButton.icon(
       onPressed: () => showCachePreviewConfirmation(context),
@@ -268,14 +257,14 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _network() => _section('网络与节点', '04 // NETWORK', Icons.public, [
     _toggle(
       '强制离线模式',
-      '仅读取本地已存储的剧情与素材',
+      '预览功能，尚未限制网络请求',
       _offline,
       (value) => setState(() => _offline = value),
     ),
     const Divider(height: 20),
-    _statusRow('剧情索引', 'torappu.prts.wiki', '在线'),
+    _statusRow('剧情索引', 'torappu.prts.wiki', '未检测'),
     const SizedBox(height: 14),
-    _statusRow('素材分发节点', 'PRTS STATIC CDN', '正常'),
+    _statusRow('素材分发节点', 'PRTS STATIC CDN', '未检测'),
     const SizedBox(height: 14),
     OutlinedButton.icon(
       onPressed: () => showPreviewMessage(context, '连接诊断'),
@@ -310,7 +299,7 @@ class _SettingsPageState extends State<SettingsPage> {
     String title,
     String description,
     bool value,
-    ValueChanged<bool> onChanged,
+    ValueChanged<bool>? onChanged,
   ) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 8),
     child: Row(
@@ -330,7 +319,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         const SizedBox(width: 8),
         Semantics(
-          label: '$title（预览）',
+          label: title == '仅在 Wi-Fi 下下载' ? title : '$title（预览）',
           child: Switch(value: value, onChanged: onChanged),
         ),
       ],
@@ -343,7 +332,7 @@ class _SettingsPageState extends State<SettingsPage> {
     double min,
     double max,
     String label,
-    ValueChanged<double> onChanged, {
+    ValueChanged<double>? onChanged, {
     required int divisions,
   }) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 10),
@@ -365,7 +354,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ],
         ),
         Semantics(
-          label: '$title（预览）',
+          label: title == '并发下载数' ? title : '$title（预览）',
           child: Slider(
             key: ValueKey('setting-$title'),
             value: value,
