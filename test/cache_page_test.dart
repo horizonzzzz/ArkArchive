@@ -6,6 +6,77 @@ import 'package:arknights_story_player/app/settings_page.dart';
 import 'package:arknights_story_player/story_player/data/story_repository.dart';
 
 void main() {
+  testWidgets('离线按活动下钻，播放和批量删除只作用当前活动', (tester) async {
+    const first = StoryEntry('甲幕', 'a/1');
+    const second = StoryEntry('乙幕', 'b/1');
+    const extra = StoryEntry('未归类幕', 'unknown');
+    var cached = [first, second, extra];
+    StoryEntry? opened;
+    List<StoryEntry>? deleted;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, update) => CachePage(
+              groups: const [
+                StoryGroup('活动甲', [first]),
+                StoryGroup('活动乙', [second]),
+              ],
+              selected: const [],
+              cached: cached,
+              jobs: const {},
+              onBrowse: () {},
+              onCache: () {},
+              onOpen: (entry) => opened = entry,
+              onToggleJob: (_) {},
+              onRemoveJob: (_) {},
+              onDeleteCached: (entries) => update(() {
+                deleted = entries;
+                cached = cached
+                    .where((entry) => !entries.contains(entry))
+                    .toList();
+              }),
+              deleting: false,
+              caching: false,
+              done: 0,
+              total: 0,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('已离线'));
+    await tester.pumpAndSettle();
+    expect(find.text('甲幕'), findsNothing);
+    expect(find.text('其他离线剧情'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('offline-活动甲')));
+    await tester.pumpAndSettle();
+    expect(find.text('甲幕'), findsOneWidget);
+    expect(find.text('乙幕'), findsNothing);
+    await tester.tap(find.byTooltip('播放 甲幕'));
+    expect(opened, first);
+    await tester.tap(find.text('批量管理'));
+    await tester.pump();
+    await tester.tap(find.text('全选'));
+    await tester.pump();
+    await tester.tap(find.text('删除选中 (1)'));
+    await tester.pumpAndSettle();
+    expect(deleted, [first]);
+    expect(cached, [second, extra]);
+    expect(find.text('暂无离线档案'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('offline-活动甲')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('offline-活动乙')));
+    await tester.pumpAndSettle();
+    expect(find.text('乙幕'), findsOneWidget);
+    expect(find.text('删除选中 (1)'), findsNothing);
+    await tester.tap(find.text('返回已离线'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('offline-活动乙')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('单幕缓存可暂停、恢复和移除', (tester) async {
     const entry = StoryEntry('测试剧情', 'test/story');
     final job = CacheJob(entry)
@@ -90,7 +161,10 @@ void main() {
           ),
         ),
       );
-      expect(find.text('使用移动数据缓存前会提示确认。'), mobile ? findsOneWidget : findsNothing);
+      expect(
+        find.text('使用移动数据缓存前会提示确认。'),
+        mobile ? findsOneWidget : findsNothing,
+      );
       expect(find.text('本地媒体缓存目录'), mobile ? findsNothing : findsOneWidget);
       expect(find.text('C:/cache'), mobile ? findsNothing : findsOneWidget);
       await tester.ensureVisible(find.text('清空素材缓存'));

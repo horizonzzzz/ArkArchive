@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,36 +10,67 @@ import 'package:arknights_story_player/story_player/story_player.dart';
 import 'package:arknights_story_player/story_player/data/file_cache.dart';
 import 'package:arknights_story_player/story_player/data/cache_control.dart';
 
-const _main = StoryEntry('14-1 余火 行动前', 'main/14-1', code: '14-1', name: '余火', tag: '行动前');
-const _after = StoryEntry('14-1 余火 行动后', 'main/14-1-end', code: '14-1', name: '余火', tag: '行动后');
-const _side = StoryEntry('CW-1 孤星 幕间', 'side/cw', code: 'CW-1', name: '孤星', tag: '幕间');
+const _main = StoryEntry(
+  '14-1 余火 行动前',
+  'main/14-1',
+  code: '14-1',
+  name: '余火',
+  tag: '行动前',
+);
+const _after = StoryEntry(
+  '14-1 余火 行动后',
+  'main/14-1-end',
+  code: '14-1',
+  name: '余火',
+  tag: '行动后',
+);
+const _side = StoryEntry(
+  'CW-1 孤星 幕间',
+  'side/cw',
+  code: 'CW-1',
+  name: '孤星',
+  tag: '幕间',
+);
 const _groups = [
   StoryGroup('慈悲灯塔', [_main, _after], entryType: 'MAINLINE'),
   StoryGroup('孤星', [_side], entryType: 'ACTIVITY'),
-  StoryGroup('乌萨斯的孩子们', [StoryEntry('排练开始', 'mini/1')], entryType: 'MINI_ACTIVITY'),
+  StoryGroup('乌萨斯的孩子们', [
+    StoryEntry('排练开始', 'mini/1'),
+  ], entryType: 'MINI_ACTIVITY'),
   StoryGroup('一些选择', [StoryEntry('干员密录', 'memory/1')]),
 ];
 
 class _MemoryCache extends FileCache {
   final data = <Uri, Uint8List>{};
   @override
-  Future<void> delete(Uri uri) async { data.remove(uri); }
+  Future<void> delete(Uri uri) async {
+    data.remove(uri);
+  }
+
   @override
-  Future<int> size() async => data.values.fold<int>(0, (sum, bytes) => sum + bytes.length);
+  Future<int> size() async =>
+      data.values.fold<int>(0, (sum, bytes) => sum + bytes.length);
   @override
   Future<String?> location() async => null;
   @override
   Future<Uint8List?> read(Uri uri) async => data[uri];
   @override
-  Future<void> write(Uri uri, Uint8List bytes) async { data[uri] = bytes; }
+  Future<void> write(Uri uri, Uint8List bytes) async {
+    data[uri] = bytes;
+  }
 }
+
 class _Store extends AssetStore {
   _Store() : super(cache: _MemoryCache());
   @override
-  Future<List<ConnectivityResult>> cacheConnections() async => [ConnectivityResult.wifi];
+  Future<List<ConnectivityResult>> cacheConnections() async => [
+    ConnectivityResult.wifi,
+  ];
   @override
-  Stream<List<ConnectivityResult>> get cacheConnectionChanges => const Stream.empty();
+  Stream<List<ConnectivityResult>> get cacheConnectionChanges =>
+      const Stream.empty();
 }
+
 class _Repository extends StoryRepository {
   _Repository() : super(_Store());
   int indexCalls = 0;
@@ -52,7 +84,9 @@ class _Repository extends StoryRepository {
   Future<List<StoryGroup>> loadIndex() async {
     indexCalls++;
     if (failIndex) throw const FormatException('目录暂不可用');
-    if (cacheIndex) await store.writeCache(StoryRepository.indexUri, Uint8List(1048576));
+    if (cacheIndex) {
+      await store.writeCache(StoryRepository.indexUri, Uint8List(1048576));
+    }
     return _groups;
   }
 
@@ -63,7 +97,10 @@ class _Repository extends StoryRepository {
   }
 
   @override
-  Future<PreparedStory> prepare(StoryDocument document, {void Function(int, int)? onProgress}) async {
+  Future<PreparedStory> prepare(
+    StoryDocument document, {
+    void Function(int, int)? onProgress,
+  }) async {
     prepareCalls++;
     throw StateError('本测试不应准备或下载资源');
   }
@@ -72,33 +109,67 @@ class _Repository extends StoryRepository {
   Future<Set<String>> cachedStories() async => {};
 
   @override
-  Future<List<String>> cacheEntry(StoryEntry entry, {CacheControl? control, void Function(int, int)? onProgress}) async {
+  Future<List<String>> cacheEntry(
+    StoryEntry entry, {
+    CacheControl? control,
+    void Function(int, int)? onProgress,
+  }) async {
     entryCalls++;
     return [];
   }
 }
 
-Future<_Repository> _mount(WidgetTester tester, {Size size = const Size(390, 844), double textScale = 1, _Repository? repository}) async {
+Future<_Repository> _mount(
+  WidgetTester tester, {
+  Size size = const Size(390, 844),
+  double textScale = 1,
+  _Repository? repository,
+}) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final repo = repository ?? _Repository();
   addTearDown(repo.store.close);
-  await tester.pumpWidget(MaterialApp(
-    theme: buildAppTheme(),
-    builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)), child: child!),
-    home: StoryLauncher(repository: repo),
-  ));
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: buildAppTheme(),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
+      home: StoryLauncher(repository: repo),
+    ),
+  );
   await tester.pumpAndSettle();
   return repo;
 }
 
 void main() {
-  for (final size in [const Size(1440, 900), const Size(1100, 700), const Size(1280, 540), const Size(800, 600), const Size(390, 844), const Size(320, 640), const Size(844, 390)]) {
+  for (final size in [
+    const Size(1440, 900),
+    const Size(1100, 700),
+    const Size(1280, 540),
+    const Size(800, 600),
+    const Size(390, 844),
+    const Size(320, 640),
+    const Size(844, 390),
+  ]) {
     testWidgets('三页在 ${size.width} × ${size.height} 下无布局溢出', (tester) async {
       await _mount(tester, size: size);
       expect(tester.takeException(), isNull);
       final desktop = size.width >= 1100;
-      expect(find.byKey(const Key('desktop-sidebar')), desktop ? findsOneWidget : findsNothing);
+      expect(
+        find.byKey(const Key('desktop-sidebar')),
+        desktop ? findsOneWidget : findsNothing,
+      );
+      expect(find.byKey(const ValueKey('main/14-1')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('main/14-1')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('story-search')), findsOneWidget);
       for (final label in ['离线与缓存', '系统设置', '剧情馆']) {
         await tester.tap(find.text(label).last);
         await tester.pumpAndSettle();
@@ -119,10 +190,19 @@ void main() {
     await tester.tap(find.byKey(const Key('category-2')));
     await tester.pumpAndSettle();
     expect(find.text('慈悲灯塔'), findsNothing);
+    expect(find.byKey(const ValueKey('side/cw')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('chapter-孤星')));
+    await tester.pumpAndSettle();
     expect(find.text('CW-1'), findsOneWidget);
+    await tester.tap(find.text('返回剧情馆'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('category-5')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('chapter-一些选择')));
+    await tester.pumpAndSettle();
     expect(find.text('干员密录'), findsOneWidget);
+    await tester.tap(find.text('返回剧情馆'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('category-4')));
     await tester.pumpAndSettle();
     expect(find.text('玩法衍生档案待接入'), findsOneWidget);
@@ -130,8 +210,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('story-search')), '行动后');
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('main/14-1-end')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('main/14-1')), findsNothing);
     expect(find.byKey(const ValueKey('main/14-1-end')), findsOneWidget);
+    await tester.tap(find.text('返回剧情馆'));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('story-search')), '不存在的剧情');
     await tester.pumpAndSettle();
     expect(find.text('没有匹配的剧情'), findsOneWidget);
@@ -139,7 +224,7 @@ void main() {
 
   testWidgets('移动端选择并批量缓存，显示已缓存剧情', (tester) async {
     final repo = await _mount(tester);
-    await tester.tap(find.text('批量管理'));
+    await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsLabel('全选本章').first);
     await tester.pumpAndSettle();
@@ -150,6 +235,9 @@ void main() {
     expect(find.text('缓存完成，共 2 幕。'), findsOneWidget);
     expect(find.text('待缓存 (0)'), findsOneWidget);
     await tester.tap(find.text('已离线'));
+    await tester.pumpAndSettle();
+    expect(find.text(_main.title), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('offline-慈悲灯塔')));
     await tester.pumpAndSettle();
     expect(find.text(_main.title), findsOneWidget);
     await tester.tap(find.byTooltip('播放 ${_main.title}'));
@@ -188,6 +276,8 @@ void main() {
     expect(find.text('暂时无法读取目录'), findsOneWidget);
     repo.failIndex = false;
     await tester.tap(find.text('重新加载目录'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('播放 ${_main.title}'));
     await tester.pump();

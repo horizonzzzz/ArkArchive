@@ -28,7 +28,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
       widget.repository ?? StoryRepository(_ownedAssets!);
   final _search = TextEditingController();
   final _selected = <String>{};
-  final _expanded = <String>{};
   List<StoryGroup>? _groups;
   StoryGroup? _activeGroup;
   String? _indexError;
@@ -37,7 +36,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
   String _filter = '';
   int _category = 0;
   int _page = 0;
-  bool _selectMode = false;
   bool _busy = false;
   int _done = 0, _total = 0;
   Set<String> _cached = {};
@@ -514,8 +512,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
       if (!mounted) return;
       setState(() {
         _groups = groups;
-        _activeGroup = groups.firstOrNull;
-        if (groups.isNotEmpty) _expanded.add(groups.first.name);
+        _activeGroup = null;
       });
       unawaited(_refreshCacheInfo());
     } catch (e) {
@@ -629,7 +626,12 @@ class _StoryLauncherState extends State<StoryLauncher> {
     builder: (context, constraints) {
       final desktop = constraints.maxWidth >= 1100;
       return PopScope(
-        canPop: !_busy,
+        canPop: !_busy && !(_page == 0 && _activeGroup != null),
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop && !_busy && _page == 0 && _activeGroup != null) {
+            _leaveActivity();
+          }
+        },
         child: Scaffold(
           body: SafeArea(
             child: Stack(
@@ -648,6 +650,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
                               children: [
                                 _library(desktop),
                                 CachePage(
+                                  groups: _groups ?? const [],
+                                  active: _page == 1,
                                   selected: _selectedEntries,
                                   cached: [
                                     for (final group
@@ -669,7 +673,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                   deleting: _deletingCache,
                                   onBrowse: () => setState(() {
                                     _page = 0;
-                                    _selectMode = true;
+                                    _activeGroup = null;
                                   }),
                                 ),
                                 SettingsPage(
@@ -1018,11 +1022,14 @@ class _StoryLauncherState extends State<StoryLauncher> {
     ),
   );
 
+  void _leaveActivity() => setState(() {
+    _activeGroup = null;
+    _selected.clear();
+  });
+
   Widget _library(bool desktop) {
     final groups = _visibleGroups;
-    final active = groups.contains(_activeGroup)
-        ? _activeGroup
-        : groups.firstOrNull;
+    final active = _activeGroup;
     final catalog = CustomScrollView(
       key: PageStorageKey(desktop ? 'desktop-chapters' : 'mobile-chapters'),
       slivers: [
@@ -1032,17 +1039,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                ArchiveHeading(
-                  '剧情馆',
-                  trailing: desktop
-                      ? null
-                      : TextButton(
-                          onPressed: () => setState(() {
-                            _selectMode = !_selectMode;
-                          }),
-                          child: Text(_selectMode ? '完成选择' : '批量管理'),
-                        ),
-                ),
+                const ArchiveHeading('剧情馆'),
                 const SizedBox(height: 20),
                 TextField(
                   key: const Key('story-search'),
@@ -1084,7 +1081,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
           ),
         ),
         const SliverToBoxAdapter(child: Divider(height: 1)),
-        _catalogBody(groups, desktop),
+        _catalogBody(groups),
       ],
     );
     return Column(
@@ -1118,26 +1115,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
               ],
             ),
           ),
-        Expanded(
-          child: desktop
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(width: 314, child: catalog),
-                    const VerticalDivider(width: 1),
-                    Expanded(
-                      child: active == null
-                          ? const ArchiveEmpty(
-                              icon: Icons.menu_book_outlined,
-                              title: '等待选择篇章',
-                              message: '从左侧目录选择一个篇章，查看剧情关卡。',
-                            )
-                          : _chapterDetail(active),
-                    ),
-                  ],
-                )
-              : catalog,
-        ),
+        Expanded(child: active == null ? catalog : _chapterDetail(active)),
       ],
     );
   }
@@ -1164,7 +1142,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
       ),
   ];
 
-  Widget _catalogBody(List<StoryGroup> groups, bool desktop) {
+  Widget _catalogBody(List<StoryGroup> groups) {
     Widget? status;
     if (_indexError != null) {
       status = ArchiveEmpty(
@@ -1214,169 +1192,36 @@ class _StoryLauncherState extends State<StoryLauncher> {
       padding: const EdgeInsets.all(14),
       sliver: SliverList.builder(
         itemCount: groups.length,
-        itemBuilder: (context, index) => desktop
-            ? _chapterCard(
-                groups[index],
-                groups[index] ==
-                    (_activeGroup != null && groups.contains(_activeGroup)
-                        ? _activeGroup
-                        : groups.first),
-              )
-            : _accordion(groups[index]),
+        itemBuilder: (context, index) => _activityCard(groups[index]),
       ),
     );
   }
 
-  Widget _chapterCard(StoryGroup group, bool active) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Material(
-      color: active ? AppColors.surface : AppColors.panel,
-      child: InkWell(
-        onTap: () => setState(() => _activeGroup = group),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            border: Border(
-              left: BorderSide(
-                color: active ? AppColors.indicator : Colors.transparent,
-                width: 3,
-              ),
-              top: BorderSide(
-                color: active ? AppColors.borderLight : AppColors.border,
-              ),
-              right: BorderSide(
-                color: active ? AppColors.borderLight : AppColors.border,
-              ),
-              bottom: BorderSide(
-                color: active ? AppColors.borderLight : AppColors.border,
-              ),
-            ),
+  Widget _activityCard(StoryGroup group) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: ArchivePanel(
+      padding: EdgeInsets.zero,
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          key: ValueKey('chapter-${group.name}'),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 8,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _categories[_categoryOf(group)],
-                style: TextStyle(
-                  color: active ? AppColors.terminalWhite : AppColors.muted,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                group.name,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
-                  color: active ? AppColors.text : AppColors.secondary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${group.entries.length} 幕',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.muted,
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    Icons.chevron_right,
-                    size: 16,
-                    color: active ? AppColors.text : AppColors.muted,
-                  ),
-                ],
-              ),
-            ],
+          title: Text(group.name),
+          subtitle: Text(
+            '${_categories[_categoryOf(group)]} · ${_entries(group).length} 幕',
           ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => setState(() {
+            _selected.clear();
+            _activeGroup = group;
+          }),
         ),
       ),
     ),
   );
-
-  Widget _accordion(StoryGroup group) {
-    final expanded =
-        _expanded.contains(group.name) || _filter.trim().isNotEmpty;
-    final entries = _entries(group);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: ArchivePanel(
-        padding: EdgeInsets.zero,
-        child: Column(
-          children: [
-            Semantics(
-              expanded: expanded,
-              button: true,
-              child: InkWell(
-                key: ValueKey('chapter-${group.name}'),
-                onTap: () => setState(() {
-                  if (!_expanded.add(group.name)) _expanded.remove(group.name);
-                }),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _categories[_categoryOf(group)],
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.8,
-                                color: AppColors.terminalWhite,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              group.name,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '共 ${group.entries.length} 幕',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.subtext,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        expanded ? Icons.expand_less : Icons.expand_more,
-                        size: 20,
-                        color: AppColors.subtext,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            if (expanded) ...[
-              const Divider(height: 1),
-              if (_selectMode)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: _selectAllControl(entries),
-                ),
-              for (final entry in entries) _stageRow(entry, _selectMode),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _chapterDetail(StoryGroup group) {
     final entries = _entries(group);
@@ -1389,31 +1234,22 @@ class _StoryLauncherState extends State<StoryLauncher> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _leaveActivity,
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('返回剧情馆'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    ArchiveTag(
-                      _categories[_categoryOf(group)],
-                      color: AppColors.terminalWhite,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      '${entries.length} 幕',
-                      style: const TextStyle(
-                        color: AppColors.subtext,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      'SECTOR // ${group.entryType.isNotEmpty ? group.entryType : "ARCHIVE"}',
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        letterSpacing: 1.5,
-                        fontSize: 10,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
+                    ArchiveTag(_categories[_categoryOf(group)]),
+                    Text('${entries.length} 幕'),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -1433,7 +1269,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
                   children: [
                     _selectAllControl(entries),
                     FilledButton.icon(
-                      onPressed: _selected.isEmpty ? null : _cacheSelected,
+                      onPressed: _selected.isEmpty || _caching
+                          ? null
+                          : _cacheSelected,
                       icon: const Icon(Icons.download_outlined, size: 17),
                       label: Text('缓存选中项 (${_selected.length})'),
                     ),
@@ -1457,7 +1295,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
               padding: const EdgeInsets.only(bottom: 6),
               child: ArchivePanel(
                 padding: EdgeInsets.zero,
-                child: _stageRow(entries[index], true),
+                child: _stageRow(entries[index]),
               ),
             ),
           ),
@@ -1497,23 +1335,13 @@ class _StoryLauncherState extends State<StoryLauncher> {
     );
   }
 
-  Widget _stageRow(StoryEntry entry, bool selecting) => Material(
+  Widget _stageRow(StoryEntry entry) => Material(
     key: ValueKey(entry.path),
     color: _selected.contains(entry.path)
         ? AppColors.surface
         : Colors.transparent,
     child: InkWell(
-      onTap: () {
-        if (selecting) {
-          _toggle(entry, !_selected.contains(entry.path));
-        } else {
-          _open(entry);
-        }
-      },
-      onLongPress: () => setState(() {
-        _selectMode = true;
-        if (!_cached.contains(entry.path)) _selected.add(entry.path);
-      }),
+      onTap: () => _toggle(entry, !_selected.contains(entry.path)),
       child: Container(
         decoration: BoxDecoration(
           border: Border(
@@ -1525,17 +1353,16 @@ class _StoryLauncherState extends State<StoryLauncher> {
             ),
           ),
         ),
-        padding: EdgeInsets.fromLTRB(selecting ? 6 : 14, 12, 12, 12),
+        padding: const EdgeInsets.fromLTRB(6, 12, 12, 12),
         child: Row(
           children: [
-            if (selecting)
-              Checkbox(
-                value: _selected.contains(entry.path),
-                semanticLabel: '选择 ${entry.title}',
-                onChanged: _cached.contains(entry.path)
-                    ? null
-                    : (value) => _toggle(entry, value ?? false),
-              ),
+            Checkbox(
+              value: _selected.contains(entry.path),
+              semanticLabel: '选择 ${entry.title}',
+              onChanged: _cached.contains(entry.path)
+                  ? null
+                  : (value) => _toggle(entry, value ?? false),
+            ),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1605,7 +1432,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
           tooltip: '取消选择',
           onPressed: () => setState(() {
             _selected.clear();
-            _selectMode = false;
           }),
           icon: const Icon(Icons.close, size: 18),
         ),

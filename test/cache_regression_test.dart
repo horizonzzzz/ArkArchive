@@ -23,10 +23,13 @@ class DesktopStore extends AssetStore {
   @override
   bool get isMobile => false;
 }
+
 class MobileStore extends AssetStore {
   MobileStore() : super(cache: MemoryCache());
   List<ConnectivityResult> connections = [ConnectivityResult.mobile];
-  final changes = StreamController<List<ConnectivityResult>>.broadcast(sync: true);
+  final changes = StreamController<List<ConnectivityResult>>.broadcast(
+    sync: true,
+  );
   @override
   bool get isMobile => true;
   @override
@@ -34,7 +37,10 @@ class MobileStore extends AssetStore {
   @override
   Stream<List<ConnectivityResult>> get cacheConnectionChanges => changes.stream;
   @override
-  void close() { changes.close(); super.close(); }
+  void close() {
+    changes.close();
+    super.close();
+  }
 }
 
 class QueueRepository extends StoryRepository {
@@ -60,10 +66,15 @@ class QueueRepository extends StoryRepository {
     offline.add(entry.path);
     return [];
   }
+
   @override
-  Future<void> forgetCachedStory(StoryEntry entry) async { offline.remove(entry.path); }
+  Future<void> forgetCachedStory(StoryEntry entry) async {
+    offline.remove(entry.path);
+  }
+
   @override
-  Future<bool> deleteCachedStory(StoryEntry entry) async => offline.remove(entry.path);
+  Future<bool> deleteCachedStory(StoryEntry entry) async =>
+      offline.remove(entry.path);
 }
 
 CachePage page({
@@ -89,27 +100,46 @@ CachePage page({
 );
 
 Future<void> startQueue(WidgetTester tester, QueueRepository repository) async {
-  await tester.pumpWidget(MaterialApp(theme: buildAppTheme(), home: StoryLauncher(repository: repository)));
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: buildAppTheme(),
+      home: StoryLauncher(repository: repository),
+    ),
+  );
   await tester.pumpAndSettle();
-  tester.widget<CachePage>(find.byType(CachePage, skipOffstage: false)).onBrowse();
+  tester
+      .widget<CachePage>(find.byType(CachePage, skipOffstage: false))
+      .onBrowse();
   await tester.pump();
+  await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
+  await tester.pumpAndSettle();
   await tester.ensureVisible(find.text('全选本章'));
   await tester.tap(find.text('全选本章'));
   await tester.pump();
-  tester.widget<CachePage>(find.byType(CachePage, skipOffstage: false)).onCache();
+  tester
+      .widget<CachePage>(find.byType(CachePage, skipOffstage: false))
+      .onCache();
   await tester.pump();
 }
 
-Future<void> finishQueue(WidgetTester tester, QueueRepository repository) async {
+Future<void> finishQueue(
+  WidgetTester tester,
+  QueueRepository repository,
+) async {
   for (var i = 0; i < 20; i++) {
     for (final release in repository.releases.values.toList()) {
       if (!release.isCompleted) release.complete();
     }
     await tester.pump();
-    if (!tester.widget<CachePage>(find.byType(CachePage, skipOffstage: false)).caching) break;
+    if (!tester
+        .widget<CachePage>(find.byType(CachePage, skipOffstage: false))
+        .caching) {
+      break;
+    }
   }
   await tester.pumpAndSettle();
 }
+
 void main() {
   testWidgets('选中标签保持反白对比，任务进度与总进度随资源更新', (tester) async {
     const entry = StoryEntry('进度测试', 'progress');
@@ -177,6 +207,8 @@ void main() {
       DefaultTextStyle.of(tester.element(find.text('已离线'))).style.color,
       AppColors.onActive,
     );
+    await tester.tap(find.byKey(const ValueKey('offline-其他离线剧情')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('批量管理'));
     await tester.pump();
     await tester.tap(find.text('全选'));
@@ -200,6 +232,8 @@ void main() {
         .widget<CachePage>(find.byType(CachePage, skipOffstage: false))
         .onBrowse();
     await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('全选本章'));
     await tester.tap(find.text('全选本章'));
     await tester.pump();
@@ -237,6 +271,8 @@ void main() {
     expect(cache.cached, hasLength(6));
     cache.onBrowse();
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
+    await tester.pumpAndSettle();
     expect(find.text('已缓存'), findsWidgets);
     final checks = tester.widgetList<Checkbox>(find.byType(Checkbox));
     expect(checks, isNotEmpty);
@@ -258,6 +294,8 @@ void main() {
         .widget<CachePage>(find.byType(CachePage, skipOffstage: false))
         .onBrowse();
     await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('全选本章'));
     await tester.tap(find.text('全选本章'));
     await tester.pump();
@@ -288,7 +326,9 @@ void main() {
     await startQueue(tester, repository);
     var cache = tester.widget<CachePage>(find.byType(CachePage));
     expect(repository.started, hasLength(3));
-    final settings = tester.widget<SettingsPage>(find.byType(SettingsPage, skipOffstage: false));
+    final settings = tester.widget<SettingsPage>(
+      find.byType(SettingsPage, skipOffstage: false),
+    );
     settings.onConcurrencyChanged(2);
     await tester.pump();
     expect(cache.jobs['test/2']!.control.blocked, isTrue);
@@ -312,7 +352,9 @@ void main() {
   });
 
   testWidgets('Wi-Fi 转移动网络暂停全部任务，只弹一次，确认后继续', (tester) async {
-    final store = MobileStore()..connections = [ConnectivityResult.wifi]..concurrency = 2;
+    final store = MobileStore()
+      ..connections = [ConnectivityResult.wifi]
+      ..concurrency = 2;
     addTearDown(store.close);
     final repository = QueueRepository(store);
     await startQueue(tester, repository);
@@ -325,7 +367,10 @@ void main() {
     expect(cache.jobs.values.every((job) => job.control.blocked), isTrue);
     await tester.tap(find.text('继续缓存'));
     await tester.pumpAndSettle();
-    expect(cache.jobs.values.where((job) => !job.control.blocked), hasLength(2));
+    expect(
+      cache.jobs.values.where((job) => !job.control.blocked),
+      hasLength(2),
+    );
     store.changes.add([ConnectivityResult.mobile]);
     await tester.pump();
     expect(find.text('使用移动数据缓存？'), findsNothing);
@@ -350,10 +395,21 @@ void main() {
   testWidgets('下载中仍可批量删除已离线剧情', (tester) async {
     const entry = StoryEntry('已离线', 'offline');
     List<StoryEntry>? deleted;
-    await tester.pumpWidget(MaterialApp(theme: buildAppTheme(), home: Scaffold(
-      body: page(caching: true, cached: [entry], onDelete: (entries) => deleted = entries),
-    )));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: Scaffold(
+          body: page(
+            caching: true,
+            cached: [entry],
+            onDelete: (entries) => deleted = entries,
+          ),
+        ),
+      ),
+    );
     await tester.tap(find.text('已离线'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('offline-其他离线剧情')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('批量管理'));
     await tester.pump();
@@ -363,7 +419,9 @@ void main() {
     expect(deleted, [entry]);
   });
   testWidgets('拒绝 Wi-Fi 转移动网络会停止剩余任务，不复活离线记录', (tester) async {
-    final store = MobileStore()..connections = [ConnectivityResult.wifi]..concurrency = 2;
+    final store = MobileStore()
+      ..connections = [ConnectivityResult.wifi]
+      ..concurrency = 2;
     addTearDown(store.close);
     final repository = QueueRepository(store);
     await startQueue(tester, repository);
@@ -374,23 +432,42 @@ void main() {
     await finishQueue(tester, repository);
     final cache = tester.widget<CachePage>(find.byType(CachePage));
     expect(cache.caching, isFalse);
-    expect(cache.jobs.values.every((job) => job.status == CacheJobStatus.cancelled), isTrue);
+    expect(
+      cache.jobs.values.every((job) => job.status == CacheJobStatus.cancelled),
+      isTrue,
+    );
     expect(repository.offline, isEmpty);
     expect(cache.message, contains('已停止缓存'));
   });
 
   testWidgets('设置页下载中并发可调，目录与清空保持锁定', (tester) async {
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SettingsPage(
-      concurrency: 3, onConcurrencyChanged: (_) {}, isMobile: true, isDesktop: false,
-      caching: true, directoryBusy: true, onClearCache: () {}, onOpenDirectory: () {}, onMoveDirectory: () {},
-    ))));
-    final slider = tester.widget<Slider>(find.byKey(const ValueKey('setting-并发下载数')));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SettingsPage(
+            concurrency: 3,
+            onConcurrencyChanged: (_) {},
+            isMobile: true,
+            isDesktop: false,
+            caching: true,
+            directoryBusy: true,
+            onClearCache: () {},
+            onOpenDirectory: () {},
+            onMoveDirectory: () {},
+          ),
+        ),
+      ),
+    );
+    final slider = tester.widget<Slider>(
+      find.byKey(const ValueKey('setting-并发下载数')),
+    );
     expect(slider.onChanged, isNotNull);
-    final clear = tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '清空素材缓存'));
+    final clear = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, '清空素材缓存'),
+    );
     expect(clear.onPressed, isNull);
     expect(find.text('仅在 Wi-Fi 下下载'), findsNothing);
   });
-
 
   test('清理后保留剧情目录和设置，清除素材、内存和离线记录', () async {
     final cache = MemoryCache();
