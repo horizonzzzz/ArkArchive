@@ -16,8 +16,6 @@ void main() {
               onConcurrencyChanged: (_) {},
               isMobile: store.isMobile,
               isDesktop: store.isDesktop,
-              wifiOnly: true,
-              onWifiOnlyChanged: (_) {},
               caching: false,
               onOpenDirectory: () {},
               onClearCache: () {},
@@ -35,7 +33,10 @@ void main() {
           platform == TargetPlatform.windows ||
           platform == TargetPlatform.macOS ||
           platform == TargetPlatform.linux;
-      expect(find.text('仅在 Wi-Fi 下下载'), mobile ? findsOneWidget : findsNothing);
+      expect(
+        find.text('使用移动数据缓存前会提示确认。'),
+        mobile ? findsOneWidget : findsNothing,
+      );
       expect(find.text('打开目录'), desktop ? findsOneWidget : findsNothing);
       expect(find.text('更改目录'), desktop ? findsOneWidget : findsNothing);
       expect(find.text('/cache'), desktop ? findsOneWidget : findsNothing);

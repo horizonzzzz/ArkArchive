@@ -51,19 +51,11 @@ class StoryRepository {
     'https://local.invalid/offline-stories-v1',
   );
   Future<void> _indexWrite = Future.value();
-  Future<MediaCatalog>? _cacheCatalog;
+  MediaCatalog? _cacheCatalog;
+  final Map<String, Set<Uri>?> _activeAssets = {};
 
-  Future<MediaCatalog> _loadCacheCatalog() async {
-    final future = _cacheCatalog ??= store.runCacheDownload(
-      () => MediaCatalog.load(store),
-    );
-    try {
-      return await future;
-    } catch (_) {
-      if (identical(_cacheCatalog, future)) _cacheCatalog = null;
-      rethrow;
-    }
-  }
+  Future<MediaCatalog> _loadCacheCatalog() async =>
+      _cacheCatalog ??= await MediaCatalog.load(store);
 
   Uri _manifestUri(String path) =>
       Uri.https('local.invalid', '/story-cache-manifest-v1', {'story': path});
@@ -117,6 +109,14 @@ class StoryRepository {
         safeToReclaim = false;
       }
       final shared = <Uri>{indexUri, ...MediaCatalog.tableUris};
+      // 未完成的剧情尚无离线清单，也必须保护它已经下载的共享素材。
+      for (final assets in _activeAssets.values) {
+        if (assets == null) {
+          safeToReclaim = false;
+        } else {
+          shared.addAll(assets);
+        }
+      }
       for (final path in entries) {
         try {
           final manifest = await _readManifest(path);
@@ -153,48 +153,57 @@ class StoryRepository {
     CacheControl? control,
     void Function(int, int)? onProgress,
   }) => store.runCacheDownload(() async {
-    await control?.checkpoint();
-    await _changeCachedStories((entries) => entries.remove(entry.path));
-    final document = await loadEntry(entry);
-    if (!document.script.commands.any(
-      (c) => c.tag == 'dialogue' || c.text.isNotEmpty,
-    )) {
-      throw const FormatException('脚本中没有可播放内容');
-    }
-    final catalog = await _loadCacheCatalog();
-    final warnings = <String>[];
-    final assets = catalog.dependencies(document.script, warnings);
-    final errors = [...warnings];
-    errors.addAll(
-      await store.preload({
-        indexUri,
-        storyBase.resolve('${entry.path}.txt'),
-        ...MediaCatalog.tableUris,
-        ...assets,
-      }, onProgress: onProgress),
-    );
-    await control?.checkpoint();
-    if (errors.isEmpty) {
-      final manifest = {
-        indexUri,
-        storyBase.resolve('${entry.path}.txt'),
-        ...MediaCatalog.tableUris,
-        ...assets,
+    if (_activeAssets.containsKey(entry.path)) throw StateError('剧情正在缓存');
+    _activeAssets[entry.path] = null;
+    try {
+      await control?.checkpoint();
+      await _changeCachedStories((entries) => entries.remove(entry.path));
+      final document = await loadEntry(entry);
+      if (!document.script.commands.any(
+        (c) => c.tag == 'dialogue' || c.text.isNotEmpty,
+      )) {
+        throw const FormatException('脚本中没有可播放内容');
+      }
+      final catalog = await _loadCacheCatalog();
+      final warnings = <String>[];
+      final assets = catalog.dependencies(document.script, warnings);
+      _activeAssets[entry.path] = {
+        indexUri, storyBase.resolve('${entry.path}.txt'), ...MediaCatalog.tableUris, ...assets,
       };
-      await store.writeCache(
-        _manifestUri(entry.path),
-        utf8.encode(jsonEncode(manifest.map((uri) => uri.toString()).toList())),
+      final errors = [...warnings];
+      errors.addAll(
+        await store.preload({
+          indexUri,
+          storyBase.resolve('${entry.path}.txt'),
+          ...MediaCatalog.tableUris,
+          ...assets,
+        }, onProgress: onProgress),
       );
       await control?.checkpoint();
-      await _changeCachedStories((entries) {
-        if (control?.cancelled != true) entries.add(entry.path);
-      });
-      if (control?.cancelled == true) {
-        await _changeCachedStories((entries) => entries.remove(entry.path));
-        throw const CacheCancelled();
+      if (errors.isEmpty) {
+        final manifest = {
+          indexUri,
+          storyBase.resolve('${entry.path}.txt'),
+          ...MediaCatalog.tableUris,
+          ...assets,
+        };
+        await store.writeCache(
+          _manifestUri(entry.path),
+          utf8.encode(jsonEncode(manifest.map((uri) => uri.toString()).toList())),
+        );
+        await control?.checkpoint();
+        await _changeCachedStories((entries) {
+          if (control?.cancelled != true) entries.add(entry.path);
+        });
+        if (control?.cancelled == true) {
+          await _changeCachedStories((entries) => entries.remove(entry.path));
+          throw const CacheCancelled();
+        }
       }
+      return errors;
+    } finally {
+      _activeAssets.remove(entry.path);
     }
-    return errors;
   }, control: control);
   Future<StoryDocument> load(Uri uri, {String? title}) async {
     final text = utf8.decode(await store.load(uri));

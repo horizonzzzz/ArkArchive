@@ -66,7 +66,7 @@ class _CachePageState extends State<CachePage> {
             job.entry.path: job.entry,
       }.values.where((entry) => !cachedPaths.contains(entry.path)).toList();
       final entries = _tab == 1 ? widget.cached : pending;
-      final locked = widget.caching || widget.deleting;
+      final locked = widget.deleting;
       final progress = widget.jobs.values.fold<double>(
         0,
         (sum, job) =>
@@ -312,7 +312,7 @@ class _CachePageState extends State<CachePage> {
                           if (_tab == 1 && !managing) ...[
                             IconButton(
                               tooltip: '播放 ${entry.title}',
-                              onPressed: locked
+                              onPressed: locked || widget.caching
                                   ? null
                                   : () => widget.onOpen(entry),
                               icon: const Icon(Icons.play_arrow),
@@ -337,7 +337,7 @@ class _CachePageState extends State<CachePage> {
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(padding, 8, padding, 16),
                   child: FilledButton.icon(
-                    onPressed: locked || widget.selected.isEmpty
+                    onPressed: locked || widget.caching || widget.selected.isEmpty
                         ? null
                         : widget.onCache,
                     icon: const Icon(Icons.download_outlined, size: 18),

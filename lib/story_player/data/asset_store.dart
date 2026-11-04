@@ -9,12 +9,6 @@ import 'package:http/http.dart' as http;
 import 'cache_control.dart';
 import 'file_cache.dart';
 
-class WifiRequired implements Exception {
-  const WifiRequired();
-
-  @override
-  String toString() => '当前未连接 Wi-Fi，下载已停止。连接 Wi-Fi 或关闭“仅在 Wi-Fi 下下载”后重试。';
-}
 
 class AssetStore {
   AssetStore({http.Client? client, FileCache? cache})
@@ -24,18 +18,14 @@ class AssetStore {
   final http.Client _client;
   final FileCache _cache;
   final Map<Uri, Uint8List> _memory = {};
-  final Map<(Uri, bool), Future<Uint8List>> _pending = {};
+  final Map<(Uri, Object?), Future<Uint8List>> _pending = {};
   final Map<Uri, Object> _writeErrors = {};
   Future<void> _settingsWrite = Future.value();
   static final _settingsUri = Uri.parse(
     'https://local.invalid/story-cache-settings',
   );
-  static final _wifiUri = Uri.parse(
-    'https://local.invalid/story-cache-wifi-only',
-  );
   static final _cacheDownloadZone = Object();
   static final _cacheControlZone = Object();
-  bool wifiOnly = false;
   bool get isMobile =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
@@ -54,49 +44,24 @@ class AssetStore {
     zoneValues: {_cacheDownloadZone: true, _cacheControlZone: control},
   );
 
-  bool _wifiAllowed(List<ConnectivityResult> connections) =>
-      connections.contains(ConnectivityResult.wifi) &&
-      !connections.contains(ConnectivityResult.mobile);
+  Future<List<ConnectivityResult>> cacheConnections() =>
+      Connectivity().checkConnectivity().timeout(const Duration(seconds: 5));
 
-  Future<void> checkCacheNetwork() async {
-    if (!isMobile || !wifiOnly) return;
-    try {
-      final connections = await Connectivity().checkConnectivity().timeout(
-        const Duration(seconds: 5),
-      );
-      if (_wifiAllowed(connections)) return;
-    } catch (_) {
-      // 无法确认连接类型时同样遵守 Wi-Fi 限制。
-    }
-    throw const WifiRequired();
-  }
+  Stream<List<ConnectivityResult>> get cacheConnectionChanges =>
+      Connectivity().onConnectivityChanged;
 
   Future<void> clearCache({Set<Uri> keep = const {}}) async {
     if (_movingCache || _pending.isNotEmpty) throw StateError('请等待当前资源加载结束');
     _movingCache = true;
     try {
       await _settingsWrite.catchError((_) {});
-      await _cache.clear(keep: {_settingsUri, _wifiUri, ...keep});
+      await _cache.clear(keep: {_settingsUri, ...keep});
     } finally {
       releaseMemory();
       _movingCache = false;
     }
   }
 
-  Future<void> setWifiOnly(bool value) async {
-    if (_movingCache) throw StateError('缓存目录迁移中');
-    wifiOnly = value;
-    final write = _settingsWrite
-        .catchError((_) {})
-        .then(
-          (_) => _cache.write(
-            _wifiUri,
-            Uint8List.fromList(utf8.encode(value ? '1' : '0')),
-          ),
-        );
-    _settingsWrite = write;
-    await write;
-  }
 
   Future<String?> cacheLocation() => _cache.location();
   Future<int> cacheSize() => _cache.size();
@@ -133,59 +98,36 @@ class AssetStore {
   }
 
   Future<http.Response> _get(Uri uri) async {
-    final turn = Completer<void>();
-    _waiting.add(turn);
-    _drain();
-    await turn.future;
-    final abort = Completer<void>();
-    StreamSubscription<List<ConnectivityResult>>? subscription;
-    var networkBlocked = false;
-    final restricted =
-        isMobile && wifiOnly && Zone.current[_cacheDownloadZone] == true;
-    try {
-      if (restricted) {
-        final connectivity = Connectivity();
-        subscription = connectivity.onConnectivityChanged.listen(
-          (connections) {
-            if (wifiOnly && !_wifiAllowed(connections)) {
-              networkBlocked = true;
-              if (!abort.isCompleted) abort.complete();
-            }
-          },
-          onError: (Object _) {
-            networkBlocked = true;
+    final control = Zone.current[_cacheControlZone] as CacheControl?;
+    while (true) {
+      await control?.checkpoint();
+      final turn = Completer<void>();
+      _waiting.add(turn);
+      _drain();
+      await turn.future;
+      final abort = Completer<void>();
+      var interrupted = false;
+      final subscription = control?.interruptions.listen((_) {
+        interrupted = true;
+        if (!abort.isCompleted) abort.complete();
+      });
+      try {
+        if (control?.cancelled == true) throw const CacheCancelled();
+        if (control?.blocked == true) continue;
+        final request = http.AbortableRequest('GET', uri, abortTrigger: abort.future);
+        try {
+          final response = await _client.send(request)
+              .then(http.Response.fromStream)
+              .timeout(const Duration(seconds: 30), onTimeout: () {
             if (!abort.isCompleted) abort.complete();
-          },
-        );
-        await checkCacheNetwork();
-        if (networkBlocked) throw const WifiRequired();
-      }
-      final request = http.AbortableRequest(
-        'GET',
-        uri,
-        abortTrigger: abort.future,
-      );
-      try {
-        final response = await _client
-            .send(request)
-            .then(http.Response.fromStream)
-            .timeout(
-              const Duration(seconds: 30),
-              onTimeout: () {
-                if (!abort.isCompleted) abort.complete();
-                throw TimeoutException('请求超时：$uri');
-              },
-            );
-        if (networkBlocked) throw const WifiRequired();
-        return response;
-      } catch (_) {
-        if (networkBlocked) throw const WifiRequired();
-        rethrow;
-      }
-    } finally {
-      try {
-        await subscription?.cancel();
+            throw TimeoutException('请求超时：$uri');
+          });
+          if (!interrupted) return response;
+        } catch (_) {
+          if (!interrupted) rethrow;
+        }
       } finally {
+        await subscription?.cancel();
         _active--;
         _drain();
       }
@@ -199,12 +141,6 @@ class AssetStore {
       if (value != null && value >= 1 && value <= 8) concurrency = value;
     } catch (_) {
       // 存储不可用时仍允许使用默认值播放。
-    }
-    try {
-      final data = await _cache.read(_wifiUri);
-      if (data != null) wifiOnly = utf8.decode(data) == '1';
-    } catch (_) {
-      // 存储不可用时保留当前设置。
     }
   }
 
@@ -257,7 +193,7 @@ class AssetStore {
       throw FormatException('仅支持 HTTP(S) 资源：$uri');
     }
     if (_memory.containsKey(uri)) return _memory[uri]!;
-    final key = (uri, isMobile && Zone.current[_cacheDownloadZone] == true);
+    final key = (uri, Zone.current[_cacheControlZone] ?? Zone.current[_cacheDownloadZone]);
     if (_pending.containsKey(key)) return _pending[key]!;
     final future = _download(uri);
     _pending[key] = future;
@@ -343,8 +279,6 @@ class AssetStore {
             _writeErrors.remove(uri);
           }
         } on CacheCancelled {
-          rethrow;
-        } on WifiRequired {
           rethrow;
         } catch (e) {
           errors.add('$uri：$e');

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -44,9 +43,11 @@ class MemoryCache extends FileCache {
 class AbortAwareClient extends http.BaseClient {
   final started = Completer<void>();
   bool aborted = false;
+  var requests = 0;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (++requests > 1) return http.StreamedResponse(Stream.value([1, 2]), 200);
     started.complete();
     await (request as http.AbortableRequest).abortTrigger;
     aborted = true;
@@ -63,7 +64,7 @@ class FailingCache extends MemoryCache {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('暂停等待当前资源结束，恢复后继续，删除时唤醒等待任务', () async {
+  test('暂停丢弃已中断资源结果，恢复后继续，删除时唤醒等待任务', () async {
     final firstStarted = Completer<void>();
     final firstResponse = Completer<http.Response>();
     final control = CacheControl();
@@ -94,7 +95,7 @@ void main() {
     expect(requests, 1);
     control.resume();
     expect(await operation, isEmpty);
-    expect(requests, 2);
+    expect(requests, 3);
     control.pause();
     final waiting = control.checkpoint();
     control.cancel();
@@ -120,121 +121,109 @@ void main() {
     paused.resume();
     expect(await first, isEmpty);
   });
-  test('移动端仅 Wi-Fi 设置阻止蜂窝网络缓存，不影响普通播放请求', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    const methods = MethodChannel('dev.fluttercommunity.plus/connectivity');
-    const events = MethodChannel(
-      'dev.fluttercommunity.plus/connectivity_status',
-    );
-    messenger.setMockMethodCallHandler(
-      methods,
-      (call) async => <String>['mobile'],
-    );
-    messenger.setMockMethodCallHandler(events, (call) async => null);
-    addTearDown(() {
-      debugDefaultTargetPlatformOverride = null;
-      messenger.setMockMethodCallHandler(methods, null);
-      messenger.setMockMethodCallHandler(events, null);
-    });
-    var requests = 0;
-    final cache = MemoryCache();
-    final store = AssetStore(
-      cache: cache,
-      client: MockClient((_) async {
-        requests++;
-        return http.Response('ok', 200);
-      }),
-    );
-    addTearDown(store.close);
-    await store.setWifiOnly(true);
-    final uri = Uri.parse('https://example.test/blocked.txt');
-    await expectLater(
-      store.runCacheDownload(() => store.load(uri)),
-      throwsA(isA<WifiRequired>()),
-    );
-    await expectLater(
-      store.runCacheDownload(() => store.preload({uri})),
-      throwsA(isA<WifiRequired>()),
-    );
-    expect(requests, 0);
-    await store.load(uri);
-    expect(requests, 1);
-    final restored = AssetStore(cache: cache);
-    addTearDown(restored.close);
-    await restored.loadSettings();
-    expect(restored.wifiOnly, isTrue);
-  });
-  test('移动端切离 Wi-Fi 时中止正在进行的缓存请求', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    const methods = MethodChannel('dev.fluttercommunity.plus/connectivity');
-    const events = MethodChannel(
-      'dev.fluttercommunity.plus/connectivity_status',
-    );
-    messenger.setMockMethodCallHandler(methods, (_) async => <String>['wifi']);
-    messenger.setMockMethodCallHandler(events, (_) async => null);
-    addTearDown(() {
-      debugDefaultTargetPlatformOverride = null;
-      messenger.setMockMethodCallHandler(methods, null);
-      messenger.setMockMethodCallHandler(events, null);
-    });
+  test('暂停立即中止素材请求，取消后不继续请求', () async {
     final client = AbortAwareClient();
     final store = AssetStore(cache: MemoryCache(), client: client);
     addTearDown(store.close);
-    await store.setWifiOnly(true);
+    final control = CacheControl();
     final operation = store.runCacheDownload(
-      () => store.preload({Uri.parse('https://example.test/switch.txt')}),
+      () => store.preload({Uri.parse('https://example.test/abort.txt')}), control: control,
     );
-    final failure = expectLater(operation, throwsA(isA<WifiRequired>()));
     await client.started.future;
-    await messenger.handlePlatformMessage(
-      events.name,
-      const StandardMethodCodec().encodeSuccessEnvelope(<String>['mobile']),
-      null,
-    );
-    await failure;
+    control.pause();
+    await Future<void>.delayed(Duration.zero);
     expect(client.aborted, isTrue);
+    final failure = expectLater(operation, throwsA(isA<CacheCancelled>()));
+    control.cancel();
+    await failure;
   });
-  test('蜂窝网络缓存不复用普通播放的在途请求', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    const methods = MethodChannel('dev.fluttercommunity.plus/connectivity');
-    const events = MethodChannel(
-      'dev.fluttercommunity.plus/connectivity_status',
-    );
-    messenger.setMockMethodCallHandler(
-      methods,
-      (_) async => <String>['mobile'],
-    );
-    messenger.setMockMethodCallHandler(events, (_) async => null);
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
-    final started = Completer<void>();
-    final response = Completer<http.Response>();
-    var requests = 0;
-    final store = AssetStore(
-      cache: MemoryCache(),
-      client: MockClient((_) {
-        requests++;
-        started.complete();
-        return response.future;
-      }),
-    );
+
+  test('降档中断请求后恢复可成功，已完成素材不重下', () async {
+    final client = AbortAwareClient();
+    final cache = MemoryCache();
+    final store = AssetStore(cache: cache, client: client);
     addTearDown(store.close);
-    await store.setWifiOnly(true);
-    final uri = Uri.parse('https://example.test/shared.txt');
-    final playback = store.load(uri);
-    await started.future;
-    await expectLater(
-      store.runCacheDownload(() => store.load(uri)),
-      throwsA(isA<WifiRequired>()),
-    );
-    response.complete(http.Response('ok', 200));
-    expect(utf8.decode(await playback), 'ok');
-    expect(requests, 1);
+    final uri = Uri.parse('https://example.test/resume.mp3');
+    final control = CacheControl();
+    final operation = store.runCacheDownload(() => store.preload({uri}), control: control);
+    await client.started.future;
+    control.setScheduled(false);
+    await Future<void>.delayed(Duration.zero);
+    expect(client.aborted, isTrue);
+    expect(cache.data[uri], isNull);
+    control.setScheduled(true);
+    expect(await operation, isEmpty);
+    expect(cache.data[uri], [1, 2]);
+    expect(client.requests, 2);
+    expect(await store.runCacheDownload(() => store.preload({uri}), control: control), isEmpty);
+    expect(client.requests, 2);
+  });
+
+  test('同一资源的不同剧情请求不会因其中一个暂停一起挂起', () async {
+    final client = AbortAwareClient();
+    final store = AssetStore(cache: MemoryCache(), client: client);
+    addTearDown(store.close);
+    final uri = Uri.parse('https://example.test/shared.mp3');
+    final first = CacheControl();
+    final second = CacheControl();
+    final pending = store.runCacheDownload(() => store.preload({uri}), control: first);
+    await client.started.future;
+    first.pause();
+    expect(await store.runCacheDownload(() => store.preload({uri}), control: second), isEmpty);
+    final cancelled = expectLater(pending, throwsA(isA<CacheCancelled>()));
+    first.cancel();
+    await cancelled;
+    expect(second.cancelled, isFalse);
+  });
+  test('手动暂停与并发限流独立，取消会唤醒所有等待', () async {
+    final control = CacheControl()..pause()..setScheduled(false);
+    var finished = false;
+    final waiting = control.checkpoint().then((_) => finished = true);
+    control.setScheduled(true);
+    await Future<void>.delayed(Duration.zero);
+    expect(finished, isFalse);
+    control.resume();
+    await waiting;
+    expect(finished, isTrue);
+    control.setScheduled(false);
+    final cancelled = expectLater(control.checkpoint(), throwsA(isA<CacheCancelled>()));
+    control.cancel();
+    await cancelled;
+  });
+
+  test('音频查找忽略大小写，但不改变剧情文本变量表', () {
+    final catalog = MediaCatalog(variables: {
+      'SomeText': '保持原名', 'MusicKey': '@audio/a.mp3', 'musickey': '@audio/b.mp3',
+    }, characters: {}, backgroundPpu: {});
+    expect(catalog.variables['SomeText'], '保持原名');
+    expect(catalog.audio(r'$MusicKey')!.path, '/assets/audio/a.mp3');
+    expect(catalog.audio(r'$musickey')!.path, '/assets/audio/b.mp3');
+    expect(catalog.audio(r'$MUSICKEY')!.path, '/assets/audio/b.mp3');
+  });
+  test('混合大小写和首尾空白的音频变量全部解析，未知变量仍报错', () {
+    final variables = {
+      'd_avg_OriginiumArts_soundwave': 'Sound_Beta_2/AVG/d_avg_OriginiumArts_soundwave',
+      'd_avg_OriginiumArts_fire_long': 'Sound_Beta_2/AVG/d_avg_OriginiumArts_fire_long',
+      'd_avg_OriginiumArts_heart_1': 'Sound_Beta_2/AVG/d_avg_OriginiumArts_heart_1',
+      'ReunionNormal_loop': 'Sound_Beta_2/Music/AVG/m_avg_ReunionNormal_loop',
+      'ReunionNormal_intro': 'Sound_Beta_2/Music/AVG/m_avg_ReunionNormal_intro',
+      'm_sys_act51sideInstrumental_loop': 'Sound_Beta_2/Music/AVG/m_sys_act51sideInstrumental_loop',
+      'd_avg_Qinggong': 'Sound_Beta_2/AVG/d_avg_Qinggong',
+      'd_avg_OriginiumArts_fire_short': 'Sound_Beta_2/AVG/d_avg_OriginiumArts_fire_short',
+      'd_avg_Warlockarrow': 'Sound_Beta_2/AVG/d_avg_Warlockarrow',
+    };
+    final catalog = MediaCatalog(variables: variables, characters: {}, backgroundPpu: {});
+    for (final entry in variables.entries) {
+      final expected = 'https://torappu.prts.wiki/assets/audio/${entry.value.toLowerCase().substring(13)}.mp3';
+      expect(catalog.audio(' \$${entry.key} ').toString(), expected);
+      expect(catalog.audio('\$${entry.key.toUpperCase()}').toString(), expected);
+    }
+    final warnings = <String>[];
+    final script = StoryScript.parse(variables.keys.map((key) => '[PlaySound(key="\$$key")]').join('\n'));
+    expect(catalog.dependencies(script, warnings), hasLength(9));
+    expect(warnings, isEmpty);
+    catalog.dependencies(StoryScript.parse(r'[PlaySound(key="$missing")]'), warnings);
+    expect(warnings.single, contains('未解析音频'));
   });
   test('立绘按 body/index 选择差分并定位 face_overlay，保留路径层级和美元符', () {
     final catalog = MediaCatalog(
@@ -505,6 +494,61 @@ void main() {
     expect(cache.data[secondOnly], isNotNull);
     expect(await repo.cachedStories(), {second.path});
   });
+  for (final waitingForScript in [false, true]) {
+    test('删除保护活跃剧情素材（依赖尚未解析：$waitingForScript）', () async {
+      final cache = MemoryCache();
+      final started = Completer<void>();
+      final release = Completer<void>();
+      var downloadingSecond = false;
+      final store = AssetStore(cache: cache, client: MockClient((request) async {
+        if (downloadingSecond &&
+            (waitingForScript ? request.url.path.endsWith('second.txt') : request.url.path.endsWith('second.png'))) {
+          started.complete();
+          await release.future;
+        }
+        if (request.url.path.endsWith('.txt')) {
+          final unique = request.url.path.contains('first') ? 'first' : 'second';
+          return http.Response.bytes(utf8.encode('[name="甲"]对白\n[background(image="shared")]\n[background(image="$unique")]'), 200);
+        }
+        return request.url.path.endsWith('.png') ? http.Response.bytes([1], 200) : http.Response('{}', 200);
+      }));
+      addTearDown(store.close);
+      final repository = StoryRepository(store);
+      const first = StoryEntry('第一幕', 'test/first');
+      const second = StoryEntry('第二幕', 'test/second');
+      expect(await repository.cacheEntry(first), isEmpty);
+      downloadingSecond = true;
+      final operation = repository.cacheEntry(second, control: CacheControl());
+      await started.future;
+      expect(await repository.deleteCachedStory(first), !waitingForScript);
+      final shared = Uri.parse('https://torappu.prts.wiki/assets/avg/background/shared.png');
+      expect(cache.data[shared], isNotNull);
+      expect(await repository.cachedStories(), isEmpty);
+      release.complete();
+      expect(await operation, isEmpty);
+      expect(await repository.cachedStories(), {second.path});
+      store.releaseMemory();
+      final prepared = await repository.prepare(await repository.loadEntry(second));
+      expect(prepared.warnings, isEmpty);
+      expect(cache.data[shared], isNotNull);
+    });
+  }
+
+  test('取消缓存后不会提交离线记录', () async {
+    final cache = MemoryCache();
+    final control = CacheControl();
+    final store = AssetStore(cache: cache, client: MockClient((request) async => http.Response.bytes(
+      utf8.encode(request.url.path.endsWith('.txt') ? '[name="甲"]对白' : '{}'), 200,
+    )));
+    addTearDown(store.close);
+    final repository = StoryRepository(store);
+    const entry = StoryEntry('取消', 'test/cancel');
+    await expectLater(repository.cacheEntry(entry, control: control,
+      onProgress: (done, total) { if (done == total) control.cancel(); },
+    ), throwsA(isA<CacheCancelled>()));
+    expect(await repository.cachedStories(), isEmpty);
+  });
+
   test('旧版离线记录缺少素材清单时不删除任何素材', () async {
     final cache = MemoryCache();
     final store = AssetStore(

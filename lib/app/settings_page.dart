@@ -10,22 +10,20 @@ class SettingsPage extends StatefulWidget {
     required this.onConcurrencyChanged,
     required this.isMobile,
     required this.isDesktop,
-    required this.wifiOnly,
-    required this.onWifiOnlyChanged,
     required this.caching,
     required this.onOpenDirectory,
     required this.onMoveDirectory,
     required this.directoryBusy,
     required this.onClearCache,
+    this.concurrencyBusy = false,
     this.cacheBytes,
     this.cacheLocation,
   });
+  final bool concurrencyBusy;
   final int concurrency;
   final ValueChanged<int> onConcurrencyChanged;
   final bool isMobile;
   final bool isDesktop;
-  final bool wifiOnly;
-  final ValueChanged<bool> onWifiOnlyChanged;
   final bool caching;
   final int? cacheBytes;
   final String? cacheLocation;
@@ -231,14 +229,13 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _storage(
     bool wide,
   ) => _section('存储与缓存', '03 // STORAGE', Icons.storage_outlined, [
-    if (widget.isMobile)
-      _toggle(
-        '仅在 Wi-Fi 下下载',
-        '限制批量缓存使用移动网络',
-        widget.wifiOnly,
-        widget.caching ? null : widget.onWifiOnlyChanged,
+    if (widget.isMobile) ...[
+      const Text(
+        '使用移动数据缓存前会提示确认。',
+        style: TextStyle(fontSize: 12, color: AppColors.muted),
       ),
-    if (widget.isMobile) const Divider(height: 20),
+      const Divider(height: 20),
+    ],
     Text(
       widget.cacheBytes == null
           ? '缓存占用：无法读取'
@@ -281,7 +278,7 @@ class _SettingsPageState extends State<SettingsPage> {
       1,
       8,
       '${widget.concurrency.toDouble().round()}',
-      widget.directoryBusy
+      widget.concurrencyBusy
           ? null
           : (value) => widget.onConcurrencyChanged(value.round()),
       divisions: 7,
@@ -361,7 +358,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         const SizedBox(width: 8),
         Semantics(
-          label: title == '仅在 Wi-Fi 下下载' ? title : '$title（预览）',
+          label: '$title（预览）',
           child: Switch(value: value, onChanged: onChanged),
         ),
       ],

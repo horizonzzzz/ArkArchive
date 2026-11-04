@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../story_player/story_player.dart';
 import 'app_theme.dart';
@@ -45,11 +46,30 @@ class _StoryLauncherState extends State<StoryLauncher> {
   int _cachedTotal = 0;
   String? _cacheMessage;
   final Map<String, CacheJob> _cacheJobs = {};
-  Completer<void>? _cacheQueueChanged;
+  bool _networkPaused = false;
+  bool _mobileApproved = false;
+  bool _networkStopped = false;
+  Future<bool>? _networkConfirmation;
+  StreamSubscription<List<ConnectivityResult>>? _cacheNetworkSubscription;
 
-  void _wakeCacheQueue() {
-    _cacheQueueChanged?.complete();
-    _cacheQueueChanged = null;
+  void _syncCacheJobs() {
+    var available = _repository.store.concurrency;
+    for (final job in _cacheJobs.values) {
+      if (job.control.cancelled ||
+          job.status == CacheJobStatus.completed ||
+          job.status == CacheJobStatus.failed ||
+          job.status == CacheJobStatus.cancelled) {
+        continue;
+      }
+      final admitted = !_networkPaused && !job.control.paused && available > 0;
+      if (admitted) available--;
+      job.control.setScheduled(admitted);
+      job.status = job.control.paused
+          ? CacheJobStatus.paused
+          : admitted && job.started
+          ? CacheJobStatus.downloading
+          : CacheJobStatus.waiting;
+    }
   }
 
   bool _deletingCache = false;
@@ -107,19 +127,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
     }
   }
 
-  Future<void> _changeWifiOnly(bool value) async {
-    setState(() => _repository.store.wifiOnly = value);
-    try {
-      await _repository.store.setWifiOnly(value);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Wi-Fi 设置无法保存，本次运行仍然生效。')));
-      }
-    }
-  }
-
   Future<void> _openCacheDirectory() async {
     try {
       await _repository.store.openCacheDirectory();
@@ -155,7 +162,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
 
   Future<void> _changeConcurrency(int value) async {
     setState(() => _repository.store.concurrency = value);
-    _wakeCacheQueue();
+    _syncCacheJobs();
     try {
       await _repository.store.setConcurrency(value);
     } catch (_) {
@@ -167,6 +174,74 @@ class _StoryLauncherState extends State<StoryLauncher> {
     }
   }
 
+  Future<bool> _checkCacheNetwork([
+    List<ConnectivityResult>? connections,
+  ]) async {
+    if (!_caching || _networkStopped) return false;
+    if (!_repository.store.isMobile || _mobileApproved) return true;
+    if (connections == null) {
+      try {
+        connections = await _repository.store.cacheConnections();
+      } catch (_) {
+        connections = [];
+      }
+    }
+    if (!connections.contains(ConnectivityResult.mobile) &&
+        (connections.contains(ConnectivityResult.wifi) ||
+            connections.contains(ConnectivityResult.ethernet))) {
+      return true;
+    }
+    if (_networkConfirmation != null) return _networkConfirmation!;
+    if (!mounted) return false;
+    setState(() {
+      _networkPaused = true;
+      _syncCacheJobs();
+    });
+    final confirmation = showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('使用移动数据缓存？'),
+        content: const Text('当前网络可能使用移动数据。剧情图片和音频可能消耗较多流量，是否继续本次缓存？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('停止缓存'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('继续缓存'),
+          ),
+        ],
+      ),
+    ).then((value) => value == true);
+    _networkConfirmation = confirmation;
+    try {
+      final allowed = await confirmation;
+      _mobileApproved = allowed;
+      _networkStopped = !allowed;
+      if (mounted) {
+        setState(() {
+          _networkPaused = false;
+          if (!allowed) {
+            for (final job in _cacheJobs.values) {
+              if (job.status == CacheJobStatus.waiting ||
+                  job.status == CacheJobStatus.downloading ||
+                  job.status == CacheJobStatus.paused) {
+                job.control.cancel();
+                job.status = CacheJobStatus.cancelled;
+              }
+            }
+          }
+          _syncCacheJobs();
+        });
+      }
+      return allowed;
+    } finally {
+      _networkConfirmation = null;
+    }
+  }
+
   Future<void> _cacheSelected() async {
     if (_busy ||
         _caching ||
@@ -175,127 +250,122 @@ class _StoryLauncherState extends State<StoryLauncher> {
         _selectedEntries.isEmpty) {
       return;
     }
-    setState(() => _caching = true);
+    setState(() {
+      _caching = true;
+      _mobileApproved = false;
+      _networkStopped = false;
+    });
+    final jobs = <CacheJob>[];
     try {
-      await _repository.store.checkCacheNetwork();
-    } on WifiRequired catch (notice) {
+      if (_repository.store.isMobile) {
+        _cacheNetworkSubscription = _repository.store.cacheConnectionChanges
+            .listen(
+              (connections) {
+                unawaited(_checkCacheNetwork(connections));
+              },
+              onError: (Object _) {
+                unawaited(_checkCacheNetwork([]));
+              },
+            );
+      }
+      if (!await _checkCacheNetwork() || _networkStopped || !mounted) return;
+      jobs.addAll(
+        {for (final entry in _selectedEntries) entry.path: CacheJob(entry)}
+            .values,
+      );
+      setState(() {
+        _cacheJobs
+          ..clear()
+          ..addEntries(jobs.map((job) => MapEntry(job.entry.path, job)));
+        _cachedDone = 0;
+        _cachedTotal = jobs.length;
+        _cacheMessage = null;
+        _page = 1;
+        _syncCacheJobs();
+      });
+      Future<void> worker(CacheJob job) async {
+        try {
+          await job.control.checkpoint();
+          job.started = true;
+          job.status = CacheJobStatus.downloading;
+          if (mounted) setState(() {});
+          final errors = await _repository.cacheEntry(
+            job.entry,
+            control: job.control,
+            onProgress: (done, total) {
+              job.done = done;
+              job.total = total;
+              if (mounted) setState(() {});
+            },
+          );
+          await job.control.checkpoint();
+          if (errors.isEmpty) {
+            job.status = CacheJobStatus.completed;
+            _cached.add(job.entry.path);
+            _selected.remove(job.entry.path);
+          } else {
+            job.status = CacheJobStatus.failed;
+            job.error = errors.join('；');
+          }
+        } on CacheCancelled {
+          job.status = CacheJobStatus.cancelled;
+          if (job.started) {
+            try {
+              await _repository.forgetCachedStory(job.entry);
+            } catch (error) {
+              job.error = '无法删除离线记录：$error';
+              job.status = CacheJobStatus.failed;
+            }
+          }
+        } catch (error) {
+          job.status = CacheJobStatus.failed;
+          job.error = '$error';
+        } finally {
+          _syncCacheJobs();
+          if (mounted) setState(() => _cachedDone++);
+        }
+      }
+
+      await Future.wait(jobs.map(worker));
+      _repository.store.releaseMemory();
+      await _refreshCacheInfo();
+    } catch (error) {
+      if (mounted) setState(() => _cacheMessage = '缓存无法继续：$error');
+    } finally {
+      final subscription = _cacheNetworkSubscription;
+      _cacheNetworkSubscription = null;
+      // 取消监听立即生效，界面收尾不等待平台释放订阅。
+      unawaited(subscription?.cancel());
       if (mounted) {
+        final failures = jobs.where(
+          (job) => job.status == CacheJobStatus.failed,
+        );
         setState(() {
           _caching = false;
-          _cacheMessage = '$notice';
+          _networkPaused = false;
+          _cacheMessage = [
+            if (_networkStopped) '已停止缓存，未继续使用移动数据。',
+            if (jobs.isNotEmpty)
+              '缓存完成，共 ${jobs.where((job) => job.status == CacheJobStatus.completed).length} 幕。',
+            if (failures.isNotEmpty)
+              '部分剧情缓存失败：\n${failures.map((job) => '${job.entry.title}：${job.error}').join('\n')}',
+            if (jobs.isEmpty && !_networkStopped && _cacheMessage != null)
+              _cacheMessage!,
+          ].join('\n');
         });
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$notice')));
       }
-      return;
     }
-    if (!mounted) return;
-    final jobs = {
-      for (final entry in _selectedEntries) entry.path: CacheJob(entry),
-    }.values.toList();
-    var wifiInterrupted = false;
-    setState(() {
-      _cacheJobs
-        ..clear()
-        ..addEntries(jobs.map((job) => MapEntry(job.entry.path, job)));
-      _cachedDone = 0;
-      _cachedTotal = jobs.length;
-      _cacheMessage = null;
-      _page = 1;
-    });
-    Future<void> worker(CacheJob job) async {
-      try {
-        await job.control.checkpoint();
-        job.started = true;
-        job.status = CacheJobStatus.downloading;
-        if (mounted) setState(() {});
-        final errors = await _repository.cacheEntry(
-          job.entry,
-          control: job.control,
-          onProgress: (done, total) {
-            job.done = done;
-            job.total = total;
-            if (mounted) setState(() {});
-          },
-        );
-        await job.control.checkpoint();
-        if (errors.isEmpty) {
-          job.status = CacheJobStatus.completed;
-          _cached.add(job.entry.path);
-          _selected.remove(job.entry.path);
-        } else {
-          job.status = CacheJobStatus.failed;
-          job.error = errors.join('；');
-        }
-      } on WifiRequired {
-        wifiInterrupted = true;
-        job.status = CacheJobStatus.waiting;
-      } on CacheCancelled {
-        job.status = CacheJobStatus.cancelled;
-        if (job.started) {
-          try {
-            await _repository.forgetCachedStory(job.entry);
-          } catch (error) {
-            job.error = '无法删除离线记录：$error';
-            job.status = CacheJobStatus.failed;
-          }
-        }
-      } catch (error) {
-        job.status = CacheJobStatus.failed;
-        job.error = '$error';
-      }
-      if (mounted) setState(() => _cachedDone++);
-    }
-
-    final pending = jobs.toList();
-    final running = <Future<void>>{};
-    while (pending.isNotEmpty || running.isNotEmpty) {
-      if (wifiInterrupted) pending.clear();
-      while (running.length < _repository.store.concurrency) {
-        final job = pending.where((job) => !job.control.paused).firstOrNull;
-        if (job == null) break;
-        pending.remove(job);
-        late final Future<void> task;
-        task = worker(job).whenComplete(() => running.remove(task));
-        running.add(task);
-      }
-      if (pending.isEmpty && running.isEmpty) break;
-      final changed = _cacheQueueChanged ??= Completer<void>();
-      await Future.any([...running, changed.future]);
-    }
-    _repository.store.releaseMemory();
-    await _refreshCacheInfo();
-    if (!mounted) return;
-    final failures = jobs
-        .where((job) => job.status == CacheJobStatus.failed)
-        .toList();
-    final complete = jobs
-        .where((job) => job.status == CacheJobStatus.completed)
-        .length;
-    setState(() {
-      _caching = false;
-      _cacheMessage = [
-        if (wifiInterrupted) '${const WifiRequired()}',
-        '缓存完成，共 $complete 幕。',
-        if (failures.isNotEmpty)
-          '部分剧情缓存失败：\n${failures.map((job) => '${job.entry.title}：${job.error}').join('\n')}',
-      ].join('\n');
-    });
   }
 
   void _toggleCacheJob(CacheJob job) {
     setState(() {
       if (job.control.paused) {
         job.control.resume();
-        job.status = job.started
-            ? CacheJobStatus.downloading
-            : CacheJobStatus.waiting;
       } else {
         job.control.pause();
-        job.status = CacheJobStatus.paused;
       }
+      _syncCacheJobs();
     });
-    _wakeCacheQueue();
   }
 
   void _removeCacheJob(CacheJob job) {
@@ -304,12 +374,12 @@ class _StoryLauncherState extends State<StoryLauncher> {
       job.status = CacheJobStatus.cancelled;
       _cacheJobs.remove(job.entry.path);
       _selected.remove(job.entry.path);
+      _syncCacheJobs();
     });
-    _wakeCacheQueue();
   }
 
   Future<void> _deleteCached(List<StoryEntry> entries) async {
-    if (_caching || _busy || _deletingCache || _movingDirectory) return;
+    if (_busy || _deletingCache || _movingDirectory) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -329,7 +399,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
     );
     if (confirm != true ||
         !mounted ||
-        _caching ||
         _busy ||
         _deletingCache ||
         _movingDirectory) {
@@ -344,11 +413,14 @@ class _StoryLauncherState extends State<StoryLauncher> {
       }
       final cached = await _repository.cachedStories();
       if (!mounted) return;
-      setState(() => _cached = cached);
+      setState(() {
+        _cached.removeAll(entries.map((entry) => entry.path));
+        _cached.addAll(cached);
+      });
       if (!reclaimed) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('离线记录已删除；缺少素材清单，文件已保留。')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('离线记录已删除；素材正在使用或缺少清单，相关文件已保留。')),
+        );
       }
     } catch (error) {
       if (mounted) {
@@ -357,7 +429,14 @@ class _StoryLauncherState extends State<StoryLauncher> {
       }
       try {
         final cached = await _repository.cachedStories();
-        if (mounted) setState(() => _cached = cached);
+        if (mounted) {
+          setState(() {
+            for (final entry in entries) {
+              if (!cached.contains(entry.path)) _cached.remove(entry.path);
+            }
+            _cached.addAll(cached);
+          });
+        }
       } catch (_) {}
     } finally {
       if (mounted) setState(() => _deletingCache = false);
@@ -596,10 +675,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                 SettingsPage(
                                   concurrency: _repository.store.concurrency,
                                   onConcurrencyChanged: _changeConcurrency,
+                                  concurrencyBusy: _movingDirectory,
                                   isMobile: _repository.store.isMobile,
                                   isDesktop: _repository.store.isDesktop,
-                                  wifiOnly: _repository.store.wifiOnly,
-                                  onWifiOnlyChanged: _changeWifiOnly,
                                   caching: _caching,
                                   cacheBytes: _cacheBytes,
                                   cacheLocation: _cacheLocation,
@@ -1556,7 +1634,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
     for (final job in _cacheJobs.values) {
       job.control.cancel();
     }
-    _wakeCacheQueue();
+    unawaited(_cacheNetworkSubscription?.cancel());
     _search.dispose();
     _ownedAssets?.close();
     super.dispose();

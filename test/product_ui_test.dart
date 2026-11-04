@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,8 +32,15 @@ class _MemoryCache extends FileCache {
   @override
   Future<void> write(Uri uri, Uint8List bytes) async { data[uri] = bytes; }
 }
+class _Store extends AssetStore {
+  _Store() : super(cache: _MemoryCache());
+  @override
+  Future<List<ConnectivityResult>> cacheConnections() async => [ConnectivityResult.wifi];
+  @override
+  Stream<List<ConnectivityResult>> get cacheConnectionChanges => const Stream.empty();
+}
 class _Repository extends StoryRepository {
-  _Repository() : super(AssetStore(cache: _MemoryCache()));
+  _Repository() : super(_Store());
   int indexCalls = 0;
   int entryCalls = 0;
   int prepareCalls = 0;

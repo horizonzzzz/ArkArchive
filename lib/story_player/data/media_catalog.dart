@@ -17,9 +17,11 @@ class CharacterArt {
 class MediaCatalog {
   MediaCatalog({required this.variables, required this.characters, required this.backgroundPpu, Uri? assetBase})
       : assetBase = assetBase ?? Uri.parse('https://torappu.prts.wiki/assets/'),
+        _variableKeys = {for (final key in variables.keys) key.toLowerCase(): key},
         _characterKeys = {for (final key in characters.keys) key.toLowerCase(): key};
   final Map<String, dynamic> variables;
   final Map<String, dynamic> characters;
+  final Map<String, String> _variableKeys;
   final Map<String, String> _characterKeys;
   final Map<String, dynamic> backgroundPpu;
   final Uri assetBase;
@@ -51,8 +53,12 @@ class MediaCatalog {
   }
   Uri _characterUri(String path) => assetBase.resolve('avg/characters/${path.split('/').map(Uri.encodeComponent).join('/')}.png');
   Uri? audio(String key) {
+    key = key.trim();
     if (key.isEmpty) return null;
-    var path = key.startsWith(r'$') ? variables[key.substring(1).toLowerCase()]?.toString() : key;
+    final variable = key.startsWith(r'$') ? key.substring(1) : null;
+    var path = variable == null
+        ? key
+        : (variables[variable] ?? variables[_variableKeys[variable.toLowerCase()]])?.toString();
     if (path == null) return null;
     if (path.startsWith('https://') || path.startsWith('http://')) return Uri.parse(path);
     if (path.startsWith('@')) return assetBase.resolve(path.substring(1));
