@@ -705,8 +705,11 @@ class StoryEngine extends ChangeNotifier {
           if (_waitingInput) break;
           continue;
         }
-        if (c.tag == 'dialogue' ||
-            ((c.tag == 'dialog' || c.tag == 'aside') && c.text.isNotEmpty)) {
+        if (c.tag == 'dialogue' || c.tag == 'dialog' || c.tag == 'aside') {
+          if (c.text.isEmpty) {
+            state.dialogueVisible = false;
+            continue;
+          }
           _flushMultiline();
           _showDialogue(
             c.tag == 'aside' ? '' : c.value('name'),
@@ -1554,10 +1557,10 @@ class StoryEngine extends ChangeNotifier {
     final blackStart2 = c.number('blackstart2', -1), blackEnd2 = c.number('blackend2', -1);
     state.characters.removeWhere((n) => second.isEmpty ? n.slot != 'm' : n.slot == 'm');
     final entries = [
-      (second.isEmpty ? 'm' : 'l', first, enter, blackStart, blackEnd),
-      ('r', second, enter2, blackStart2, blackEnd2),
+      (second.isEmpty ? 'm' : 'l', first, enter, blackStart, blackEnd, '1'),
+      ('r', second, enter2, blackStart2, blackEnd2, '2'),
     ];
-    for (final (slot, name, enterDir, bStart, bEnd) in entries) {
+    for (final (slot, name, enterDir, bStart, bEnd, index) in entries) {
       if (name.isEmpty) {
         state.characters.removeWhere((n) => n.slot == slot);
         continue;
@@ -1576,6 +1579,10 @@ class StoryEngine extends ChangeNotifier {
           _ => 0,
         };
         node.actionY = enterDir == 'up' ? 1072 : enterDir == 'down' ? -1072 : 0;
+        if (c.args.containsKey('xpos$index') && c.args.containsKey('ypos$index')) {
+          node.actionX = c.number('xpos$index').truncateToDouble();
+          node.actionY = c.number('ypos$index').truncateToDouble();
+        }
       }
       state.characters.add(node);
       final next = node;
@@ -2132,39 +2139,48 @@ class StoryEngine extends ChangeNotifier {
       warn('第 ${c.line} 行：charactercutin 未找到立绘 $name，仅展示空窗口');
     }
     if (existing != null) {
-      // 更新切入窗口：交叉替换立绘并过渡窗口参数；使未完成的隐藏淡出失效。
-      existing.hideEpoch++;
+      final session = ++existing.hideEpoch;
       final fromX = existing.rootX, fromY = existing.rootY;
+      final fromContentX = existing.contentX, fromContentY = existing.contentY;
+      final fromZoom = existing.zoom, fromAlpha = existing.alpha;
       final fromMaskW = existing.maskW, fromMaskH = existing.maskH;
-      final fromAlpha = existing.alpha;
-      existing
-        ..fadeStyle = fadeStyle
-        ..character = showCharacter ? name : ''
-        ..charOffsetX = c.number('charoffsetx')
-        ..charOffsetY = c.number('charoffsety')
-        ..rootX = 640 + c.number('offsetx')
-        ..rootY = 360 - c.number('offsety')
-        ..contentX = -c.number('povx')
-        ..contentY = c.number('povy')
-        ..zoom = c.args.containsKey('zoom') ? c.number('zoom') : existing.zoom
-        ..targetW = c.args.containsKey('width') ? c.number('width') : existing.targetW;
-      existing.maskW = existing.targetW;
-      existing.maskH = 720;
-      if (fadeMs > 0) {
-        final fade = animate('cutin:$widgetId', fadeMs / 1000, (t) {
-          existing.alpha = _lerp(fromAlpha, 1, t);
-          existing.rootX = _lerp(fromX, existing.rootX, t);
-          existing.rootY = _lerp(fromY, existing.rootY, t);
-          existing.maskW = _lerp(fromMaskW, existing.targetW, t);
-          existing.maskH = _lerp(fromMaskH, 720, t);
-        });
-        if (block) await fade;
-      }
+      final toX = c.args.containsKey('offsetx') ? 640 + c.number('offsetx') : fromX;
+      final toY = c.args.containsKey('offsety') ? 360 - c.number('offsety') : fromY;
+      final toContentX = c.args.containsKey('povx') ? -c.number('povx') : fromContentX;
+      final toContentY = c.args.containsKey('povy') ? c.number('povy') : fromContentY;
+      final toZoom = c.number('zoom', fromZoom);
+      final toWidth = c.number('width', fromMaskW);
+      final sameCharacter = showCharacter && existing.characters.isNotEmpty && existing.characters.last.name == name;
+      final oldCharacters = sameCharacter ? <CutinCharacter>[] : existing.characters.toList();
+      final next = !sameCharacter && showCharacter ? CutinCharacter(name, 0) : null;
+      if (next != null) existing.characters.add(next);
+      existing.fadeStyle = fadeStyle;
+      existing.targetW = toWidth;
+      final fade = animate('cutin:$widgetId', fadeMs / 1000, (t) {
+        existing.alpha = _lerp(fromAlpha, 1, t);
+        existing.rootX = _lerp(fromX, toX, t);
+        existing.rootY = _lerp(fromY, toY, t);
+        existing.contentX = _lerp(fromContentX, toContentX, t);
+        existing.contentY = _lerp(fromContentY, toContentY, t);
+        existing.zoom = _lerp(fromZoom, toZoom, t);
+        existing.maskW = _lerp(fromMaskW, toWidth, t);
+        existing.maskH = _lerp(fromMaskH, 720, t);
+        for (final character in oldCharacters) {
+          character.alpha = 1 - t;
+        }
+        if (next != null) next.alpha = t;
+      }).then((_) {
+        if (existing.hideEpoch == session && state.cutins[widgetId] == existing) {
+          existing.characters.removeWhere(oldCharacters.contains);
+          _changed();
+        }
+      });
+      if (block) await fade;
       return;
     }
     final window = CutinWindow(widgetId)
       ..fadeStyle = fadeStyle
-      ..character = showCharacter ? name : ''
+      ..characters.addAll(showCharacter ? [CutinCharacter(name, 1)] : [] )
       ..charOffsetX = c.number('charoffsetx')
       ..charOffsetY = c.number('charoffsety')
       ..rootX = 640 + c.number('offsetx')

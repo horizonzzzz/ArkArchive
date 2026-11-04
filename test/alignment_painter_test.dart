@@ -19,12 +19,13 @@ void main() {
   }
 
   Future<List<int>> pixel(StageState state, {
+    MediaCatalog? mediaCatalog,
     Map<Uri, ui.Image> textures = const {},
     Map<String, ui.Image> sprites = const {},
     int x = 640, int y = 360,
   }) async {
     final recorder = ui.PictureRecorder();
-    StagePainter(state, catalog, textures, null, null, sprites)
+    StagePainter(state, mediaCatalog ?? catalog, textures, null, null, sprites)
         .paint(ui.Canvas(recorder), const ui.Size(1280, 720));
     final picture = recorder.endRecording();
     addTearDown(picture.dispose);
@@ -56,6 +57,35 @@ void main() {
     });
   }
 
+  test('切入窗口绘制交叉淡化并缩放立绘位置', () async {
+    final characters = <String, dynamic>{
+      for (final name in ['a', 'b']) name: {
+        'array': [{'image': name}],
+        'size': {'x': 20, 'y': 20},
+        'pos': {'x': 0, 'y': 0},
+      },
+    };
+    final media = MediaCatalog(variables: {}, characters: characters, backgroundPpu: {});
+    final textures = {
+      media.character('a')!.body: await solid(const ui.Color(0xffff0000)),
+      media.character('b')!.body: await solid(const ui.Color(0xff0000ff)),
+    };
+    final window = CutinWindow('w')
+      ..maskW = 400
+      ..maskH = 720
+      ..targetW = 400
+      ..charOffsetX = 40
+      ..charOffsetY = 360
+      ..zoom = 2
+      ..characters.addAll([CutinCharacter('a', .5), CutinCharacter('b', .5)]);
+    final state = StageState()..cutins['w'] = window;
+    final mixed = await pixel(state, mediaCatalog: media, textures: textures, x: 720);
+    expect(mixed[0], closeTo(98, 2));
+    expect(mixed[1], closeTo(34, 2));
+    expect(mixed[2], closeTo(162, 2));
+    final background = await pixel(state, mediaCatalog: media, textures: textures, x: 680);
+    expect(background.take(3), [137, 137, 137]);
+  });
   test('地点印章在 500ms 可见、4500ms 淡出、5000ms 消失', () async {
     final state = StageState();
     final stamp = LocationStamp(ui.Offset.zero, const ['', ''], '')..elapsedMs = 500;

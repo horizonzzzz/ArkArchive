@@ -72,6 +72,110 @@ void main() {
     });
   }
 
+
+  for (final command in ['[name=""]', '[dialog]', '[aside]']) {
+    testEngine('$command 隐藏对白并继续播放字幕', (tester) async {
+      final e = engineFor(tester, 'before\n$command\n[subtitle(text="center")]\n[subtitle]\nafter');
+      await e.start();
+      await e.advance();
+      await e.advance();
+      expect(e.state.dialogueVisible, isFalse);
+      expect(e.state.subtitle?.text, 'center');
+      expect(e.waitingInput, isTrue);
+      expect(e.state.history.map((line) => line.text), ['before', 'center']);
+      expect(e.warnings, isEmpty);
+      await e.advance();
+      await e.advance();
+      expect(e.state.subtitle, isNull);
+      expect(e.state.dialogueVisible, isTrue);
+      expect(e.state.text, 'after');
+    });
+  }
+
+  testEngine('字幕不会隐式隐藏对白', (tester) async {
+    final e = engineFor(tester, 'before\n[subtitle(text="center")]');
+    await e.start();
+    await e.advance();
+    await e.advance();
+    expect(e.state.dialogueVisible, isTrue);
+    expect(e.state.subtitle?.text, 'center');
+  });
+  testEngine('旧版角色坐标仅在入场方向和完整坐标同时存在时设置起点', (tester) async {
+    final e = engineFor(tester, 'line');
+    await e.start();
+    await e.handlers['character']!(StoryScript.parse(
+      '[character(name="a",name2="b",enter="left",enter2="up",xpos1=123.9,ypos1=-45.8,xpos2=8,fadetime=1)]',
+    ).commands.single);
+    final left = e.state.characters.firstWhere((c) => c.slot == 'l');
+    final right = e.state.characters.firstWhere((c) => c.slot == 'r');
+    expect(left.actionX, 123);
+    expect(left.actionY, -45);
+    expect(right.actionX, 0);
+    expect(right.actionY, 1072);
+    await tester.pump(const Duration(milliseconds: 512));
+    expect(left.actionX, closeTo(123 * (1 - .512 * (3 - .512 * (3 - .512))), .01));
+    await tester.pump(const Duration(milliseconds: 512));
+    expect(left.actionX, 0);
+    expect(left.actionY, 0);
+    await e.handlers['character']!(StoryScript.parse(
+      '[character(name="c",xpos1=50,ypos1=60,fadetime=0)]',
+    ).commands.single);
+    final middle = e.state.characters.lastWhere((c) => c.slot == 'm');
+    expect(middle.actionX, 0);
+    expect(middle.actionY, 0);
+  });
+
+  testEngine('切入窗口交叉淡化并线性过渡参数，未指定参数保持原值', (tester) async {
+    final e = engineFor(tester, 'line');
+    await e.start();
+    Future<void> cutin(String args) => e.handlers['charactercutin']!(
+      StoryScript.parse('[charactercutin(widgetid="w",$args)]').commands.single,
+    );
+    await cutin('name="a",fadetime=0,offsetx=20,offsety=10,povx=10,povy=20,zoom=1,width=200');
+    final window = e.state.cutins['w']!;
+    await cutin('name="b",fadetime=1,offsetx=120,offsety=110,povx=30,povy=60,zoom=2,width=400');
+    expect(window.characters.map((c) => c.alpha), [1, 0]);
+    await tester.pump(const Duration(milliseconds: 512));
+    expect(window.rootX, closeTo(711.2, .01));
+    expect(window.rootY, closeTo(298.8, .01));
+    expect(window.contentX, closeTo(-20.24, .01));
+    expect(window.contentY, closeTo(40.48, .01));
+    expect(window.zoom, closeTo(1.512, .001));
+    expect(window.maskW, closeTo(302.4, .01));
+    expect(window.characters[0].alpha, closeTo(.488, .001));
+    expect(window.characters[1].alpha, closeTo(.512, .001));
+    await tester.pump(const Duration(milliseconds: 512));
+    expect(window.characters.map((c) => c.name), ['b']);
+    expect(window.rootX, 760);
+    await cutin('name="b",fadetime=0');
+    expect(window.rootX, 760);
+    expect(window.contentX, -30);
+    expect(window.zoom, 2);
+    expect(window.characters.map((c) => c.name), ['b']);
+  });
+
+  testEngine('切入窗口更新可中断替换和隐藏，零时长立即生效', (tester) async {
+    final e = engineFor(tester, 'line');
+    await e.start();
+    Future<void> cutin(String args) => e.handlers['charactercutin']!(
+      StoryScript.parse('[charactercutin(widgetid="w",$args)]').commands.single,
+    );
+    await cutin('name="a",fadetime=0');
+    await cutin('name="b",fadetime=1');
+    await tester.pump(const Duration(milliseconds: 320));
+    await cutin('name="c",fadetime=0,offsetx=50');
+    await tester.pump();
+    final window = e.state.cutins['w']!;
+    expect(window.characters.map((c) => c.name), ['c']);
+    expect(window.rootX, 690);
+    await cutin('fadetime=1');
+    await tester.pump(const Duration(milliseconds: 320));
+    await cutin('name="d",fadetime=0');
+    await tester.pump(const Duration(seconds: 2));
+    expect(e.state.cutins['w'], same(window));
+    expect(window.characters.map((c) => c.name), ['d']);
+    expect(window.alpha, 1);
+  });
   testEngine('命名缓动用于中间帧', (tester) async {
     final e = engineFor(tester, '');
     var value = 0.0;

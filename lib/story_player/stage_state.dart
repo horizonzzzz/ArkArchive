@@ -127,6 +127,11 @@ class InterludeFrame {
   int hideEpoch = 0;
 }
 
+class CutinCharacter {
+  CutinCharacter(this.name, this.alpha);
+  final String name;
+  double alpha;
+}
 class CutinWindow {
   CutinWindow(this.widgetId);
   final String widgetId;
@@ -139,7 +144,7 @@ class CutinWindow {
   double alpha = 1;
   /// 0=横向展开，1=纵向展开（遮罩收拢方向）。
   int expandAxis = 0;
-  String character = '';
+  final List<CutinCharacter> characters = [];
   double charOffsetX = 0, charOffsetY = 0;
   /// 隐藏会话哨兵：参考端 ++sessionId；淡出完成后才从场景移除。
   int hideEpoch = 0;

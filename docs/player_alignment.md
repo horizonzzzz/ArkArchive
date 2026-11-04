@@ -180,7 +180,6 @@ Windows 与 Web 出现音乐和历史记录正常、舞台全黑且无法点击�
 
 - interlude 对话模板（interlude_dialog_*）用提取的公共框精灵近似；波形动画、square_show 关键帧与 unknown-char 占位图未复刻。
 - 印章与 interlude 名称文字用 Noto 字体近似参考端商业字体；shake 等随机轨迹为统计意义上相似。
-- `charactercutin` 同窗口多立绘交叉淡出按单立绘替换处理。
 - 真实关卡端到端演出验收（浏览器/桌面运行）仍待执行。
 
 ### 打包 UI 素材来源
@@ -210,6 +209,14 @@ Windows 与 Web 出现音乐和历史记录正常、舞台全黑且无法点击�
 - `flutter test --reporter expanded`：58 项通过，1 项联网测试按默认配置跳过（需显式设置 `STORY_REFERENCE_URL`）；相比修复前新增 29 项回归。
 - `flutter analyze`：通过，无诊断。
 - `flutter build web --release --no-web-resources-cdn`：通过，产物位于 `build/web/`，Wasm dry run 也通过；尚未执行实际 Wasm 构建或设备演出验收。
+
+## 角色入场与切入窗口
+
+参考端仅在指定 `enter` / `enter2` 且对应的 `xpos` 和 `ypos` 均存在时，将坐标取整作为旧版 `character` 入场起点；入场完成后仍回到槽位默认位置。`charactercutin` 更新保留新旧立绘并交叉淡化，窗口位置、内容位置、缩放和遮罩尺寸从当前值过渡到固定目标；未指定参数保留当前值。回归测试检查中间帧、零时长、更新和隐藏互相取消及绘制结果。真实剧情逐帧验收仍待执行。
+
+## 空对白指令与字幕切换
+
+PRTS 生产构建的执行循环对空的具名对白、`dialog` 和 `aside` 调用 `hideDialogue()`，随后继续执行脚本；`subtitle` 本身不隐式隐藏对白。播放器现按相同行为处理空对白，避免脚本明确清除底部对白后旧文字仍留在字幕下方。回归测试覆盖三种空对白、字幕等待与后续对白恢复，以及没有清除指令时的叠加行为。
 
 ## 资源与授权边界
 

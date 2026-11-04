@@ -469,17 +469,20 @@ class StagePainter extends CustomPainter {
     c.save();
     c.clipRect(rect);
     c.drawRect(rect, Paint()..color = const Color(0xff898989).withValues(alpha: window.alpha));
-    final character = window.character;
-    if (character.isNotEmpty) {
+    c.save();
+    c.translate(window.rootX + window.contentX, window.rootY + window.contentY);
+    c.scale(window.zoom);
+    for (final character in window.characters) {
       _drawCharacterArt(
         c,
-        character,
-        position: Offset(window.rootX + window.contentX + window.charOffsetX, window.rootY + window.contentY + window.maskH / 2 - window.charOffsetY),
-        scale: window.zoom,
-        alpha: window.alpha,
+        character.name,
+        position: Offset(window.charOffsetX, 360 - window.charOffsetY),
+        scale: 1,
+        alpha: window.alpha * character.alpha,
         brightness: 1,
       );
     }
+    c.restore();
     c.restore();
   }
 
