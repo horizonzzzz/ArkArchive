@@ -1,3 +1,7 @@
+import '../story_player/data/media_catalog.dart';
+import '../story_player/data/playback_settings.dart';
+import '../story_player/data/story_repository.dart';
+
 import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
@@ -18,8 +22,16 @@ class SettingsPage extends StatefulWidget {
     this.concurrencyBusy = false,
     this.cacheBytes,
     this.cacheLocation,
+    this.active = true,
+    this.settings = const PlaybackSettings(),
+    this.onSettingsChanged,
+    this.probe,
   });
   final bool concurrencyBusy;
+  final bool active;
+  final PlaybackSettings settings;
+  final ValueChanged<PlaybackSettings>? onSettingsChanged;
+  final Future<bool> Function(Uri)? probe;
   final int concurrency;
   final ValueChanged<int> onConcurrencyChanged;
   final bool isMobile;
@@ -36,81 +48,116 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final _volumes = <String, double>{
-    '主音量': 80,
-    '背景音乐 BGM': 75,
-    '音效与环境 SFX': 85,
-    '语音 Voice（预留）': 80,
-  };
-  bool _offline = false;
-  bool _skipConfirmation = true;
-  bool _landscape = true;
-  double _autoDelay = 2;
-  double _typewriter = 40;
+  int? _category;
+  late PlaybackSettings _settings = widget.settings;
+  bool _checking = false;
+  String _indexStatus = '未检测', _assetStatus = '未检测';
+
+  void _changeSettings(PlaybackSettings value) {
+    setState(() => _settings = value);
+    widget.onSettingsChanged?.call(value);
+  }
+
+  Future<void> _diagnose() async {
+    final probe = widget.probe;
+    if (probe == null || _checking) return;
+    setState(() {
+      _checking = true;
+      _indexStatus = _assetStatus = '检测中';
+    });
+    Future<String> check(Uri uri) async {
+      try {
+        return await probe(uri) ? '连接成功' : '连接失败';
+      } catch (_) {
+        return '连接失败';
+      }
+    }
+
+    final results = await Future.wait([
+      check(StoryRepository.indexUri),
+      check(MediaCatalog.tableUris[1]),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _indexStatus = results[0];
+      _assetStatus = results[1];
+      _checking = false;
+    });
+  }
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final wide = constraints.maxWidth >= 880;
-      final sections = [_audio(), _playback(), _storage(wide), _network()];
-      return SingleChildScrollView(
-        key: const PageStorageKey('settings-scroll'),
-        padding: EdgeInsets.all(constraints.maxWidth < 600 ? 16 : 28),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1240),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const ArchiveHeading('系统设置'),
-                const SizedBox(height: 20),
-                if (wide)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          children: [
-                            sections[0],
-                            const SizedBox(height: 16),
-                            sections[2],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            sections[1],
-                            const SizedBox(height: 16),
-                            sections[3],
-                          ],
-                        ),
-                      ),
-                    ],
-                  )
-                else ...[
-                  for (final section in sections) ...[
-                    section,
-                    const SizedBox(height: 14),
-                  ],
-                ],
-                const SizedBox(height: 24),
-                const Text(
-                  '明日方舟剧情播放器 · PRTS TERMINAL\n数据来源 PRTS 维基与公开网络解构。',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.muted,
-                    fontSize: 11,
-                    height: 1.7,
-                  ),
+  void didUpdateWidget(covariant SettingsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.settings != widget.settings) _settings = widget.settings;
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: !widget.active || _category == null,
+    onPopInvokedWithResult: (didPop, result) {
+      if (!didPop && widget.active && _category != null) {
+        setState(() => _category = null);
+      }
+    },
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        const categories = [
+          (Icons.graphic_eq, '音频通道'),
+          (Icons.slow_motion_video, '演出偏好'),
+          (Icons.storage_outlined, '存储与缓存'),
+          (Icons.public, '网络与节点'),
+        ];
+        final wide = constraints.maxWidth >= 880;
+        final content = switch (_category) {
+          0 => _audio(),
+          1 => _playback(),
+          2 => _storage(wide),
+          3 => _network(),
+          _ => Column(
+            children: [
+              for (var i = 0; i < categories.length; i++)
+                ListTile(
+                  leading: Icon(categories[i].$1),
+                  title: Text(categories[i].$2),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => setState(() => _category = i),
                 ),
-              ],
+            ],
+          ),
+        };
+        return SingleChildScrollView(
+          key: PageStorageKey('settings-${_category ?? 'root'}'),
+          padding: EdgeInsets.all(constraints.maxWidth < 600 ? 16 : 28),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_category == null)
+                    const ArchiveHeading('系统设置')
+                  else
+                    Row(
+                      children: [
+                        IconButton(
+                          tooltip: '返回设置分类',
+                          onPressed: () => setState(() => _category = null),
+                          icon: const Icon(Icons.arrow_back),
+                        ),
+                        Expanded(
+                          child: ArchiveHeading(categories[_category!].$2),
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 20),
+                  content,
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    },
+        );
+      },
+    ),
   );
 
   Widget _section(
@@ -157,72 +204,54 @@ class _SettingsPageState extends State<SettingsPage> {
   );
 
   Widget _audio() => _section('音频通道', '01 // AUDIO', Icons.graphic_eq, [
-    for (final entry in _volumes.entries)
-      _slider(
-        entry.key,
-        entry.value,
-        0,
-        100,
-        '${entry.value.round()}%',
-        (value) => setState(() => _volumes[entry.key] = value),
-        divisions: 100,
-      ),
+    _slider(
+      '主音量',
+      _settings.master * 100,
+      0,
+      100,
+      '${(_settings.master * 100).round()}%',
+      (v) => _changeSettings(_settings.copyWith(master: v / 100)),
+      divisions: 100,
+    ),
+    _slider(
+      '背景音乐 BGM',
+      _settings.bgm * 100,
+      0,
+      100,
+      '${(_settings.bgm * 100).round()}%',
+      (v) => _changeSettings(_settings.copyWith(bgm: v / 100)),
+      divisions: 100,
+    ),
+    _slider(
+      '音效与环境 SFX',
+      _settings.sfx * 100,
+      0,
+      100,
+      '${(_settings.sfx * 100).round()}%',
+      (v) => _changeSettings(_settings.copyWith(sfx: v / 100)),
+      divisions: 100,
+    ),
   ]);
 
   Widget _playback() =>
       _section('演出偏好', '02 // PLAYBACK', Icons.slow_motion_video, [
-        _toggle(
-          '横屏沉浸播放',
-          '启用横屏全屏舞台渲染',
-          _landscape,
-          (value) => setState(() => _landscape = value),
-        ),
         _slider(
           '自动播放等待',
-          _autoDelay,
+          _settings.autoDelay,
           1,
           5,
-          '${_autoDelay.round()} 秒',
-          (value) => setState(() => _autoDelay = value),
+          '${_settings.autoDelay.round()} 秒',
+          (v) => _changeSettings(_settings.copyWith(autoDelay: v)),
           divisions: 4,
         ),
         _slider(
           '逐字出字间隔',
-          _typewriter,
+          _settings.typingMs,
           10,
           80,
-          '${_typewriter.round()} ms',
-          (value) => setState(() => _typewriter = value),
+          '${_settings.typingMs.round()} ms',
+          (v) => _changeSettings(_settings.copyWith(typingMs: v)),
           divisions: 14,
-        ),
-        _toggle(
-          '跳过对白前确认',
-          '跳过整段对白前弹出拦截确认',
-          _skipConfirmation,
-          (value) => setState(() => _skipConfirmation = value),
-        ),
-        const Divider(height: 20),
-        const Text(
-          '对白样式基准',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: AppColors.subtext,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: const BoxDecoration(
-            color: AppColors.canvas,
-            border: Border(
-              left: BorderSide(color: AppColors.indicator, width: 2),
-            ),
-          ),
-          child: const Text(
-            '「罗德岛各部门注意，准备进入预定作战区域。」',
-            style: TextStyle(fontSize: 13, height: 1.6, color: AppColors.text),
-          ),
         ),
       ]);
 
@@ -294,19 +323,12 @@ class _SettingsPageState extends State<SettingsPage> {
   ]);
 
   Widget _network() => _section('网络与节点', '04 // NETWORK', Icons.public, [
-    _toggle(
-      '强制离线模式',
-      '预览功能，尚未限制网络请求',
-      _offline,
-      (value) => setState(() => _offline = value),
-    ),
-    const Divider(height: 20),
-    _statusRow('剧情索引', 'torappu.prts.wiki', '未检测'),
+    _statusRow('剧情索引', 'torappu.prts.wiki', _indexStatus),
     const SizedBox(height: 14),
-    _statusRow('素材分发节点', 'PRTS STATIC CDN', '未检测'),
+    _statusRow('素材分发节点', 'torappu.prts.wiki/assets', _assetStatus),
     const SizedBox(height: 14),
     OutlinedButton.icon(
-      onPressed: () => showPreviewMessage(context, '连接诊断'),
+      onPressed: _checking || widget.probe == null ? null : _diagnose,
       icon: const Icon(Icons.network_check, size: 18),
       label: const Text('连接诊断'),
     ),
@@ -332,37 +354,6 @@ class _SettingsPageState extends State<SettingsPage> {
       const SizedBox(width: 8),
       ArchiveTag(status),
     ],
-  );
-
-  Widget _toggle(
-    String title,
-    String description,
-    bool value,
-    ValueChanged<bool>? onChanged,
-  ) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    child: Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(fontSize: 13)),
-              const SizedBox(height: 5),
-              Text(
-                description,
-                style: const TextStyle(fontSize: 11, color: AppColors.muted),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        Semantics(
-          label: '$title（预览）',
-          child: Switch(value: value, onChanged: onChanged),
-        ),
-      ],
-    ),
   );
 
   Widget _slider(
@@ -393,7 +384,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ],
         ),
         Semantics(
-          label: title == '并发下载数' ? title : '$title（预览）',
+          label: title,
           child: Slider(
             key: ValueKey('setting-$title'),
             value: value,

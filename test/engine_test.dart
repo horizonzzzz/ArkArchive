@@ -3,6 +3,46 @@ import 'package:arknights_story_player/story_player/script.dart';
 import 'package:arknights_story_player/story_player/runtime/story_engine.dart';
 
 void main() {
+  test('播放设置作用于手动和普通自动速度', () {
+    final engine = StoryEngine(
+      StoryScript.parse('对白'),
+      typingInterval: const Duration(milliseconds: 60),
+      autoWaitSeconds: 3,
+    );
+    addTearDown(engine.dispose);
+    expect(engine.currentSpeed.typingMs, 60);
+    engine.setAutoMode('button_auto');
+    expect(engine.currentSpeed.typingMs, 60);
+    expect(engine.currentSpeed.autoWaitBase, 3);
+    expect(engine.currentSpeed.autoWaitPerChar, 0);
+    engine.setSpeedLevel(1);
+    expect(engine.currentSpeed.typingMs, 15);
+    expect(engine.currentSpeed.autoWaitBase, 1);
+  });
+
+  testWidgets('自动播放在逐字完成后等待配置时长', (tester) async {
+    final initial = tester.binding.clock.now();
+    final engine = StoryEngine(
+      StoryScript.parse('[name="甲"]甲乙\n[name="甲"]第二句'),
+      typingInterval: const Duration(milliseconds: 80),
+      autoWaitSeconds: 2,
+      elapsed: () => tester.binding.clock.now().difference(initial),
+    );
+    try {
+      await engine.start();
+      engine.setAutoMode('button_auto');
+      await tester.pump(const Duration(milliseconds: 80));
+      expect(engine.state.revealed, 1);
+      await tester.pump(const Duration(milliseconds: 96));
+      expect(engine.state.revealed, 2);
+      await tester.pump(const Duration(milliseconds: 1900));
+      expect(engine.state.text, '甲乙');
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(engine.state.text, '第二句');
+    } finally {
+      engine.dispose();
+    }
+  });
   testWidgets('阻塞遮罩先完成；非阻塞背景动画与对白并行', (tester) async {
     final initial = tester.binding.clock.now();
     final engine = StoryEngine(

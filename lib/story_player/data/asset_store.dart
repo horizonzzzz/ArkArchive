@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'cache_control.dart';
 import 'file_cache.dart';
 
+import 'playback_settings.dart';
 
 class AssetStore {
   AssetStore({http.Client? client, FileCache? cache})
@@ -24,6 +25,10 @@ class AssetStore {
   static final _settingsUri = Uri.parse(
     'https://local.invalid/story-cache-settings',
   );
+  static final _playbackSettingsUri = Uri.parse(
+    'https://local.invalid/story-playback-settings-v1',
+  );
+  PlaybackSettings playbackSettings = const PlaybackSettings();
   static final _cacheDownloadZone = Object();
   static final _cacheControlZone = Object();
   bool get isMobile =>
@@ -55,13 +60,12 @@ class AssetStore {
     _movingCache = true;
     try {
       await _settingsWrite.catchError((_) {});
-      await _cache.clear(keep: {_settingsUri, ...keep});
+      await _cache.clear(keep: {_settingsUri, _playbackSettingsUri, ...keep});
     } finally {
       releaseMemory();
       _movingCache = false;
     }
   }
-
 
   Future<String?> cacheLocation() => _cache.location();
   Future<int> cacheSize() => _cache.size();
@@ -114,14 +118,22 @@ class AssetStore {
       try {
         if (control?.cancelled == true) throw const CacheCancelled();
         if (control?.blocked == true) continue;
-        final request = http.AbortableRequest('GET', uri, abortTrigger: abort.future);
+        final request = http.AbortableRequest(
+          'GET',
+          uri,
+          abortTrigger: abort.future,
+        );
         try {
-          final response = await _client.send(request)
+          final response = await _client
+              .send(request)
               .then(http.Response.fromStream)
-              .timeout(const Duration(seconds: 30), onTimeout: () {
-            if (!abort.isCompleted) abort.complete();
-            throw TimeoutException('请求超时：$uri');
-          });
+              .timeout(
+                const Duration(seconds: 30),
+                onTimeout: () {
+                  if (!abort.isCompleted) abort.complete();
+                  throw TimeoutException('请求超时：$uri');
+                },
+              );
           if (!interrupted) return response;
         } catch (_) {
           if (!interrupted) rethrow;
@@ -142,6 +154,15 @@ class AssetStore {
     } catch (_) {
       // 存储不可用时仍允许使用默认值播放。
     }
+    try {
+      final data = await _cache.read(_playbackSettingsUri);
+      if (data != null)
+        playbackSettings = PlaybackSettings.fromJson(
+          jsonDecode(utf8.decode(data)) as Map<String, dynamic>,
+        );
+    } catch (_) {
+      // Keep defaults if saved preferences cannot be read.
+    }
   }
 
   Future<void> setConcurrency(int value) async {
@@ -158,6 +179,32 @@ class AssetStore {
         );
     _settingsWrite = write;
     await write;
+  }
+
+  Future<void> setPlaybackSettings(PlaybackSettings value) async {
+    playbackSettings = value;
+    if (_movingCache) throw StateError('缓存目录迁移中');
+    final bytes = Uint8List.fromList(utf8.encode(jsonEncode(value.toJson())));
+    final write = _settingsWrite
+        .catchError((_) {})
+        .then((_) => _cache.write(_playbackSettingsUri, bytes));
+    _settingsWrite = write;
+    await write;
+  }
+
+  Future<bool> probe(Uri uri) async {
+    final abort = Completer<void>();
+    try {
+      final response = await _client
+          .send(http.AbortableRequest('GET', uri, abortTrigger: abort.future))
+          .timeout(const Duration(seconds: 10));
+      await response.stream.listen((_) {}).cancel();
+      return response.statusCode >= 200 && response.statusCode < 300;
+    } catch (_) {
+      return false;
+    } finally {
+      if (!abort.isCompleted) abort.complete();
+    }
   }
 
   Future<Uint8List?> readCache(Uri uri) async {
@@ -193,7 +240,10 @@ class AssetStore {
       throw FormatException('仅支持 HTTP(S) 资源：$uri');
     }
     if (_memory.containsKey(uri)) return _memory[uri]!;
-    final key = (uri, Zone.current[_cacheControlZone] ?? Zone.current[_cacheDownloadZone]);
+    final key = (
+      uri,
+      Zone.current[_cacheControlZone] ?? Zone.current[_cacheDownloadZone],
+    );
     if (_pending.containsKey(key)) return _pending[key]!;
     final future = _download(uri);
     _pending[key] = future;

@@ -250,6 +250,7 @@ class StoryEngine extends ChangeNotifier {
     this.elapsed,
     this.variables = const {},
     this.typingInterval = const Duration(milliseconds: 40),
+    this.autoWaitSeconds,
     this.firstRead = true,
     this.characterArtSize,
     this.imageNaturalWidth,
@@ -271,6 +272,7 @@ class StoryEngine extends ChangeNotifier {
   final StoryAudio audio;
   final Map<String, dynamic> variables;
   final Duration typingInterval;
+  final double? autoWaitSeconds;
   final Duration Function()? elapsed;
   final bool firstRead;
   /// 从 character.json 读取立绘标称尺寸，供 zoom 轴心位移计算。
@@ -331,6 +333,12 @@ class StoryEngine extends ChangeNotifier {
   bool get waitingInput => _waitingInput;
 
   PlaySpeed get currentSpeed => switch (autoMode) {
+    'button_auto' when autoWaitSeconds != null => PlaySpeed(
+      typingMs: typingInterval.inMicroseconds / 1000 * buttonSpeeds[math.min(speedLevel, buttonSpeeds.length - 1)].typingMs / 40,
+      animateRatio: 1,
+      autoWaitBase: autoWaitSeconds! * buttonSpeeds[math.min(speedLevel, buttonSpeeds.length - 1)].autoWaitBase / 1.5,
+      autoWaitPerChar: 0,
+    ),
     'button_auto' => buttonSpeeds[math.min(speedLevel, buttonSpeeds.length - 1)],
     'quick_play' => quickSpeeds[math.min(speedLevel, quickSpeeds.length - 1)],
     _ => defaultSpeed,

@@ -11,6 +11,7 @@ import 'cache_page.dart';
 import 'cache_job.dart';
 import '../story_player/data/cache_control.dart';
 import 'settings_page.dart';
+import '../story_player/data/playback_settings.dart';
 
 class StoryLauncher extends StatefulWidget {
   const StoryLauncher({super.key, this.repository});
@@ -172,6 +173,17 @@ class _StoryLauncherState extends State<StoryLauncher> {
     }
   }
 
+  Future<void> _changePlaybackSettings(PlaybackSettings value) async {
+    try {
+      final write = _repository.store.setPlaybackSettings(value);
+      setState(() {});
+      await write;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('播放设置无法保存，当前值仅在本次运行中生效。')));
+      }
+    }
+  }
   Future<bool> _checkCacheNetwork([
     List<ConnectivityResult>? connections,
   ]) async {
@@ -555,7 +567,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
       if (!mounted) return;
       setState(() => _busy = false);
       await Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => StoryPlayer(story: prepared)),
+        MaterialPageRoute<void>(builder: (_) => StoryPlayer(story: prepared, settings: _repository.store.playbackSettings)),
       );
     } catch (e) {
       if (mounted) {
@@ -677,6 +689,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                   }),
                                 ),
                                 SettingsPage(
+                                  active: _page == 2,
+                                  settings: _repository.store.playbackSettings,
+                                  onSettingsChanged: _changePlaybackSettings,
+                                  probe: _repository.store.probe,
                                   concurrency: _repository.store.concurrency,
                                   onConcurrencyChanged: _changeConcurrency,
                                   concurrencyBusy: _movingDirectory,

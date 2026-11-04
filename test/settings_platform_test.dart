@@ -27,6 +27,8 @@ void main() {
           ),
         ),
       );
+      await tester.tap(find.text('存储与缓存'));
+      await tester.pumpAndSettle();
       final mobile =
           platform == TargetPlatform.android || platform == TargetPlatform.iOS;
       final desktop =
@@ -44,4 +46,50 @@ void main() {
       expect(tester.takeException(), isNull);
     }, variant: TargetPlatformVariant({platform}));
   }
+  testWidgets('设置分类下钻、调整并诊断节点', (tester) async {
+    final requests = <Uri>[];
+    var master = 0.0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SettingsPage(
+            concurrency: 4,
+            onConcurrencyChanged: (_) {},
+            isMobile: false,
+            isDesktop: false,
+            caching: false,
+            onOpenDirectory: () {},
+            onMoveDirectory: () {},
+            directoryBusy: false,
+            onClearCache: () {},
+            onSettingsChanged: (value) => master = value.master,
+            probe: (uri) async {
+              requests.add(uri);
+              return requests.length == 1;
+            },
+          ),
+        ),
+      ),
+    );
+    expect(find.text('主音量'), findsNothing);
+    await tester.tap(find.text('音频通道'));
+    await tester.pumpAndSettle();
+    expect(find.text('语音 Voice（预留）'), findsNothing);
+    final slider = tester.widget<Slider>(
+      find.byKey(const ValueKey('setting-主音量')),
+    );
+    slider.onChanged!(.3 * 100);
+    await tester.pump();
+    expect(master, .3);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('网络与节点'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('连接诊断'));
+    await tester.pumpAndSettle();
+    expect(requests, hasLength(2));
+    expect(find.text('连接成功'), findsOneWidget);
+    expect(find.text('连接失败'), findsOneWidget);
+    expect(find.text('强制离线模式'), findsNothing);
+  });
 }

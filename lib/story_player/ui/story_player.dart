@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../data/media_catalog.dart';
 import '../data/story_repository.dart';
+import '../data/playback_settings.dart';
 import '../runtime/just_audio_output.dart';
 import '../runtime/story_audio.dart';
 import '../runtime/story_engine.dart';
@@ -11,9 +12,10 @@ import 'story_stage.dart';
 
 /// 可直接由关卡选择页打开；生命周期和资源不依赖应用入口。
 class StoryPlayer extends StatefulWidget {
-  const StoryPlayer({super.key, required this.story, this.audio});
+  const StoryPlayer({super.key, required this.story, this.audio, this.settings = const PlaybackSettings()});
   final PreparedStory story;
   final StoryAudio? audio;
+  final PlaybackSettings settings;
   @override
   State<StoryPlayer> createState() => _StoryPlayerState();
 }
@@ -35,7 +37,9 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
     engine = StoryEngine(widget.story.document.script,
       variables: widget.story.catalog.variables,
-      audio: widget.audio ?? JustAudioOutput(widget.story.catalog, widget.story.assets, onWarning: (message) { if (mounted) { engine.warn(message); setState(() {}); } }),
+      typingInterval: Duration(milliseconds: widget.settings.typingMs.round()),
+      autoWaitSeconds: widget.settings.autoDelay,
+      audio: widget.audio ?? JustAudioOutput(widget.story.catalog, widget.story.assets, masterVolume: widget.settings.master, bgmVolume: widget.settings.bgm, sfxVolume: widget.settings.sfx, onWarning: (message) { if (mounted) { engine.warn(message); setState(() {}); } }),
       characterArtSize: (name) {
         final art = widget.story.catalog.character(name);
         return art == null ? null : Offset(art.size.width, art.size.height);

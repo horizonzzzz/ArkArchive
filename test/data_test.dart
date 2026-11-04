@@ -10,6 +10,7 @@ import 'package:arknights_story_player/story_player/data/file_cache.dart';
 import 'package:arknights_story_player/story_player/data/cache_control.dart';
 import 'package:arknights_story_player/story_player/data/media_catalog.dart';
 import 'package:arknights_story_player/story_player/data/story_repository.dart';
+import 'package:arknights_story_player/story_player/data/playback_settings.dart';
 import 'package:arknights_story_player/story_player/script.dart';
 
 class MemoryCache extends FileCache {
@@ -64,6 +65,29 @@ class FailingCache extends MemoryCache {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('播放设置保存、清理缓存后保留并恢复', () async {
+    final cache = MemoryCache();
+    final store = AssetStore(cache: cache);
+    final restored = AssetStore(cache: cache);
+    addTearDown(store.close);
+    addTearDown(restored.close);
+    await store.setPlaybackSettings(const PlaybackSettings(master: .3, bgm: .4, sfx: .5, autoDelay: 3, typingMs: 60));
+    await store.clearCache();
+    await restored.loadSettings();
+    expect(restored.playbackSettings.toJson(), {'master': .3, 'bgm': .4, 'sfx': .5, 'autoDelay': 3.0, 'typingMs': 60.0});
+  });
+
+  test('节点诊断绕过缓存并检查响应状态', () async {
+    var calls = 0;
+    final store = AssetStore(cache: MemoryCache(), client: MockClient((request) async {
+      calls++;
+      return http.Response('', request.url.path == '/ok' ? 200 : 503);
+    }));
+    addTearDown(store.close);
+    expect(await store.probe(Uri.parse('https://example.test/ok')), isTrue);
+    expect(await store.probe(Uri.parse('https://example.test/fail')), isFalse);
+    expect(calls, 2);
+  });
   test('暂停丢弃已中断资源结果，恢复后继续，删除时唤醒等待任务', () async {
     final firstStarted = Completer<void>();
     final firstResponse = Completer<http.Response>();

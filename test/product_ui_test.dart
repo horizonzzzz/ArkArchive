@@ -182,6 +182,8 @@ void main() {
     await _mount(tester, repository: _Repository()..cacheIndex = true);
     await tester.tap(find.text('系统设置').last);
     await tester.pumpAndSettle();
+    await tester.tap(find.text('存储与缓存'));
+    await tester.pumpAndSettle();
     expect(find.text('缓存占用：1.0 MB'), findsOneWidget);
   });
 
@@ -250,9 +252,11 @@ void main() {
     expect(find.byKey(const Key('mobile-batch-bar')), findsNothing);
   });
 
-  testWidgets('设置滑块仅更新界面，切换页面后保持本次预览值', (tester) async {
+  testWidgets('设置滑块更新后切换页面保持设置值', (tester) async {
     final repo = await _mount(tester);
     await tester.tap(find.text('系统设置').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('音频通道'));
     await tester.pumpAndSettle();
     final slider = find.byKey(const ValueKey('setting-主音量'));
     final before = tester.widget<Slider>(slider).value;

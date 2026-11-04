@@ -458,6 +458,8 @@ void main() {
         ),
       ),
     );
+    await tester.tap(find.text('存储与缓存'));
+    await tester.pumpAndSettle();
     final slider = tester.widget<Slider>(
       find.byKey(const ValueKey('setting-并发下载数')),
     );
