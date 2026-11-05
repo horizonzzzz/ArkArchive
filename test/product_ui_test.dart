@@ -310,6 +310,47 @@ void main() {
     }),
   );
   for (final reduceMotion in [false, true]) {
+    testWidgets('移动端分类点击和滑动同步，减少动画：$reduceMotion', (tester) async {
+      await _mount(tester, reduceMotion: reduceMotion);
+      final pages = find.byKey(const PageStorageKey('category-pages'));
+      expect(pages, findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('category-1')));
+      await tester.pump();
+      if (!reduceMotion) {
+        await tester.pump(const Duration(milliseconds: 100));
+        final page = tester.widget<PageView>(pages).controller!.page!;
+        expect(page, greaterThan(0));
+        expect(page, lessThan(1));
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('慈悲灯塔'), findsOneWidget);
+      expect(find.text('孤星'), findsNothing);
+      await tester.drag(pages, const Offset(-300, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('孤星'), findsOneWidget);
+      expect(find.text('慈悲灯塔'), findsNothing);
+      await tester.drag(pages, const Offset(300, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('慈悲灯塔'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(tester.widget<PageView>(pages).controller!.page, 1);
+      expect(find.text('慈悲灯塔'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }, variant: TargetPlatformVariant({TargetPlatform.android}));
+  }
+
+  testWidgets('桌面端分类不启用滑动分页', (tester) async {
+    await _mount(tester);
+    expect(find.byKey(const PageStorageKey('category-pages')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('category-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('慈悲灯塔'), findsOneWidget);
+    expect(find.text('孤星'), findsNothing);
+  }, variant: TargetPlatformVariant({TargetPlatform.windows}));
+  for (final reduceMotion in [false, true]) {
     testWidgets('快速切换保留搜索与章节状态，减少动画：$reduceMotion', (tester) async {
       final repo = await _mount(tester, reduceMotion: reduceMotion);
       await tester.enterText(find.byKey(const Key('story-search')), '行动后');

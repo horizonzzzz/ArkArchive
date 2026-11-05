@@ -30,6 +30,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   late final StoryRepository _repository =
       widget.repository ?? StoryRepository(_ownedAssets!);
   final _search = TextEditingController();
+  final _categoryPageController = PageController();
   final _selected = <String>{};
   List<StoryGroup>? _groups;
   StoryGroup? _activeGroup;
@@ -628,13 +629,14 @@ class _StoryLauncherState extends State<StoryLauncher> {
         .toList();
   }
 
-  List<StoryGroup> get _visibleGroups => (_groups ?? const <StoryGroup>[])
-      .where(
-        (group) =>
-            (_category == 0 || _categoryOf(group) == _category) &&
-            _entries(group).isNotEmpty,
-      )
-      .toList();
+  List<StoryGroup> _visibleGroups(int category) =>
+      (_groups ?? const <StoryGroup>[])
+          .where(
+            (group) =>
+                (category == 0 || _categoryOf(group) == category) &&
+                _entries(group).isNotEmpty,
+          )
+          .toList();
 
   List<StoryEntry> get _selectedEntries => [
     for (final group in _groups ?? const <StoryGroup>[])
@@ -944,7 +946,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
   });
 
   Widget _library(bool desktop) {
-    final groups = _visibleGroups;
     final active = _activeGroup;
     final catalog = Column(
       children: [
@@ -984,36 +985,15 @@ class _StoryLauncherState extends State<StoryLauncher> {
           ),
         ),
         Expanded(
-          child: CustomScrollView(
-            key: PageStorageKey(
-              desktop ? 'desktop-chapters' : 'mobile-chapters',
-            ),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: Text(
-                    _groups == null
-                        ? '正在读取剧情索引'
-                        : '${groups.length} 个篇章 · ${groups.fold<int>(0, (sum, group) => sum + _entries(group).length)} 幕',
-                    style: const TextStyle(
-                      color: AppColors.subtext,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ),
-              _catalogBody(groups),
-              const SliverToBoxAdapter(
-                child: SafeArea(
-                  top: false,
-                  left: false,
-                  right: false,
-                  child: SizedBox.shrink(),
-                ),
-              ),
-            ],
-          ),
+          child: _repository.store.isMobile
+              ? PageView.builder(
+                  key: const PageStorageKey('category-pages'),
+                  controller: _categoryPageController,
+                  itemCount: _categories.length,
+                  onPageChanged: (value) => setState(() => _category = value),
+                  itemBuilder: (context, index) => _catalogPage(index, desktop),
+                )
+              : _catalogPage(_category, desktop),
         ),
       ],
     );
@@ -1050,13 +1030,67 @@ class _StoryLauncherState extends State<StoryLauncher> {
           ),
         Expanded(
           child: ArchivePageTransition(
-            transitionKey: (active?.name, active?.entryType, _category),
+            transitionKey: (
+              active?.name,
+              active?.entryType,
+              _repository.store.isMobile ? null : _category,
+            ),
             depth: active == null ? 0 : 1,
             child: active == null ? catalog : _chapterDetail(active),
           ),
         ),
       ],
     );
+  }
+
+  Widget _catalogPage(int category, bool desktop) {
+    final groups = _visibleGroups(category);
+    return CustomScrollView(
+      key: PageStorageKey(
+        _repository.store.isMobile && category != 0
+            ? 'mobile-chapters-$category'
+            : desktop
+            ? 'desktop-chapters'
+            : 'mobile-chapters',
+      ),
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: Text(
+              _groups == null
+                  ? '正在读取剧情索引'
+                  : '${groups.length} 个篇章 · ${groups.fold<int>(0, (sum, group) => sum + _entries(group).length)} 幕',
+              style: const TextStyle(color: AppColors.subtext, fontSize: 12),
+            ),
+          ),
+        ),
+        _catalogBody(groups, category),
+        const SliverToBoxAdapter(
+          child: SafeArea(
+            top: false,
+            left: false,
+            right: false,
+            child: SizedBox.shrink(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _selectCategory(int category) {
+    if (_repository.store.isMobile && _categoryPageController.hasClients) {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _categoryPageController.jumpToPage(category);
+      } else {
+        _categoryPageController.animateToPage(
+          category,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    }
+    setState(() => _category = category);
   }
 
   List<Widget> _categoryButtons() => [
@@ -1081,7 +1115,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
           ),
           child: TextButton(
             key: ValueKey('category-$i'),
-            onPressed: () => setState(() => _category = i),
+            onPressed: () => _selectCategory(i),
             style: TextButton.styleFrom(
               foregroundColor: _category == i
                   ? AppColors.text
@@ -1094,7 +1128,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
       ),
   ];
 
-  Widget _catalogBody(List<StoryGroup> groups) {
+  Widget _catalogBody(List<StoryGroup> groups, int category) {
     Widget? status;
     if (_indexError != null) {
       status = ArchiveEmpty(
@@ -1121,17 +1155,13 @@ class _StoryLauncherState extends State<StoryLauncher> {
     } else if (groups.isEmpty) {
       status = ArchiveEmpty(
         icon: Icons.search_off,
-        title: _category == 4 ? '玩法衍生档案待接入' : '没有匹配的剧情',
-        message: _category == 4
-            ? '当前索引未提供完整的玩法衍生目录，后续将在这里接入。'
-            : '试试其他关键词或切换分类。',
+        title: category == 4 ? '玩法衍生档案待接入' : '没有匹配的剧情',
+        message: category == 4 ? '当前索引未提供完整的玩法衍生目录，后续将在这里接入。' : '试试其他关键词或切换分类。',
         action: TextButton(
           onPressed: () {
             _search.clear();
-            setState(() {
-              _filter = '';
-              _category = 0;
-            });
+            setState(() => _filter = '');
+            _selectCategory(0);
           },
           child: const Text('查看全部剧情'),
         ),
@@ -1384,6 +1414,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
       job.control.cancel();
     }
     unawaited(_cacheNetworkSubscription?.cancel());
+    _categoryPageController.dispose();
     _search.dispose();
     _ownedAssets?.close();
     super.dispose();
