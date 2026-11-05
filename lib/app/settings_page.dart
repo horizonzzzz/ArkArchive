@@ -89,6 +89,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void didUpdateWidget(covariant SettingsPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.settings != widget.settings) _settings = widget.settings;
+    if (oldWidget.active && !widget.active) _category = null;
   }
 
   @override
@@ -102,10 +103,10 @@ class _SettingsPageState extends State<SettingsPage> {
     child: LayoutBuilder(
       builder: (context, constraints) {
         const categories = [
-          (Icons.graphic_eq, '音频通道'),
-          (Icons.slow_motion_video, '演出偏好'),
-          (Icons.storage_outlined, '存储与缓存'),
-          (Icons.public, '网络与节点'),
+          (Icons.graphic_eq, '音频通道', '主音量、音乐与音效'),
+          (Icons.slow_motion_video, '演出偏好', '自动播放与文字显示速度'),
+          (Icons.storage_outlined, '存储与缓存', '缓存占用、下载并发与本地文件'),
+          (Icons.public, '网络与节点', '检查剧情与素材连接'),
         ];
         final wide = constraints.maxWidth >= 880;
         final content = switch (_category) {
@@ -113,97 +114,82 @@ class _SettingsPageState extends State<SettingsPage> {
           1 => _playback(),
           2 => _storage(wide),
           3 => _network(),
-          _ => Column(
-            children: [
-              for (var i = 0; i < categories.length; i++)
-                ListTile(
-                  leading: Icon(categories[i].$1),
-                  title: Text(categories[i].$2),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => setState(() => _category = i),
-                ),
-            ],
-          ),
-        };
-        return SingleChildScrollView(
-          key: PageStorageKey('settings-${_category ?? 'root'}'),
-          padding: EdgeInsets.all(constraints.maxWidth < 600 ? 16 : 28),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_category == null)
-                    const ArchiveHeading('系统设置')
-                  else
-                    Row(
-                      children: [
-                        IconButton(
-                          tooltip: '返回设置分类',
-                          onPressed: () => setState(() => _category = null),
-                          icon: const Icon(Icons.arrow_back),
-                        ),
-                        Expanded(
-                          child: ArchiveHeading(categories[_category!].$2),
-                        ),
-                      ],
+          _ => ArchivePanel(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                for (var i = 0; i < categories.length; i++) ...[
+                  if (i > 0)
+                    const Divider(height: 1, indent: 16, endIndent: 16),
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
                     ),
-                  const SizedBox(height: 20),
-                  content,
+                    leading: Icon(
+                      categories[i].$1,
+                      size: 22,
+                      color: AppColors.subtext,
+                    ),
+                    title: Text(
+                      categories[i].$2,
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                    subtitle: Text(
+                      categories[i].$3,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.subtext,
+                      ),
+                    ),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => setState(() => _category = i),
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
+        };
+        return Column(
+          children: [
+            ArchivePageHeader(
+              key: const Key('settings-header'),
+              maxWidth: 900,
+              title: _category == null ? '系统设置' : categories[_category!].$2,
+              leading: _category == null
+                  ? null
+                  : IconButton(
+                      tooltip: '返回设置分类',
+                      onPressed: () => setState(() => _category = null),
+                      icon: const Icon(Icons.arrow_back, size: 22),
+                    ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                key: PageStorageKey('settings-${_category ?? 'root'}'),
+                padding: const EdgeInsets.all(20),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 860),
+                    child: content,
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
     ),
   );
 
-  Widget _section(
-    String title,
-    String subtitle,
-    IconData icon,
-    List<Widget> children,
-  ) => ArchivePanel(
+  Widget _section(List<Widget> children) => ArchivePanel(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Icon(icon, color: AppColors.terminalWhite, size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  color: AppColors.text,
-                ),
-              ),
-            ),
-            Text(
-              subtitle,
-              style: const TextStyle(
-                color: AppColors.muted,
-                letterSpacing: 1.5,
-                fontSize: 9,
-                fontFamily: 'monospace',
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        const Divider(height: 1),
-        const SizedBox(height: 12),
-        ...children,
-      ],
+      children: children,
     ),
   );
 
-  Widget _audio() => _section('音频通道', '01 // AUDIO', Icons.graphic_eq, [
+  Widget _audio() => _section([
     _slider(
       '主音量',
       _settings.master * 100,
@@ -233,31 +219,28 @@ class _SettingsPageState extends State<SettingsPage> {
     ),
   ]);
 
-  Widget _playback() =>
-      _section('演出偏好', '02 // PLAYBACK', Icons.slow_motion_video, [
-        _slider(
-          '自动播放等待',
-          _settings.autoDelay,
-          1,
-          5,
-          '${_settings.autoDelay.round()} 秒',
-          (v) => _changeSettings(_settings.copyWith(autoDelay: v)),
-          divisions: 4,
-        ),
-        _slider(
-          '逐字出字间隔',
-          _settings.typingMs,
-          10,
-          80,
-          '${_settings.typingMs.round()} ms',
-          (v) => _changeSettings(_settings.copyWith(typingMs: v)),
-          divisions: 14,
-        ),
-      ]);
+  Widget _playback() => _section([
+    _slider(
+      '自动播放等待',
+      _settings.autoDelay,
+      1,
+      5,
+      '${_settings.autoDelay.round()} 秒',
+      (v) => _changeSettings(_settings.copyWith(autoDelay: v)),
+      divisions: 4,
+    ),
+    _slider(
+      '逐字出字间隔',
+      _settings.typingMs,
+      10,
+      80,
+      '${_settings.typingMs.round()} ms',
+      (v) => _changeSettings(_settings.copyWith(typingMs: v)),
+      divisions: 14,
+    ),
+  ]);
 
-  Widget _storage(
-    bool wide,
-  ) => _section('存储与缓存', '03 // STORAGE', Icons.storage_outlined, [
+  Widget _storage(bool wide) => _section([
     if (widget.isMobile) ...[
       const Text(
         '使用移动数据缓存前会提示确认。',
@@ -322,7 +305,7 @@ class _SettingsPageState extends State<SettingsPage> {
     ),
   ]);
 
-  Widget _network() => _section('网络与节点', '04 // NETWORK', Icons.public, [
+  Widget _network() => _section([
     _statusRow('剧情索引', 'torappu.prts.wiki', _indexStatus),
     const SizedBox(height: 14),
     _statusRow('素材分发节点', 'torappu.prts.wiki/assets', _assetStatus),
@@ -332,8 +315,6 @@ class _SettingsPageState extends State<SettingsPage> {
       icon: const Icon(Icons.network_check, size: 18),
       label: const Text('连接诊断'),
     ),
-    const Divider(height: 20),
-    _statusRow('客户端版本', 'RHODES-OS v4.1', '1.0.0'),
   ]);
 
   Widget _statusRow(String title, String description, String status) => Row(
@@ -376,6 +357,7 @@ class _SettingsPageState extends State<SettingsPage> {
               label,
               style: const TextStyle(
                 fontFamily: AppTypography.bender,
+                fontFamilyFallback: [AppTypography.sans],
                 color: AppColors.terminalWhite,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,

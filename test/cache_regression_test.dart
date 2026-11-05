@@ -78,13 +78,11 @@ class QueueRepository extends StoryRepository {
 }
 
 CachePage page({
-  List<StoryEntry> selected = const [],
   List<StoryEntry> cached = const [],
   Map<String, CacheJob> jobs = const {},
   bool caching = false,
   ValueChanged<List<StoryEntry>>? onDelete,
 }) => CachePage(
-  selected: selected,
   cached: cached,
   jobs: jobs,
   caching: caching,
@@ -92,7 +90,7 @@ CachePage page({
   done: 0,
   total: jobs.isEmpty ? 1 : jobs.length,
   onBrowse: () {},
-  onCache: () {},
+  onRetry: () {},
   onOpen: (_) {},
   onToggleJob: (_) {},
   onRemoveJob: (_) {},
@@ -113,12 +111,12 @@ Future<void> startQueue(WidgetTester tester, QueueRepository repository) async {
   await tester.pump();
   await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
   await tester.pumpAndSettle();
+  await tester.tap(find.text('选择'));
+  await tester.pump();
   await tester.ensureVisible(find.text('全选本章'));
   await tester.tap(find.text('全选本章'));
   await tester.pump();
-  tester
-      .widget<CachePage>(find.byType(CachePage, skipOffstage: false))
-      .onCache();
+  await tester.tap(find.text('缓存'));
   await tester.pump();
 }
 
@@ -141,7 +139,7 @@ Future<void> finishQueue(
 }
 
 void main() {
-  testWidgets('选中标签保持反白对比，任务进度与总进度随资源更新', (tester) async {
+  testWidgets('缓存任务进度与总进度随资源更新，不显示分类与底部缓存按钮', (tester) async {
     const entry = StoryEntry('进度测试', 'progress');
     final job = CacheJob(entry)
       ..status = CacheJobStatus.downloading
@@ -150,14 +148,13 @@ void main() {
     Future<void> render() => tester.pumpWidget(
       MaterialApp(
         theme: buildAppTheme(),
-        home: Scaffold(
-          body: page(selected: [entry], jobs: {entry.path: job}, caching: true),
-        ),
+        home: Scaffold(body: page(jobs: {entry.path: job}, caching: true)),
       ),
     );
     await render();
-    final label = tester.element(find.text('待缓存 (1)'));
-    expect(DefaultTextStyle.of(label).style.color, AppColors.onActive);
+    expect(find.byType(ChoiceChip), findsNothing);
+    expect(find.byType(FilledButton), findsNothing);
+    final label = tester.element(find.text('进度测试'));
     final theme = Theme.of(label).progressIndicatorTheme;
     expect(theme.color, isNot(theme.linearTrackColor));
     expect(
@@ -180,7 +177,7 @@ void main() {
     );
   });
 
-  testWidgets('已完成任务从待缓存移除，已离线支持选择和批量删除', (tester) async {
+  testWidgets('下载任务与已缓存篇章同页显示，已完成任务不重复且可批量删除', (tester) async {
     const first = StoryEntry('第一幕', 'first');
     const second = StoryEntry('第二幕', 'second');
     List<StoryEntry>? deleted;
@@ -189,24 +186,25 @@ void main() {
         theme: buildAppTheme(),
         home: Scaffold(
           body: page(
-            selected: [first],
+            caching: true,
             cached: [first, second],
             jobs: {
               first.path: CacheJob(first)..status = CacheJobStatus.completed,
+              'downloading':
+                  CacheJob(const StoryEntry('正在下载的剧情', 'downloading'))
+                    ..status = CacheJobStatus.downloading
+                    ..done = 1
+                    ..total = 2,
             },
             onDelete: (entries) => deleted = entries,
           ),
         ),
       ),
     );
-    expect(find.text('待缓存 (0)'), findsOneWidget);
+    expect(find.text('正在下载的剧情'), findsOneWidget);
+    expect(find.byType(ChoiceChip), findsNothing);
     expect(find.text('第一幕'), findsNothing);
-    await tester.tap(find.text('已离线'));
-    await tester.pumpAndSettle();
-    expect(
-      DefaultTextStyle.of(tester.element(find.text('已离线'))).style.color,
-      AppColors.onActive,
-    );
+    expect(find.byKey(const ValueKey('offline-其他离线剧情')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('offline-其他离线剧情')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('批量管理'));
@@ -234,12 +232,12 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('选择'));
+    await tester.pump();
     await tester.ensureVisible(find.text('全选本章'));
     await tester.tap(find.text('全选本章'));
     await tester.pump();
-    tester
-        .widget<CachePage>(find.byType(CachePage, skipOffstage: false))
-        .onCache();
+    await tester.tap(find.text('缓存'));
     await tester.pump();
     expect(repository.started, hasLength(2));
     expect(
@@ -267,16 +265,21 @@ void main() {
     }
     await tester.pumpAndSettle();
     final cache = tester.widget<CachePage>(find.byType(CachePage));
-    expect(cache.selected, isEmpty);
+    expect(
+      cache.jobs.values.every((job) => job.status == CacheJobStatus.completed),
+      isTrue,
+    );
     expect(cache.cached, hasLength(6));
     cache.onBrowse();
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
     await tester.pumpAndSettle();
     expect(find.text('已缓存'), findsWidgets);
-    final checks = tester.widgetList<Checkbox>(find.byType(Checkbox));
-    expect(checks, isNotEmpty);
-    expect(checks.every((check) => check.onChanged == null), isTrue);
+    expect(find.byType(Checkbox), findsNothing);
+    final select = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, '选择'),
+    );
+    expect(select.onPressed, isNull);
   });
 
   testWidgets('移动网络开始缓存先确认，拒绝不创建失败任务', (tester) async {
@@ -296,12 +299,12 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('选择'));
+    await tester.pump();
     await tester.ensureVisible(find.text('全选本章'));
     await tester.tap(find.text('全选本章'));
     await tester.pump();
-    tester
-        .widget<CachePage>(find.byType(CachePage, skipOffstage: false))
-        .onCache();
+    await tester.tap(find.text('缓存'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('使用移动数据缓存？'), findsOneWidget);
@@ -407,8 +410,6 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('已离线'));
-    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('offline-其他离线剧情')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('批量管理'));

@@ -31,6 +31,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   final _selected = <String>{};
   List<StoryGroup>? _groups;
   StoryGroup? _activeGroup;
+  bool _selecting = false;
   String? _indexError;
   String? _playError;
   StoryEntry? _opening;
@@ -43,6 +44,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   bool _caching = false;
   int _cachedDone = 0;
   int _cachedTotal = 0;
+  int _cacheBatchId = 0;
   String? _cacheMessage;
   final Map<String, CacheJob> _cacheJobs = {};
   bool _networkPaused = false;
@@ -180,10 +182,13 @@ class _StoryLauncherState extends State<StoryLauncher> {
       await write;
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('播放设置无法保存，当前值仅在本次运行中生效。')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('播放设置无法保存，当前值仅在本次运行中生效。')));
       }
     }
   }
+
   Future<bool> _checkCacheNetwork([
     List<ConnectivityResult>? connections,
   ]) async {
@@ -252,6 +257,20 @@ class _StoryLauncherState extends State<StoryLauncher> {
     }
   }
 
+  Future<void> _retryFailedCacheJobs() async {
+    if (_caching || _busy || _deletingCache || _movingDirectory) return;
+    setState(() {
+      _selected
+        ..clear()
+        ..addAll(
+          _cacheJobs.values
+              .where((job) => job.status == CacheJobStatus.failed)
+              .map((job) => job.entry.path),
+        );
+    });
+    await _cacheSelected();
+  }
+
   Future<void> _cacheSelected() async {
     if (_busy ||
         _caching ||
@@ -289,8 +308,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
           ..addEntries(jobs.map((job) => MapEntry(job.entry.path, job)));
         _cachedDone = 0;
         _cachedTotal = jobs.length;
+        _cacheBatchId++;
         _cacheMessage = null;
         _page = 1;
+        _selecting = false;
         _syncCacheJobs();
       });
       Future<void> worker(CacheJob job) async {
@@ -567,7 +588,12 @@ class _StoryLauncherState extends State<StoryLauncher> {
       if (!mounted) return;
       setState(() => _busy = false);
       await Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => StoryPlayer(story: prepared, settings: _repository.store.playbackSettings)),
+        MaterialPageRoute<void>(
+          builder: (_) => StoryPlayer(
+            story: prepared,
+            settings: _repository.store.playbackSettings,
+          ),
+        ),
       );
     } catch (e) {
       if (mounted) {
@@ -641,7 +667,11 @@ class _StoryLauncherState extends State<StoryLauncher> {
         canPop: !_busy && !(_page == 0 && _activeGroup != null),
         onPopInvokedWithResult: (didPop, result) {
           if (!didPop && !_busy && _page == 0 && _activeGroup != null) {
-            _leaveActivity();
+            if (_selecting) {
+              _exitSelection();
+            } else {
+              _leaveActivity();
+            }
           }
         },
         child: Scaffold(
@@ -655,16 +685,16 @@ class _StoryLauncherState extends State<StoryLauncher> {
                     Expanded(
                       child: Column(
                         children: [
-                          if (desktop) _topbar(),
                           Expanded(
                             child: IndexedStack(
                               index: _page,
                               children: [
                                 _library(desktop),
                                 CachePage(
+                                  // 新批次切回总览，即使缓存立即完成也不依赖中间帧。
+                                  key: ValueKey('cache-batch-$_cacheBatchId'),
                                   groups: _groups ?? const [],
                                   active: _page == 1,
-                                  selected: _selectedEntries,
                                   cached: [
                                     for (final group
                                         in _groups ?? <StoryGroup>[])
@@ -676,7 +706,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                   done: _cachedDone,
                                   total: _cachedTotal,
                                   message: _cacheMessage,
-                                  onCache: _cacheSelected,
+                                  onRetry: _retryFailedCacheJobs,
                                   onOpen: _open,
                                   jobs: _cacheJobs,
                                   onToggleJob: _toggleCacheJob,
@@ -787,7 +817,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (_page == 0 && _selected.isNotEmpty) _batchBar(),
                       NavigationBar(
                         selectedIndex: _page,
                         onDestinationSelected: (value) =>
@@ -808,296 +837,146 @@ class _StoryLauncherState extends State<StoryLauncher> {
     },
   );
 
-  Widget _sidebar() => Container(
+  Widget _sidebar() => SizedBox(
     key: const Key('desktop-sidebar'),
-    width: 220,
-    decoration: const BoxDecoration(
-      color: AppColors.surface,
-      border: Border(right: BorderSide(color: AppColors.border)),
-    ),
-    child: LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: IntrinsicHeight(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    width: 216,
+    child: Material(
+      color: AppColors.panel,
+      shape: const Border(right: BorderSide(color: AppColors.borderSubtle)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 28, 16, 28),
+            child: Row(
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 24, 16, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Image.asset(
-                            'assets/images/logo_rhodes.png',
-                            width: 22,
-                            height: 22,
-                            fit: BoxFit.contain,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'PRTS',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontFamily: AppTypography.bender,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 2,
-                              color: AppColors.terminalWhite,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 16),
-                      Text(
-                        '方舟档案室',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.5,
-                          color: AppColors.text,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        '剧情档案库',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.subtext,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                    ],
-                  ),
+                Image.asset(
+                  'assets/images/logo_rhodes.png',
+                  width: 28,
+                  height: 28,
+                  fit: BoxFit.contain,
                 ),
-                const Divider(height: 1),
-                const SizedBox(height: 14),
-                for (var i = 0; i < _navigation.length; i++)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    child: Semantics(
-                      selected: _page == i,
-                      child: Material(
-                        color: _page == i
-                            ? AppColors.raised
-                            : Colors.transparent,
-                        child: InkWell(
-                          onTap: () => setState(() => _page = i),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              border: Border(
-                                left: BorderSide(
-                                  color: _page == i
-                                      ? AppColors.indicator
-                                      : Colors.transparent,
-                                  width: 3,
-                                ),
-                              ),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 14,
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  _navigation[i].$1,
-                                  size: 18,
-                                  color: _page == i
-                                      ? AppColors.text
-                                      : AppColors.subtext,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    _navigation[i].$2,
-                                    style: TextStyle(
-                                      color: _page == i
-                                          ? AppColors.text
-                                          : AppColors.subtext,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  _navigation[i].$3,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontFamily: AppTypography.bender,
-                                    color: _page == i
-                                        ? AppColors.terminalWhite
-                                        : AppColors.muted,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                const Spacer(),
-                const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.circle, size: 8, color: AppColors.green),
-                          SizedBox(width: 6),
-                          Text(
-                            'PRTS-OS v4.1',
-                            style: TextStyle(
-                              fontSize: 10,
-                              letterSpacing: 1.5,
-                              color: AppColors.subtext,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        '罗德岛中央情报处理系统',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.muted,
-                          height: 1.5,
-                        ),
-                      ),
-                      SizedBox(height: 10),
-                      Text(
-                        'SYS // ONLINE',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontFamily: AppTypography.bender,
-                          letterSpacing: 1.5,
-                          color: AppColors.muted,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    '方舟档案室',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                   ),
                 ),
               ],
             ),
           ),
-        ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+              children: [
+                for (var i = 0; i < _navigation.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: ListTile(
+                      selected: _page == i,
+                      selectedColor: AppColors.indicator,
+                      selectedTileColor: AppColors.surface,
+                      textColor: AppColors.subtext,
+                      iconColor: AppColors.subtext,
+                      leading: Icon(_navigation[i].$1, size: 20),
+                      title: Text(
+                        _navigation[i].$2,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      onTap: () => setState(() => _page = i),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.all(20),
+            child: Text(
+              '剧情浏览与离线阅读',
+              style: TextStyle(fontSize: 12, color: AppColors.subtext),
+            ),
+          ),
+        ],
       ),
     ),
   );
 
-  Widget _topbar() => Container(
-    height: 48,
-    padding: const EdgeInsets.symmetric(horizontal: 24),
-    decoration: const BoxDecoration(
-      color: AppColors.surface,
-      border: Border(bottom: BorderSide(color: AppColors.border)),
-    ),
-    child: Row(
-      children: [
-        const Text(
-          '终端系统',
-          style: TextStyle(
-            fontSize: 12,
-            color: AppColors.subtext,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10),
-          child: Text('/', style: TextStyle(color: AppColors.border)),
-        ),
-        Text(
-          _navigation[_page].$2,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.text,
-          ),
-        ),
-        const Spacer(),
-        const Text(
-          'RHODES ISLAND TERMINAL',
-          style: TextStyle(
-            fontSize: 9,
-            color: AppColors.muted,
-            letterSpacing: 1.5,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    ),
-  );
-
+  void _exitSelection() => setState(() {
+    _selecting = false;
+    _selected.clear();
+  });
   void _leaveActivity() => setState(() {
     _activeGroup = null;
     _selected.clear();
+    _selecting = false;
   });
 
   Widget _library(bool desktop) {
     final groups = _visibleGroups;
     final active = _activeGroup;
-    final catalog = CustomScrollView(
-      key: PageStorageKey(desktop ? 'desktop-chapters' : 'mobile-chapters'),
-      slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const ArchiveHeading('剧情馆'),
-                const SizedBox(height: 20),
-                TextField(
-                  key: const Key('story-search'),
-                  controller: _search,
-                  onChanged: (value) => setState(() => _filter = value),
-                  decoration: InputDecoration(
-                    hintText: '搜索篇章、关卡或剧情标题',
-                    prefixIcon: const Icon(Icons.search, size: 20),
-                    suffixIcon: _filter.isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: '清除搜索',
-                            onPressed: () {
-                              _search.clear();
-                              setState(() => _filter = '');
-                            },
-                            icon: const Icon(Icons.close, size: 18),
-                          ),
-                  ),
+    final catalog = Column(
+      children: [
+        ArchivePageHeader(
+          key: const Key('catalog-header'),
+          title: '剧情馆',
+          bottom: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                key: const Key('story-search'),
+                controller: _search,
+                onChanged: (value) => setState(() => _filter = value),
+                style: const TextStyle(fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: '搜索篇章、关卡或剧情标题',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  suffixIcon: _filter.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: '清除搜索',
+                          onPressed: () {
+                            _search.clear();
+                            setState(() => _filter = '');
+                          },
+                          icon: const Icon(Icons.close, size: 18),
+                        ),
                 ),
-                const SizedBox(height: 14),
-                if (desktop)
-                  Wrap(spacing: 6, runSpacing: 6, children: _categoryButtons())
-                else
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(spacing: 8, children: _categoryButtons()),
-                  ),
-                const SizedBox(height: 14),
-                Text(
-                  _groups == null
-                      ? 'PRTS / 剧情档案索引'
-                      : '${groups.length} 个篇章 · ${groups.fold<int>(0, (sum, group) => sum + _entries(group).length)} 幕',
-                  style: const TextStyle(color: AppColors.muted, fontSize: 11),
-                ),
-                const SizedBox(height: 14),
-              ],
-            ),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: _categoryButtons()),
+              ),
+            ],
           ),
         ),
-        const SliverToBoxAdapter(child: Divider(height: 1)),
-        _catalogBody(groups),
+        Expanded(
+          child: CustomScrollView(
+            key: PageStorageKey(
+              desktop ? 'desktop-chapters' : 'mobile-chapters',
+            ),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: Text(
+                    _groups == null
+                        ? '正在读取剧情索引'
+                        : '${groups.length} 个篇章 · ${groups.fold<int>(0, (sum, group) => sum + _entries(group).length)} 幕',
+                    style: const TextStyle(
+                      color: AppColors.subtext,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+              _catalogBody(groups),
+            ],
+          ),
+        ),
       ],
     );
     return Column(
@@ -1138,23 +1017,31 @@ class _StoryLauncherState extends State<StoryLauncher> {
 
   List<Widget> _categoryButtons() => [
     for (var i = 0; i < _categories.length; i++)
-      ChoiceChip(
-        key: ValueKey('category-$i'),
-        label: SizedBox(
-          width:
-              MediaQuery.textScalerOf(context).scale(12) *
-              _categories[i].length,
-          child: Text(_categories[i], textAlign: TextAlign.center),
-        ),
+      Semantics(
         selected: _category == i,
-        onSelected: (_) => setState(() => _category = i),
-        showCheckmark: false,
-        labelStyle: TextStyle(
-          fontSize: 12,
-          fontWeight: _category == i ? FontWeight.w700 : FontWeight.w400,
-          color: _category == i ? AppColors.onActive : AppColors.secondary,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: _category == i
+                    ? AppColors.indicator
+                    : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: TextButton(
+            key: ValueKey('category-$i'),
+            onPressed: () => setState(() => _category = i),
+            style: TextButton.styleFrom(
+              foregroundColor: _category == i
+                  ? AppColors.text
+                  : AppColors.subtext,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+            ),
+            child: Text(_categories[i]),
+          ),
         ),
-        materialTapTargetSize: MaterialTapTargetSize.padded,
       ),
   ];
 
@@ -1205,7 +1092,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
       return SliverFillRemaining(hasScrollBody: false, child: status);
     }
     return SliverPadding(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(20),
       sliver: SliverList.builder(
         itemCount: groups.length,
         itemBuilder: (context, index) => _activityCard(groups[index]),
@@ -1225,14 +1112,19 @@ class _StoryLauncherState extends State<StoryLauncher> {
             horizontal: 16,
             vertical: 8,
           ),
-          title: Text(group.name),
+          title: Text(
+            group.name,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          ),
           subtitle: Text(
             '${_categories[_categoryOf(group)]} · ${_entries(group).length} 幕',
+            style: const TextStyle(fontSize: 12, color: AppColors.subtext),
           ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => setState(() {
             _selected.clear();
             _activeGroup = group;
+            _selecting = false;
           }),
         ),
       ),
@@ -1241,79 +1133,79 @@ class _StoryLauncherState extends State<StoryLauncher> {
 
   Widget _chapterDetail(StoryGroup group) {
     final entries = _entries(group);
-    return CustomScrollView(
-      key: PageStorageKey('stages-${group.name}'),
-      slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: _leaveActivity,
-                    icon: const Icon(Icons.arrow_back),
-                    label: const Text('返回剧情馆'),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    ArchiveTag(_categories[_categoryOf(group)]),
-                    Text('${entries.length} 幕'),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  group.name,
-                  style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Wrap(
-                  spacing: 10,
+    return Column(
+      children: [
+        ArchivePageHeader(
+          key: const Key('chapter-header'),
+          title: group.name,
+          leading: IconButton(
+            tooltip: '返回剧情馆',
+            onPressed: _leaveActivity,
+            icon: const Icon(Icons.arrow_back, size: 22),
+          ),
+          trailing: TextButton(
+            onPressed: _selecting
+                ? _exitSelection
+                : entries.any((entry) => !_cached.contains(entry.path))
+                ? () => setState(() => _selecting = true)
+                : null,
+            child: Text(_selecting ? '取消' : '选择'),
+          ),
+          bottom: _selecting
+              ? Wrap(
+                  spacing: 12,
                   runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     _selectAllControl(entries),
+                    Text(
+                      '已选 ${_selected.length} 幕',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.subtext,
+                      ),
+                    ),
                     FilledButton.icon(
                       onPressed: _selected.isEmpty || _caching
                           ? null
                           : _cacheSelected,
-                      icon: const Icon(Icons.download_outlined, size: 17),
-                      label: Text('缓存选中项 (${_selected.length})'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => setState(() => _page = 1),
-                      icon: const Icon(Icons.download_done_outlined, size: 17),
-                      label: const Text('管理离线剧情'),
+                      icon: const Icon(Icons.download_outlined, size: 18),
+                      label: const Text('缓存'),
                     ),
                   ],
-                ),
-              ],
-            ),
-          ),
+                )
+              : null,
         ),
-        const SliverToBoxAdapter(child: Divider(height: 1)),
-        SliverPadding(
-          padding: const EdgeInsets.all(18),
-          sliver: SliverList.builder(
-            itemCount: entries.length,
-            itemBuilder: (context, index) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: ArchivePanel(
-                padding: EdgeInsets.zero,
-                child: _stageRow(entries[index]),
+        Expanded(
+          child: CustomScrollView(
+            key: PageStorageKey('stages-${group.name}'),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: Text(
+                    '${_categories[_categoryOf(group)]} · ${entries.length} 幕',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.subtext,
+                    ),
+                  ),
+                ),
               ),
-            ),
+              SliverPadding(
+                padding: const EdgeInsets.all(20),
+                sliver: SliverList.builder(
+                  itemCount: entries.length,
+                  itemBuilder: (context, index) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: ArchivePanel(
+                      padding: EdgeInsets.zero,
+                      child: _stageRow(entries[index]),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -1353,32 +1245,29 @@ class _StoryLauncherState extends State<StoryLauncher> {
 
   Widget _stageRow(StoryEntry entry) => Material(
     key: ValueKey(entry.path),
-    color: _selected.contains(entry.path)
+    color: _selecting && _selected.contains(entry.path)
         ? AppColors.surface
         : Colors.transparent,
     child: InkWell(
-      onTap: () => _toggle(entry, !_selected.contains(entry.path)),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border(
-            left: BorderSide(
-              color: _selected.contains(entry.path)
-                  ? AppColors.indicator
-                  : Colors.transparent,
-              width: 3,
-            ),
-          ),
-        ),
-        padding: const EdgeInsets.fromLTRB(6, 12, 12, 12),
+      onTap: _selecting
+          ? _cached.contains(entry.path)
+                ? null
+                : () => _toggle(entry, !_selected.contains(entry.path))
+          : () => _open(entry),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
         child: Row(
           children: [
-            Checkbox(
-              value: _selected.contains(entry.path),
-              semanticLabel: '选择 ${entry.title}',
-              onChanged: _cached.contains(entry.path)
-                  ? null
-                  : (value) => _toggle(entry, value ?? false),
-            ),
+            if (_selecting) ...[
+              Checkbox(
+                value: _selected.contains(entry.path),
+                semanticLabel: '选择 ${entry.title}',
+                onChanged: _cached.contains(entry.path)
+                    ? null
+                    : (value) => _toggle(entry, value ?? false),
+              ),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1391,27 +1280,26 @@ class _StoryLauncherState extends State<StoryLauncher> {
                       if (entry.code.isNotEmpty)
                         Text(
                           entry.code,
-                          style: const TextStyle(
-                            fontFamily: AppTypography.bender,
-                            color: AppColors.terminalWhite,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                            letterSpacing: 1.0,
+                          style: AppTypography.tacticalCode.copyWith(
+                            color: AppColors.subtext,
+                            fontSize: 13,
                           ),
                         ),
-                      if (_cached.contains(entry.path))
-                        const ArchiveTag('已缓存', color: AppColors.terminalWhite),
                       if (entry.tag.isNotEmpty)
                         ArchiveTag(entry.tag, color: AppColors.subtext),
+                      if (_cached.contains(entry.path))
+                        const ArchiveTag('已缓存', color: AppColors.indicator),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  if (entry.code.isNotEmpty || entry.tag.isNotEmpty)
+                    const SizedBox(height: 8),
                   Text(
                     entry.name.isEmpty ? entry.title : entry.name,
                     style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
                       color: AppColors.text,
+                      height: 1.5,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -1419,55 +1307,17 @@ class _StoryLauncherState extends State<StoryLauncher> {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: '播放 ${entry.title}',
-              onPressed: () => _open(entry),
-              icon: const Icon(
-                Icons.play_arrow,
-                color: AppColors.terminalWhite,
-                size: 22,
+            if (!_selecting) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: '播放 ${entry.title}',
+                onPressed: () => _open(entry),
+                icon: const Icon(Icons.play_arrow, size: 22),
               ),
-            ),
+            ],
           ],
         ),
       ),
-    ),
-  );
-
-  Widget _batchBar() => Container(
-    key: const Key('mobile-batch-bar'),
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-    decoration: const BoxDecoration(
-      color: AppColors.surface,
-      border: Border(top: BorderSide(color: AppColors.active, width: 2)),
-    ),
-    child: Row(
-      children: [
-        IconButton(
-          tooltip: '取消选择',
-          onPressed: () => setState(() {
-            _selected.clear();
-          }),
-          icon: const Icon(Icons.close, size: 18),
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(
-            '已选 ${_selected.length} 幕',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.text,
-            ),
-          ),
-        ),
-        FilledButton.icon(
-          onPressed: _selected.isEmpty || _caching ? null : _cacheSelected,
-          icon: const Icon(Icons.download_outlined, size: 16),
-          label: const Text('缓存'),
-        ),
-      ],
     ),
   );
 

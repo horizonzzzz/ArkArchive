@@ -22,11 +22,10 @@ void main() {
                 StoryGroup('活动甲', [first]),
                 StoryGroup('活动乙', [second]),
               ],
-              selected: const [],
               cached: cached,
               jobs: const {},
               onBrowse: () {},
-              onCache: () {},
+              onRetry: () {},
               onOpen: (entry) => opened = entry,
               onToggleJob: (_) {},
               onRemoveJob: (_) {},
@@ -45,8 +44,6 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('已离线'));
-    await tester.pumpAndSettle();
     expect(find.text('甲幕'), findsNothing);
     expect(find.text('其他离线剧情'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('offline-活动甲')));
@@ -71,7 +68,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('乙幕'), findsOneWidget);
     expect(find.text('删除选中 (1)'), findsNothing);
-    await tester.tap(find.text('返回已离线'));
+    await tester.tap(find.byTooltip('返回离线与缓存'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('offline-活动乙')), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -91,11 +88,10 @@ void main() {
           body: StatefulBuilder(
             builder: (context, update) {
               return CachePage(
-                selected: visible ? [entry] : [],
                 cached: const [],
                 jobs: visible ? {entry.path: job} : {},
                 onBrowse: () {},
-                onCache: () {},
+                onRetry: () {},
                 onOpen: (_) {},
                 onDeleteCached: (_) {},
                 onToggleJob: (item) => update(() {

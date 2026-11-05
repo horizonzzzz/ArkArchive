@@ -7,53 +7,98 @@ class ArchiveHeading extends StatelessWidget {
     this.title, {
     super.key,
     this.subtitle = '',
+    this.leading,
     this.trailing,
   });
   final String title;
   final String subtitle;
+  final Widget? leading;
   final Widget? trailing;
 
   @override
   Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.center,
     children: [
-      Container(
-        width: 3,
-        height: 22,
-        margin: const EdgeInsets.only(right: 10),
-        color: AppColors.indicator,
-      ),
+      if (leading != null) ...[leading!, const SizedBox(width: 12)],
       Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.text,
+                height: 1.3,
+              ),
+            ),
             if (subtitle.isNotEmpty) ...[
+              const SizedBox(height: 6),
               Text(
                 subtitle,
                 style: const TextStyle(
-                  fontSize: 9,
-                  letterSpacing: 1.5,
-                  color: AppColors.muted,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  color: AppColors.subtext,
+                  height: 1.5,
                 ),
               ),
-              const SizedBox(height: 2),
             ],
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-                color: AppColors.text,
-              ),
-            ),
           ],
         ),
       ),
-      ?trailing,
+      if (trailing != null) ...[const SizedBox(width: 12), trailing!],
     ],
+  );
+}
+
+/// 顶部区域独立于列表滚动，避免固定高度截断放大的系统文字。
+class ArchivePageHeader extends StatelessWidget {
+  const ArchivePageHeader({
+    super.key,
+    required this.title,
+    this.subtitle = '',
+    this.leading,
+    this.trailing,
+    this.bottom,
+    this.maxWidth = double.infinity,
+  });
+  final String title;
+  final String subtitle;
+  final Widget? leading;
+  final Widget? trailing;
+  final Widget? bottom;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: const BoxDecoration(
+      color: AppColors.canvas,
+      border: Border(bottom: BorderSide(color: AppColors.borderSubtle)),
+    ),
+    child: Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ArchiveHeading(
+                title,
+                subtitle: subtitle,
+                leading: leading,
+                trailing: trailing,
+              ),
+              if (bottom != null) ...[const SizedBox(height: 14), bottom!],
+            ],
+          ),
+        ),
+      ),
+    ),
   );
 }
 
@@ -67,14 +112,12 @@ class ArchivePanel extends StatelessWidget {
   final EdgeInsetsGeometry padding;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: padding,
-    decoration: const BoxDecoration(
-      color: AppColors.raised,
-      border: Border.fromBorderSide(BorderSide(color: AppColors.border)),
-      borderRadius: BorderRadius.zero,
+  Widget build(BuildContext context) => Material(
+    color: AppColors.panel,
+    shape: const RoundedRectangleBorder(
+      side: BorderSide(color: AppColors.borderSubtle),
     ),
-    child: child,
+    child: Padding(padding: padding, child: child),
   );
 }
 
@@ -88,7 +131,6 @@ class ArchiveTag extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
     decoration: BoxDecoration(
       color: color.withValues(alpha: .10),
-      border: Border.all(color: color.withValues(alpha: .30)),
       borderRadius: BorderRadius.zero,
     ),
     child: Text(
