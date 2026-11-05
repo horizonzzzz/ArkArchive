@@ -202,6 +202,20 @@ jobs:
           find all-artifacts -type f -exec cp {} release-assets/ \;
           ls -la release-assets/
 
+      - name: Pick Release Notes
+        id: release_notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          NOTE_FILE=".github/release-notes/${RELEASE_TAG}.md"
+          if [ -f "$NOTE_FILE" ]; then
+            echo "body_path=$NOTE_FILE" >> "$GITHUB_OUTPUT"
+            echo "generate_release_notes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "body_path=" >> "$GITHUB_OUTPUT"
+            echo "generate_release_notes=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -209,5 +223,5 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: ${{ github.ref_name }}
           files: release-assets/*
-          generate_release_notes: ${{ github.ref_name != 'v0.1.0' }}
-          body_path: ${{ github.ref_name == 'v0.1.0' && '.github/release-notes/v0.1.0.md' || '' }}
+          generate_release_notes: ${{ steps.release_notes.outputs.generate_release_notes }}
+          body_path: ${{ steps.release_notes.outputs.body_path }}
