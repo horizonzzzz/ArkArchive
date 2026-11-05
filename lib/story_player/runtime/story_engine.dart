@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../script.dart';
 import '../stage_state.dart';
 import 'story_audio.dart';
+import 'playback_checkpoint.dart';
 
 typedef CommandHandler = Future<void> Function(StoryCommand command);
 
@@ -292,6 +293,22 @@ class StoryEngine extends ChangeNotifier {
 
   StageState state = StageState();
   int cursor = 0, _epoch = 0;
+  final List<int> _playbackTrace = [];
+  final Map<String, StoryCommand> _resumeTracks = {};
+  bool _rebuilding = false;
+
+  int get checkpointRevision => cursor > 0 || running || _playbackTrace.isNotEmpty
+      ? _playbackTrace.length + 1 : 0;
+
+  PlaybackCheckpoint? get checkpoint {
+    if (_rebuilding || finished) return null;
+    if (running && cursor == 0 && _playbackTrace.isEmpty) {
+      return PlaybackCheckpoint(cursor: 0, trace: const []);
+    }
+    return !running && (_waitingInput || state.choices.isNotEmpty) &&
+        _playbackTrace.isNotEmpty
+        ? PlaybackCheckpoint(cursor: cursor, trace: _playbackTrace) : null;
+  }
   double _lastTick = 0, _typingTime = 0, _typingScale = 1, _autoClickAt = -1;
   bool running = false,
       finished = false,
@@ -448,7 +465,7 @@ class StoryEngine extends ChangeNotifier {
     final now = _nowUs();
     final dt = (now - _lastTick) / 1000;
     _lastTick = now;
-    if (paused || _disposed) return;
+    if (paused || _disposed || _rebuilding) return;
     var changed = false;
     for (final entry in _animations.entries.toList()) {
       final a = entry.value;
@@ -627,7 +644,7 @@ class StoryEngine extends ChangeNotifier {
     final previous = _animations.remove(key);
     if (previous != null && !previous.done.isCompleted) previous.done.complete();
     if (_disposed) return Future.value();
-    if (seconds <= 0) {
+    if (seconds <= 0 || (_rebuilding && !loop)) {
       update(applyEase(ease, 1));
       _changed();
       return Future.value();
@@ -708,46 +725,9 @@ class StoryEngine extends ChangeNotifier {
         if (c.tag != 'predicate' && !_predicateActive()) {
           continue;
         }
-        if (c.tag == 'multiline') {
-          _runMultiline(c);
-          if (_waitingInput) break;
-          continue;
-        }
-        if (c.tag == 'dialogue' || c.tag == 'dialog' || c.tag == 'aside') {
-          if (c.text.isEmpty) {
-            state.dialogueVisible = false;
-            continue;
-          }
-          _flushMultiline();
-          _showDialogue(
-            c.tag == 'aside' ? '' : c.value('name'),
-            c.text,
-            line: c.line,
-          );
-          _resetMultiline();
-          break;
-        }
-        if (c.tag == 'endtip') {
-          if (autoMode != 'default' && !state.metadata.isVideoOnly && c.text.isNotEmpty) {
-            _flushMultiline();
-            _showDialogue('', c.text, line: c.line);
-            _resetMultiline();
-            break;
-          }
-          continue;
-        }
-        if (c.tag == 'header') continue;
-        if (c.tag == 'subtitle' || c.tag == 'sticker') _logOverlay(c);
-        final handler = handlers[c.tag];
-        if (handler == null) {
-          warn('第 ${c.line} 行：暂不支持 [${c.tag}]');
-        } else {
-          try {
-            await handler(c);
-          } catch (e) {
-            warn('第 ${c.line} 行 [${c.tag}]：$e');
-          }
-        }
+        if (c.tag == 'endtip' && autoMode == 'default') continue;
+        _playbackTrace.add(cursor - 1);
+        if (await _executeCommand(c)) break;
         if (epoch != _epoch || _disposed || state.choices.isNotEmpty) break;
         if (_waitingInput) break;
       }
@@ -764,6 +744,144 @@ class StoryEngine extends ChangeNotifier {
       if (epoch == _epoch) {
         running = false;
         _changed();
+      }
+    }
+  }
+
+  bool _applyChoice(String value) {
+    final index = state.choices.indexWhere((c) => c.value == value && !c.disabled);
+    if (index < 0) return false;
+    _playbackTrace.add(-index - 2);
+    _selectedValue = index < _decisionValues.length ? _decisionValues[index] : 0;
+    _predicates = null;
+    state.choices = [];
+    return true;
+  }
+
+  Future<bool> _executeCommand(StoryCommand c) async {
+    if (c.tag == 'multiline') {
+      _runMultiline(c);
+      return _waitingInput;
+    }
+    if (c.tag == 'dialogue' || c.tag == 'dialog' || c.tag == 'aside') {
+      if (c.text.isEmpty) {
+        state.dialogueVisible = false;
+        return false;
+      }
+      _flushMultiline();
+      _showDialogue(c.tag == 'aside' ? '' : c.value('name'), c.text, line: c.line);
+      _resetMultiline();
+      return true;
+    }
+    if (c.tag == 'endtip') {
+      if ((autoMode != 'default' || _rebuilding) && !state.metadata.isVideoOnly && c.text.isNotEmpty) {
+        _flushMultiline();
+        _showDialogue('', c.text, line: c.line);
+        _resetMultiline();
+        return true;
+      }
+      return false;
+    }
+    if (c.tag == 'header') return false;
+    if (c.tag == 'subtitle' || c.tag == 'sticker') _logOverlay(c);
+    final handler = handlers[c.tag];
+    if (handler == null) {
+      warn('第 ${c.line} 行：暂不支持 [${c.tag}]');
+    } else {
+      try {
+        await handler(c);
+      } catch (e) {
+        warn('第 ${c.line} 行 [${c.tag}]：$e');
+      }
+    }
+    return false;
+  }
+
+  void _resetAfterSkip() {
+    _epoch++;
+    _cancelAnimations();
+    _cancelShake();
+    _resetMultiline();
+    _resetMotions();
+    clearOverlays();
+    running = false;
+    _waitingInput = false;
+    _autoClickAt = -1;
+    state.dialogueVisible = false;
+    _changed();
+  }
+
+  /// 沿实际执行路径重建场景，避免重播等待、历史音效或改变选项分支。
+  Future<void> restore(PlaybackCheckpoint saved) async {
+    if (!saved.isValidFor(script) || cursor != 0) {
+      throw const FormatException('观看断点已失效');
+    }
+    if (saved.cursor == 0) {
+      await start();
+      return;
+    }
+    _rebuilding = true;
+    running = true;
+    try {
+      for (final step in saved.trace) {
+        if (_disposed) return;
+        if (step == -1) {
+          _resetAfterSkip();
+        } else if (step <= -2) {
+          final index = -step - 2;
+          if (index >= state.choices.length ||
+              !_applyChoice(state.choices[index].value)) {
+            throw const FormatException('观看断点的选项已失效');
+          }
+          continue;
+        } else {
+          cursor = step + 1;
+          _waitingInput = false;
+          await _executeCommand(script.commands[step]);
+        }
+        _playbackTrace.add(step);
+      }
+      if (!_waitingInput && state.choices.isEmpty) {
+        throw const FormatException('观看断点没有可恢复的对白或选项');
+      }
+      cursor = saved.cursor;
+      _skipNodeIndex = _skipNodes.where((node) => node.index < cursor).length;
+      if (_skipNodeIndex > 0) _currentSkipMode = _skipNodes[_skipNodeIndex - 1].mode;
+      _resetMotions();
+      _autoClickAt = -1;
+      for (final command in _resumeTracks.values) {
+        await audio.execute(command);
+      }
+    } finally {
+      _resumeTracks.clear();
+      _rebuilding = false;
+      running = false;
+      _lastTick = _nowUs();
+      _changed();
+    }
+  }
+
+  Future<void> _executeAudio(StoryCommand c) async {
+    if (!_rebuilding) return audio.execute(c);
+    final channel = c.tag.contains('music') ? 'music' : c.value('channel', c.value('key'));
+    if (c.tag.startsWith('play')) {
+      if (channel == 'music' || c.flag('loop')) {
+        _resumeTracks[channel] = StoryCommand(c.tag,
+          {...c.args, 'delay': '0', 'crossfade': '0', 'fadetime': '0'}, c.text, c.line, c.raw);
+      } else {
+        _resumeTracks.remove(channel);
+      }
+    } else if (c.tag.startsWith('stop')) {
+      if (channel.isEmpty) {
+        _resumeTracks.removeWhere((key, _) => key != 'music');
+      } else {
+        _resumeTracks.remove(channel);
+      }
+    } else {
+      final track = _resumeTracks[channel];
+      if (track != null) {
+        _resumeTracks[channel] = StoryCommand(track.tag,
+          {...track.args, 'volume': c.value('volume', '1')}, track.text, track.line, track.raw);
       }
     }
   }
@@ -845,11 +963,7 @@ class StoryEngine extends ChangeNotifier {
   }
 
   Future<void> choose(String value) async {
-    final index = state.choices.indexWhere((c) => c.value == value && !c.disabled);
-    if (index < 0) return;
-    _selectedValue = index < _decisionValues.length ? _decisionValues[index] : 0;
-    _predicates = null;
-    state.choices = [];
+    if (!_applyChoice(value)) return;
     _changed();
     await advance();
   }
@@ -877,17 +991,8 @@ class StoryEngine extends ChangeNotifier {
       _itemSlotInUse = false;
       state.showItems.clear();
     }
-    _epoch++;
-    _cancelAnimations();
-    _cancelShake();
-    _resetMultiline();
-    _resetMotions();
-    clearOverlays();
-    running = false;
-    _waitingInput = false;
-    _autoClickAt = -1;
-    state.dialogueVisible = false;
-    _changed();
+    _playbackTrace.add(-1);
+    _resetAfterSkip();
     if (cursor < script.commands.length) {
       unawaited(advance());
     } else {
@@ -933,6 +1038,8 @@ class StoryEngine extends ChangeNotifier {
     _overlayLogSource = null;
     state = StageState()..metadata = metadata;
     cursor = 0;
+    _playbackTrace.clear();
+    _resumeTracks.clear();
     running = false;
     finished = false;
     _waitingInput = false;
@@ -1059,7 +1166,7 @@ class StoryEngine extends ChangeNotifier {
     });
     register('spellstickerclear', (_) async {});
     for (final tag in ['playmusic', 'stopmusic', 'musicvolume', 'playsound', 'stopsound', 'soundvolume']) {
-      register(tag, audio.execute);
+      register(tag, _executeAudio);
     }
     // ---- 图层与场景 ----
     for (final tag in ['background', 'image']) {
@@ -1341,6 +1448,10 @@ class StoryEngine extends ChangeNotifier {
     final scaledDuration = c.number('duration', -1) * currentSpeed.animateRatio;
     final infinite = scaledDuration < 0;
     final durationMs = infinite ? 10000.0 : math.max(0.0, scaledDuration * 1000);
+    if (_rebuilding && !infinite) {
+      _cancelShake();
+      return;
+    }
     if (durationMs <= 0) {
       _cancelShake();
       _changed();
@@ -1361,7 +1472,7 @@ class StoryEngine extends ChangeNotifier {
     _shakeDurationMs = durationMs;
     _shakeInfinite = infinite;
     _changed();
-    if (c.flag('block')) {
+    if (c.flag('block') && !_rebuilding) {
       if (infinite) {
         _shakeWaiter = Completer<void>();
         await _shakeWaiter!.future;

@@ -11,6 +11,8 @@ import 'package:arknights_story_player/story_player/data/cache_control.dart';
 import 'package:arknights_story_player/story_player/data/media_catalog.dart';
 import 'package:arknights_story_player/story_player/data/story_repository.dart';
 import 'package:arknights_story_player/story_player/data/playback_settings.dart';
+import 'package:arknights_story_player/story_player/data/playback_progress.dart';
+import 'package:arknights_story_player/story_player/runtime/playback_checkpoint.dart';
 import 'package:arknights_story_player/story_player/script.dart';
 
 class MemoryCache extends FileCache {
@@ -64,6 +66,69 @@ class FailingCache extends MemoryCache {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('观看断点重启后恢复，清理资源保留，完成后清除', () async {
+    final cache = MemoryCache();
+    final store = AssetStore(cache: cache);
+    final restored = AssetStore(cache: cache);
+    addTearDown(store.close);
+    addTearDown(restored.close);
+    final script = StoryScript.parse('第一句\n第二句');
+    final progress = PlaybackProgress(
+      path: 'main/0-1', scriptHash: PlaybackProgress.fingerprint(script),
+      checkpoint: PlaybackCheckpoint(cursor: 1, trace: [0]),
+    );
+    await store.setPlaybackProgress(progress);
+    final resource = Uri.parse('https://example.test/background.png');
+    await store.writeCache(resource, Uint8List.fromList([1]));
+    await store.clearCache();
+    expect(await store.readCache(resource), isNull);
+    await restored.loadSettings();
+    expect(restored.playbackProgress!.toJson(), progress.toJson());
+    expect(restored.playbackProgress!.matches(script), isTrue);
+    expect(restored.playbackProgress!.matches(StoryScript.parse('内容已更新')), isFalse);
+    await restored.setPlaybackProgress(null);
+    await store.loadSettings();
+    expect(store.playbackProgress, isNull);
+  });
+
+  test('连续保存只保留最近一篇，并保持完成清理的写入顺序', () async {
+    final store = AssetStore(cache: MemoryCache());
+    addTearDown(store.close);
+    final script = StoryScript.parse('正文');
+    PlaybackProgress progress(String path) => PlaybackProgress(
+      path: path, scriptHash: PlaybackProgress.fingerprint(script),
+      checkpoint: PlaybackCheckpoint(cursor: 1, trace: [0]),
+    );
+    final first = store.setPlaybackProgress(progress('first'));
+    final second = store.setPlaybackProgress(progress('second'));
+    await Future.wait([first, second]);
+    expect(store.playbackProgress!.path, 'second');
+    await Future.wait([
+      store.setPlaybackProgress(progress('third')),
+      store.setPlaybackProgress(null),
+    ]);
+    await store.loadSettings();
+    expect(store.playbackProgress, isNull);
+  });
+
+  test('损坏记录不影响加载，保存失败不宣称已保存', () async {
+    final cache = MemoryCache();
+    await cache.write(Uri.parse('https://local.invalid/story-playback-progress-v1'),
+      Uint8List.fromList(utf8.encode('{invalid')));
+    final store = AssetStore(cache: cache);
+    final failing = AssetStore(cache: FailingCache());
+    addTearDown(store.close);
+    addTearDown(failing.close);
+    await store.loadSettings();
+    expect(store.playbackProgress, isNull);
+    final script = StoryScript.parse('正文');
+    await expectLater(failing.setPlaybackProgress(PlaybackProgress(
+      path: 'main/0-1', scriptHash: PlaybackProgress.fingerprint(script),
+      checkpoint: PlaybackCheckpoint(cursor: 1, trace: [0]),
+    )), throwsStateError);
+    expect(failing.playbackProgress, isNull);
+  });
 
   test('播放设置保存、清理缓存后保留并恢复', () async {
     final cache = MemoryCache();

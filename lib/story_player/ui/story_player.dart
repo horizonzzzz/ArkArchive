@@ -8,14 +8,18 @@ import '../data/playback_settings.dart';
 import '../runtime/just_audio_output.dart';
 import '../runtime/story_audio.dart';
 import '../runtime/story_engine.dart';
+import '../runtime/playback_checkpoint.dart';
 import 'story_stage.dart';
 
 /// 可直接由关卡选择页打开；生命周期和资源不依赖应用入口。
 class StoryPlayer extends StatefulWidget {
-  const StoryPlayer({super.key, required this.story, this.audio, this.settings = const PlaybackSettings()});
+  const StoryPlayer({super.key, required this.story, this.audio,
+    this.settings = const PlaybackSettings(), this.checkpoint, this.onProgress});
   final PreparedStory story;
   final StoryAudio? audio;
   final PlaybackSettings settings;
+  final PlaybackCheckpoint? checkpoint;
+  final Future<void> Function(PlaybackCheckpoint?)? onProgress;
   @override
   State<StoryPlayer> createState() => _StoryPlayerState();
 }
@@ -28,6 +32,8 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   ui.Image? slideMask;
   static const fontFamily = 'StoryNotoSans';
   bool ready = false;
+  bool _resumeFailed = false, _progressErrorReported = false;
+  int _savedRevision = 0;
 
   @override
   void initState() {
@@ -49,6 +55,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
         return textures[uri]?.width.toDouble();
       });
     engine.warnings.addAll(widget.story.warnings);
+    engine.addListener(_progressChanged);
     unawaited(_prepare());
   }
 
@@ -83,7 +90,18 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     try { await (FontLoader(fontFamily)..addFont(rootBundle.load(MediaCatalog.fontAsset))).load(); }
     catch (e) { engine.warn('字体加载失败：$e'); }
     if (!mounted) return;
+    if (widget.checkpoint != null) {
+      try {
+        await engine.restore(widget.checkpoint!);
+      } catch (_) {
+        _resumeFailed = true;
+        engine.theaterMode = false;
+        await engine.setPaused(true);
+      }
+      if (!mounted) return;
+    }
     setState(() => ready = true);
+    _progressChanged();
   }
 
   /// 参考播放器 widget 内嵌的 UI 贴图；用于地点印章、通讯窗口与相框。
@@ -104,7 +122,33 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) unawaited(_saveProgress(force: true));
     if (state != AppLifecycleState.resumed) unawaited(engine.setPaused(true));
+  }
+
+  void _progressChanged() => unawaited(_saveProgress());
+
+  Future<void> _saveProgress({bool force = false}) async {
+    if (!ready || _resumeFailed || widget.onProgress == null ||
+        engine.checkpointRevision == 0) {
+      return;
+    }
+    final revision = engine.finished ? -1 : engine.checkpointRevision;
+    if (!force && revision == _savedRevision) return;
+    final checkpoint = engine.checkpoint;
+    if (!engine.finished && checkpoint == null) return;
+    _savedRevision = revision;
+    try {
+      await widget.onProgress!(checkpoint);
+    } catch (_) {
+      if (mounted && !_progressErrorReported) {
+        _progressErrorReported = true;
+        engine.warn('无法保存观看进度，请检查存储权限或剩余空间。');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('观看进度保存失败，请检查存储权限或剩余空间。')),
+        );
+      }
+    }
   }
 
   Future<void> _showLog({bool diagnostics = false}) async {
@@ -137,7 +181,11 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(backgroundColor: Colors.black, body: SafeArea(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+  Widget build(BuildContext context) => PopScope<void>(
+    onPopInvokedWithResult: (didPop, _) {
+      if (didPop) unawaited(_saveProgress(force: true));
+    },
+    child: Scaffold(backgroundColor: Colors.black, body: SafeArea(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
     AnimatedBuilder(animation: engine, builder: (context, _) => AnimatedOpacity(
       opacity: engine.theaterMode ? 0 : 1,
       duration: const Duration(milliseconds: 200),
@@ -153,13 +201,28 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
       ])),
     )),
     Expanded(child: ready ? Stack(alignment: Alignment.center, children: [
+      if (!_resumeFailed)
       Positioned.fill(child: StoryStage(engine: engine, catalog: widget.story.catalog, textures: textures, slideMask: slideMask, slideMaskShader: slideMaskShader, sprites: sprites, fontFamily: fontFamily)),
-      AnimatedBuilder(animation: engine, builder: (context, _) => engine.cursor == 0 || engine.finished ? FilledButton.icon(onPressed: engine.finished ? engine.restart : engine.start, icon: Icon(engine.finished ? Icons.replay : Icons.play_arrow), label: Text(engine.finished ? '重新播放' : '开始播放')) : const SizedBox.shrink()),
+      if (_resumeFailed)
+        Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('观看断点已失效，无法恢复原观看位置。'),
+          TextButton(onPressed: () async {
+            await engine.setPaused(false);
+            await engine.restart();
+            if (!mounted) return;
+            setState(() => _resumeFailed = false);
+            _progressChanged();
+          }, child: const Text('从头观看')),
+        ]))
+      else
+        AnimatedBuilder(animation: engine, builder: (context, _) => engine.cursor == 0 || engine.finished ? FilledButton.icon(onPressed: engine.finished ? engine.restart : engine.start, icon: Icon(engine.finished ? Icons.replay : Icons.play_arrow), label: Text(engine.finished ? '重新播放' : '开始播放')) : const SizedBox.shrink()),
     ]) : const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(), SizedBox(height: 16), Text('正在解码演出资源…')]))),
-  ])));
+  ]))));
 
   @override
   void dispose() {
+    unawaited(_saveProgress());
+    engine.removeListener(_progressChanged);
     slideMaskShader?.dispose();
     slideMask?.dispose();
     for (final texture in sprites.values) {

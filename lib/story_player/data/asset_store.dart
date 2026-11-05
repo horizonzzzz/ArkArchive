@@ -10,6 +10,7 @@ import 'cache_control.dart';
 import 'file_cache.dart';
 
 import 'playback_settings.dart';
+import 'playback_progress.dart';
 
 class AssetStore {
   AssetStore({http.Client? client, FileCache? cache})
@@ -29,6 +30,10 @@ class AssetStore {
     'https://local.invalid/story-playback-settings-v1',
   );
   PlaybackSettings playbackSettings = const PlaybackSettings();
+  static final _playbackProgressUri = Uri.parse(
+    'https://local.invalid/story-playback-progress-v1',
+  );
+  PlaybackProgress? playbackProgress;
   static final _cacheDownloadZone = Object();
   static final _cacheControlZone = Object();
   bool get isMobile =>
@@ -60,7 +65,7 @@ class AssetStore {
     _movingCache = true;
     try {
       await _settingsWrite.catchError((_) {});
-      await _cache.clear(keep: {_settingsUri, _playbackSettingsUri, ...keep});
+      await _cache.clear(keep: {_settingsUri, _playbackSettingsUri, _playbackProgressUri, ...keep});
     } finally {
       releaseMemory();
       _movingCache = false;
@@ -164,6 +169,15 @@ class AssetStore {
     } catch (_) {
       // Keep defaults if saved preferences cannot be read.
     }
+    try {
+      final data = await _cache.read(_playbackProgressUri);
+      playbackProgress = data == null ? null : PlaybackProgress.fromJson(
+        jsonDecode(utf8.decode(data)) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      // 损坏的观看记录不影响目录和播放设置加载。
+      playbackProgress = null;
+    }
   }
 
   Future<void> setConcurrency(int value) async {
@@ -189,6 +203,22 @@ class AssetStore {
     final write = _settingsWrite
         .catchError((_) {})
         .then((_) => _cache.write(_playbackSettingsUri, bytes));
+    _settingsWrite = write;
+    await write;
+  }
+
+  Future<void> setPlaybackProgress(PlaybackProgress? value) async {
+    if (_movingCache) throw StateError('缓存目录迁移中');
+    final bytes = value == null ? null
+        : Uint8List.fromList(utf8.encode(jsonEncode(value.toJson())));
+    final write = _settingsWrite.catchError((_) {}).then((_) async {
+      if (bytes == null) {
+        await _cache.delete(_playbackProgressUri);
+      } else {
+        await _cache.write(_playbackProgressUri, bytes);
+      }
+      playbackProgress = value;
+    });
     _settingsWrite = write;
     await write;
   }

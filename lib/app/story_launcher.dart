@@ -38,6 +38,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   String? _indexError;
   String? _playError;
   StoryEntry? _opening;
+  bool _openingResume = false;
   String _filter = '';
   int _category = 0;
   int _page = 0;
@@ -556,7 +557,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
     }
   }
 
-  Future<void> _open(StoryEntry entry) async {
+  Future<void> _open(StoryEntry entry, {bool resume = false}) async {
     if (_busy || _deletingCache || _movingDirectory) return;
     if (_caching) {
       ScaffoldMessenger.of(context)
@@ -567,6 +568,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
       _busy = true;
       _playError = null;
       _opening = entry;
+      _openingResume = resume;
       _done = 0;
       _total = 0;
     });
@@ -576,6 +578,26 @@ class _StoryLauncherState extends State<StoryLauncher> {
         (c) => c.tag == 'dialogue' || c.text.isNotEmpty,
       )) {
         throw const FormatException('脚本中没有可播放内容');
+      }
+      final scriptHash = PlaybackProgress.fingerprint(document.script);
+      final saved = resume && _repository.store.playbackProgress?.path == entry.path
+          ? _repository.store.playbackProgress : null;
+      PlaybackCheckpoint? checkpoint = saved?.checkpoint;
+      if (saved != null && !saved.matches(document.script)) {
+        if (!mounted) return;
+        final restart = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('观看断点已失效'),
+            content: const Text('剧情内容已更新，无法恢复原观看位置。是否从头观看？'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('返回')),
+              FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('从头观看')),
+            ],
+          ),
+        );
+        if (restart != true) return;
+        checkpoint = null;
       }
       final prepared = await _repository.prepare(
         document,
@@ -590,14 +612,25 @@ class _StoryLauncherState extends State<StoryLauncher> {
       );
       if (!mounted) return;
       setState(() => _busy = false);
+      Future<void> progressWrite = Future.value();
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => StoryPlayer(
             story: prepared,
             settings: _repository.store.playbackSettings,
+            checkpoint: checkpoint,
+            onProgress: (position) {
+              final value = position == null ? null : PlaybackProgress(
+                path: entry.path, scriptHash: scriptHash, checkpoint: position,
+              );
+              progressWrite = _repository.store.setPlaybackProgress(value);
+              return progressWrite;
+            },
           ),
         ),
       );
+      await progressWrite.catchError((_) {});
+      if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
         setState(() => _playError = '加载失败：$e');
@@ -1017,7 +1050,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                   ),
                 ),
                 TextButton(
-                  onPressed: () => _open(_opening!),
+                  onPressed: () => _open(_opening!, resume: _openingResume),
                   child: const Text('重试'),
                 ),
                 IconButton(
@@ -1396,6 +1429,13 @@ class _StoryLauncherState extends State<StoryLauncher> {
             ),
             if (!_selecting) ...[
               const SizedBox(width: 8),
+              if (_repository.store.playbackProgress?.path == entry.path)
+                TextButton.icon(
+                  key: ValueKey('continue-${entry.path}'),
+                  onPressed: _busy ? null : () => _open(entry, resume: true),
+                  icon: const Icon(Icons.history, size: 18),
+                  label: const Text('继续观看'),
+                ),
               IconButton(
                 tooltip: '播放 ${entry.title}',
                 onPressed: () => _open(entry),
