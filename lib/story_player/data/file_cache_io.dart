@@ -100,9 +100,13 @@ class FileCache {
   }
 
   Future<void> openDirectory() async {
-    final path = (await _folder()).path;
+    final directory = await _folder();
+    if (!await directory.exists()) {
+      throw FileSystemException('缓存目录不存在', directory.path);
+    }
+    final path = directory.absolute.path;
     if (Platform.isWindows) {
-      await Process.start('explorer.exe', [path]);
+      await Process.start('explorer.exe', ['/n,', path]);
     } else if (Platform.isMacOS) {
       await Process.start('open', [path]);
     } else if (Platform.isLinux) {
