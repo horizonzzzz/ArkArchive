@@ -209,4 +209,5 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: ${{ github.ref_name }}
           files: release-assets/*
-          generate_release_notes: true
+          generate_release_notes: ${{ github.ref_name != 'v0.1.0' }}
+          body_path: ${{ github.ref_name == 'v0.1.0' && '.github/release-notes/v0.1.0.md' || '' }}
