@@ -580,8 +580,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
         throw const FormatException('脚本中没有可播放内容');
       }
       final scriptHash = PlaybackProgress.fingerprint(document.script);
-      final saved = resume && _repository.store.playbackProgress?.path == entry.path
-          ? _repository.store.playbackProgress : null;
+      final saved = resume
+          ? _repository.store.getPlaybackProgress(entry.path)
+          : null;
       PlaybackCheckpoint? checkpoint = saved?.checkpoint;
       if (saved != null && !saved.matches(document.script)) {
         if (!mounted) return;
@@ -591,8 +592,14 @@ class _StoryLauncherState extends State<StoryLauncher> {
             title: const Text('观看断点已失效'),
             content: const Text('剧情内容已更新，无法恢复原观看位置。是否从头观看？'),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('返回')),
-              FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('从头观看')),
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('返回'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('从头观看'),
+              ),
             ],
           ),
         );
@@ -620,10 +627,15 @@ class _StoryLauncherState extends State<StoryLauncher> {
             settings: _repository.store.playbackSettings,
             checkpoint: checkpoint,
             onProgress: (position) {
-              final value = position == null ? null : PlaybackProgress(
-                path: entry.path, scriptHash: scriptHash, checkpoint: position,
-              );
-              progressWrite = _repository.store.setPlaybackProgress(value);
+              progressWrite = position == null
+                  ? _repository.store.removePlaybackProgress(entry.path)
+                  : _repository.store.setPlaybackProgress(
+                      PlaybackProgress(
+                        path: entry.path,
+                        scriptHash: scriptHash,
+                        checkpoint: position,
+                      ),
+                    );
               return progressWrite;
             },
           ),
@@ -1429,7 +1441,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
             ),
             if (!_selecting) ...[
               const SizedBox(width: 8),
-              if (_repository.store.playbackProgress?.path == entry.path)
+              if (_repository.store.getPlaybackProgress(entry.path) != null)
                 TextButton.icon(
                   key: ValueKey('continue-${entry.path}'),
                   onPressed: _busy ? null : () => _open(entry, resume: true),

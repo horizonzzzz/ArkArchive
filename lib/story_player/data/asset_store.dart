@@ -33,7 +33,9 @@ class AssetStore {
   static final _playbackProgressUri = Uri.parse(
     'https://local.invalid/story-playback-progress-v1',
   );
-  PlaybackProgress? playbackProgress;
+  final Map<String, PlaybackProgress> playbackProgresses = {};
+  PlaybackProgress? getPlaybackProgress(String path) =>
+      playbackProgresses[path];
   static final _cacheDownloadZone = Object();
   static final _cacheControlZone = Object();
   bool get isMobile =>
@@ -65,7 +67,14 @@ class AssetStore {
     _movingCache = true;
     try {
       await _settingsWrite.catchError((_) {});
-      await _cache.clear(keep: {_settingsUri, _playbackSettingsUri, _playbackProgressUri, ...keep});
+      await _cache.clear(
+        keep: {
+          _settingsUri,
+          _playbackSettingsUri,
+          _playbackProgressUri,
+          ...keep,
+        },
+      );
     } finally {
       releaseMemory();
       _movingCache = false;
@@ -171,12 +180,24 @@ class AssetStore {
     }
     try {
       final data = await _cache.read(_playbackProgressUri);
-      playbackProgress = data == null ? null : PlaybackProgress.fromJson(
-        jsonDecode(utf8.decode(data)) as Map<String, dynamic>,
-      );
+      playbackProgresses.clear();
+      if (data != null) {
+        final saved = jsonDecode(utf8.decode(data));
+        // 兼容旧版单条记录，首次保存时迁移为路径映射。
+        final records =
+            saved is Map<String, dynamic> && saved.containsKey('path')
+            ? [saved]
+            : saved as List<dynamic>;
+        for (final item in records) {
+          final progress = PlaybackProgress.fromJson(
+            item as Map<String, dynamic>,
+          );
+          playbackProgresses[progress.path] = progress;
+        }
+      }
     } catch (_) {
       // 损坏的观看记录不影响目录和播放设置加载。
-      playbackProgress = null;
+      playbackProgresses.clear();
     }
   }
 
@@ -207,17 +228,41 @@ class AssetStore {
     await write;
   }
 
-  Future<void> setPlaybackProgress(PlaybackProgress? value) async {
+  Future<void> setPlaybackProgress(PlaybackProgress value) async {
+    await _changePlaybackProgress(value.path, value);
+  }
+
+  Future<void> removePlaybackProgress(String path) async {
+    await _changePlaybackProgress(path, null);
+  }
+
+  Future<void> _changePlaybackProgress(
+    String path,
+    PlaybackProgress? value,
+  ) async {
     if (_movingCache) throw StateError('缓存目录迁移中');
-    final bytes = value == null ? null
-        : Uint8List.fromList(utf8.encode(jsonEncode(value.toJson())));
     final write = _settingsWrite.catchError((_) {}).then((_) async {
-      if (bytes == null) {
+      final updated = Map<String, PlaybackProgress>.of(playbackProgresses);
+      if (value == null) {
+        updated.remove(path);
+      } else {
+        updated[path] = value;
+      }
+      final bytes = Uint8List.fromList(
+        utf8.encode(
+          jsonEncode(
+            updated.values.map((progress) => progress.toJson()).toList(),
+          ),
+        ),
+      );
+      if (updated.isEmpty) {
         await _cache.delete(_playbackProgressUri);
       } else {
         await _cache.write(_playbackProgressUri, bytes);
       }
-      playbackProgress = value;
+      playbackProgresses
+        ..clear()
+        ..addAll(updated);
     });
     _settingsWrite = write;
     await write;

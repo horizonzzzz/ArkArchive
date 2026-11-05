@@ -67,67 +67,81 @@ class FailingCache extends MemoryCache {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('观看断点重启后恢复，清理资源保留，完成后清除', () async {
+  test('多篇剧情分别保存，完成一篇不影响其他断点，清理资源后均可恢复', () async {
     final cache = MemoryCache();
     final store = AssetStore(cache: cache);
     final restored = AssetStore(cache: cache);
     addTearDown(store.close);
     addTearDown(restored.close);
     final script = StoryScript.parse('第一句\n第二句');
-    final progress = PlaybackProgress(
-      path: 'main/0-1', scriptHash: PlaybackProgress.fingerprint(script),
-      checkpoint: PlaybackCheckpoint(cursor: 1, trace: [0]),
+    PlaybackProgress progress(String path, int cursor) => PlaybackProgress(
+      path: path,
+      scriptHash: PlaybackProgress.fingerprint(script),
+      checkpoint: PlaybackCheckpoint(cursor: cursor, trace: [0]),
     );
-    await store.setPlaybackProgress(progress);
-    final resource = Uri.parse('https://example.test/background.png');
-    await store.writeCache(resource, Uint8List.fromList([1]));
+    await store.setPlaybackProgress(progress('main/0-1', 1));
+    await store.setPlaybackProgress(progress('activity/1-1', 2));
+    expect(store.playbackProgresses, hasLength(2));
+    await store.removePlaybackProgress('main/0-1');
+    expect(store.getPlaybackProgress('main/0-1'), isNull);
+    expect(store.getPlaybackProgress('activity/1-1')!.checkpoint.cursor, 2);
     await store.clearCache();
-    expect(await store.readCache(resource), isNull);
     await restored.loadSettings();
-    expect(restored.playbackProgress!.toJson(), progress.toJson());
-    expect(restored.playbackProgress!.matches(script), isTrue);
-    expect(restored.playbackProgress!.matches(StoryScript.parse('内容已更新')), isFalse);
-    await restored.setPlaybackProgress(null);
-    await store.loadSettings();
-    expect(store.playbackProgress, isNull);
+    expect(restored.playbackProgresses, hasLength(1));
+    expect(restored.getPlaybackProgress('activity/1-1')!.checkpoint.cursor, 2);
   });
 
-  test('连续保存只保留最近一篇，并保持完成清理的写入顺序', () async {
-    final store = AssetStore(cache: MemoryCache());
-    addTearDown(store.close);
+  test('迁移旧版单篇断点格式且保留原进度', () async {
+    final cache = MemoryCache();
     final script = StoryScript.parse('正文');
-    PlaybackProgress progress(String path) => PlaybackProgress(
-      path: path, scriptHash: PlaybackProgress.fingerprint(script),
+    final old = PlaybackProgress(
+      path: 'main/0-1',
+      scriptHash: PlaybackProgress.fingerprint(script),
       checkpoint: PlaybackCheckpoint(cursor: 1, trace: [0]),
     );
-    final first = store.setPlaybackProgress(progress('first'));
-    final second = store.setPlaybackProgress(progress('second'));
-    await Future.wait([first, second]);
-    expect(store.playbackProgress!.path, 'second');
-    await Future.wait([
-      store.setPlaybackProgress(progress('third')),
-      store.setPlaybackProgress(null),
-    ]);
+    await cache.write(
+      Uri.parse('https://local.invalid/story-playback-progress-v1'),
+      Uint8List.fromList(utf8.encode(jsonEncode(old.toJson()))),
+    );
+    final store = AssetStore(cache: cache);
+    addTearDown(store.close);
     await store.loadSettings();
-    expect(store.playbackProgress, isNull);
+    expect(store.getPlaybackProgress('main/0-1')!.toJson(), old.toJson());
+    await store.setPlaybackProgress(
+      PlaybackProgress(
+        path: 'activity/1-1',
+        scriptHash: old.scriptHash,
+        checkpoint: PlaybackCheckpoint(cursor: 1, trace: [0]),
+      ),
+    );
+    await store.loadSettings();
+    expect(store.playbackProgresses, hasLength(2));
   });
 
   test('损坏记录不影响加载，保存失败不宣称已保存', () async {
     final cache = MemoryCache();
-    await cache.write(Uri.parse('https://local.invalid/story-playback-progress-v1'),
-      Uint8List.fromList(utf8.encode('{invalid')));
+    await cache.write(
+      Uri.parse('https://local.invalid/story-playback-progress-v1'),
+      Uint8List.fromList(utf8.encode('{invalid')),
+    );
     final store = AssetStore(cache: cache);
     final failing = AssetStore(cache: FailingCache());
     addTearDown(store.close);
     addTearDown(failing.close);
     await store.loadSettings();
-    expect(store.playbackProgress, isNull);
+    expect(store.playbackProgresses, isEmpty);
     final script = StoryScript.parse('正文');
-    await expectLater(failing.setPlaybackProgress(PlaybackProgress(
-      path: 'main/0-1', scriptHash: PlaybackProgress.fingerprint(script),
-      checkpoint: PlaybackCheckpoint(cursor: 1, trace: [0]),
-    )), throwsStateError);
-    expect(failing.playbackProgress, isNull);
+    await expectLater(
+      failing.setPlaybackProgress(
+        PlaybackProgress(
+          path: 'main/0-1',
+          scriptHash: PlaybackProgress.fingerprint(script),
+          checkpoint: PlaybackCheckpoint(cursor: 1, trace: [0]),
+        ),
+      ),
+      throwsStateError,
+    );
+    expect(failing.playbackProgresses, isEmpty);
   });
 
   test('播放设置保存、清理缓存后保留并恢复', () async {
@@ -136,18 +150,35 @@ void main() {
     final restored = AssetStore(cache: cache);
     addTearDown(store.close);
     addTearDown(restored.close);
-    await store.setPlaybackSettings(const PlaybackSettings(master: .3, bgm: .4, sfx: .5, autoDelay: 3, typingMs: 60));
+    await store.setPlaybackSettings(
+      const PlaybackSettings(
+        master: .3,
+        bgm: .4,
+        sfx: .5,
+        autoDelay: 3,
+        typingMs: 60,
+      ),
+    );
     await store.clearCache();
     await restored.loadSettings();
-    expect(restored.playbackSettings.toJson(), {'master': .3, 'bgm': .4, 'sfx': .5, 'autoDelay': 3.0, 'typingMs': 60.0});
+    expect(restored.playbackSettings.toJson(), {
+      'master': .3,
+      'bgm': .4,
+      'sfx': .5,
+      'autoDelay': 3.0,
+      'typingMs': 60.0,
+    });
   });
 
   test('节点诊断绕过缓存并检查响应状态', () async {
     var calls = 0;
-    final store = AssetStore(cache: MemoryCache(), client: MockClient((request) async {
-      calls++;
-      return http.Response('', request.url.path == '/ok' ? 200 : 503);
-    }));
+    final store = AssetStore(
+      cache: MemoryCache(),
+      client: MockClient((request) async {
+        calls++;
+        return http.Response('', request.url.path == '/ok' ? 200 : 503);
+      }),
+    );
     addTearDown(store.close);
     expect(await store.probe(Uri.parse('https://example.test/ok')), isTrue);
     expect(await store.probe(Uri.parse('https://example.test/fail')), isFalse);
@@ -216,7 +247,8 @@ void main() {
     addTearDown(store.close);
     final control = CacheControl();
     final operation = store.runCacheDownload(
-      () => store.preload({Uri.parse('https://example.test/abort.txt')}), control: control,
+      () => store.preload({Uri.parse('https://example.test/abort.txt')}),
+      control: control,
     );
     await client.started.future;
     control.pause();
@@ -234,7 +266,10 @@ void main() {
     addTearDown(store.close);
     final uri = Uri.parse('https://example.test/resume.mp3');
     final control = CacheControl();
-    final operation = store.runCacheDownload(() => store.preload({uri}), control: control);
+    final operation = store.runCacheDownload(
+      () => store.preload({uri}),
+      control: control,
+    );
     await client.started.future;
     control.setScheduled(false);
     await Future<void>.delayed(Duration.zero);
@@ -244,7 +279,13 @@ void main() {
     expect(await operation, isEmpty);
     expect(cache.data[uri], [1, 2]);
     expect(client.requests, 2);
-    expect(await store.runCacheDownload(() => store.preload({uri}), control: control), isEmpty);
+    expect(
+      await store.runCacheDownload(
+        () => store.preload({uri}),
+        control: control,
+      ),
+      isEmpty,
+    );
     expect(client.requests, 2);
   });
 
@@ -255,17 +296,25 @@ void main() {
     final uri = Uri.parse('https://example.test/shared.mp3');
     final first = CacheControl();
     final second = CacheControl();
-    final pending = store.runCacheDownload(() => store.preload({uri}), control: first);
+    final pending = store.runCacheDownload(
+      () => store.preload({uri}),
+      control: first,
+    );
     await client.started.future;
     first.pause();
-    expect(await store.runCacheDownload(() => store.preload({uri}), control: second), isEmpty);
+    expect(
+      await store.runCacheDownload(() => store.preload({uri}), control: second),
+      isEmpty,
+    );
     final cancelled = expectLater(pending, throwsA(isA<CacheCancelled>()));
     first.cancel();
     await cancelled;
     expect(second.cancelled, isFalse);
   });
   test('手动暂停与并发限流独立，取消会唤醒所有等待', () async {
-    final control = CacheControl()..pause()..setScheduled(false);
+    final control = CacheControl()
+      ..pause()
+      ..setScheduled(false);
     var finished = false;
     final waiting = control.checkpoint().then((_) => finished = true);
     control.setScheduled(true);
@@ -275,15 +324,24 @@ void main() {
     await waiting;
     expect(finished, isTrue);
     control.setScheduled(false);
-    final cancelled = expectLater(control.checkpoint(), throwsA(isA<CacheCancelled>()));
+    final cancelled = expectLater(
+      control.checkpoint(),
+      throwsA(isA<CacheCancelled>()),
+    );
     control.cancel();
     await cancelled;
   });
 
   test('音频查找忽略大小写，但不改变剧情文本变量表', () {
-    final catalog = MediaCatalog(variables: {
-      'SomeText': '保持原名', 'MusicKey': '@audio/a.mp3', 'musickey': '@audio/b.mp3',
-    }, characters: {}, backgroundPpu: {});
+    final catalog = MediaCatalog(
+      variables: {
+        'SomeText': '保持原名',
+        'MusicKey': '@audio/a.mp3',
+        'musickey': '@audio/b.mp3',
+      },
+      characters: {},
+      backgroundPpu: {},
+    );
     expect(catalog.variables['SomeText'], '保持原名');
     expect(catalog.audio(r'$MusicKey')!.path, '/assets/audio/a.mp3');
     expect(catalog.audio(r'$musickey')!.path, '/assets/audio/b.mp3');
@@ -291,27 +349,45 @@ void main() {
   });
   test('混合大小写和首尾空白的音频变量全部解析，未知变量仍报错', () {
     final variables = {
-      'd_avg_OriginiumArts_soundwave': 'Sound_Beta_2/AVG/d_avg_OriginiumArts_soundwave',
-      'd_avg_OriginiumArts_fire_long': 'Sound_Beta_2/AVG/d_avg_OriginiumArts_fire_long',
-      'd_avg_OriginiumArts_heart_1': 'Sound_Beta_2/AVG/d_avg_OriginiumArts_heart_1',
+      'd_avg_OriginiumArts_soundwave':
+          'Sound_Beta_2/AVG/d_avg_OriginiumArts_soundwave',
+      'd_avg_OriginiumArts_fire_long':
+          'Sound_Beta_2/AVG/d_avg_OriginiumArts_fire_long',
+      'd_avg_OriginiumArts_heart_1':
+          'Sound_Beta_2/AVG/d_avg_OriginiumArts_heart_1',
       'ReunionNormal_loop': 'Sound_Beta_2/Music/AVG/m_avg_ReunionNormal_loop',
       'ReunionNormal_intro': 'Sound_Beta_2/Music/AVG/m_avg_ReunionNormal_intro',
-      'm_sys_act51sideInstrumental_loop': 'Sound_Beta_2/Music/AVG/m_sys_act51sideInstrumental_loop',
+      'm_sys_act51sideInstrumental_loop':
+          'Sound_Beta_2/Music/AVG/m_sys_act51sideInstrumental_loop',
       'd_avg_Qinggong': 'Sound_Beta_2/AVG/d_avg_Qinggong',
-      'd_avg_OriginiumArts_fire_short': 'Sound_Beta_2/AVG/d_avg_OriginiumArts_fire_short',
+      'd_avg_OriginiumArts_fire_short':
+          'Sound_Beta_2/AVG/d_avg_OriginiumArts_fire_short',
       'd_avg_Warlockarrow': 'Sound_Beta_2/AVG/d_avg_Warlockarrow',
     };
-    final catalog = MediaCatalog(variables: variables, characters: {}, backgroundPpu: {});
+    final catalog = MediaCatalog(
+      variables: variables,
+      characters: {},
+      backgroundPpu: {},
+    );
     for (final entry in variables.entries) {
-      final expected = 'https://torappu.prts.wiki/assets/audio/${entry.value.toLowerCase().substring(13)}.mp3';
+      final expected =
+          'https://torappu.prts.wiki/assets/audio/${entry.value.toLowerCase().substring(13)}.mp3';
       expect(catalog.audio(' \$${entry.key} ').toString(), expected);
-      expect(catalog.audio('\$${entry.key.toUpperCase()}').toString(), expected);
+      expect(
+        catalog.audio('\$${entry.key.toUpperCase()}').toString(),
+        expected,
+      );
     }
     final warnings = <String>[];
-    final script = StoryScript.parse(variables.keys.map((key) => '[PlaySound(key="\$$key")]').join('\n'));
+    final script = StoryScript.parse(
+      variables.keys.map((key) => '[PlaySound(key="\$$key")]').join('\n'),
+    );
     expect(catalog.dependencies(script, warnings), hasLength(9));
     expect(warnings, isEmpty);
-    catalog.dependencies(StoryScript.parse(r'[PlaySound(key="$missing")]'), warnings);
+    catalog.dependencies(
+      StoryScript.parse(r'[PlaySound(key="$missing")]'),
+      warnings,
+    );
     expect(warnings.single, contains('未解析音频'));
   });
   test('立绘按 body/index 选择差分并定位 face_overlay，保留路径层级和美元符', () {
@@ -589,18 +665,32 @@ void main() {
       final started = Completer<void>();
       final release = Completer<void>();
       var downloadingSecond = false;
-      final store = AssetStore(cache: cache, client: MockClient((request) async {
-        if (downloadingSecond &&
-            (waitingForScript ? request.url.path.endsWith('second.txt') : request.url.path.endsWith('second.png'))) {
-          started.complete();
-          await release.future;
-        }
-        if (request.url.path.endsWith('.txt')) {
-          final unique = request.url.path.contains('first') ? 'first' : 'second';
-          return http.Response.bytes(utf8.encode('[name="甲"]对白\n[background(image="shared")]\n[background(image="$unique")]'), 200);
-        }
-        return request.url.path.endsWith('.png') ? http.Response.bytes([1], 200) : http.Response('{}', 200);
-      }));
+      final store = AssetStore(
+        cache: cache,
+        client: MockClient((request) async {
+          if (downloadingSecond &&
+              (waitingForScript
+                  ? request.url.path.endsWith('second.txt')
+                  : request.url.path.endsWith('second.png'))) {
+            started.complete();
+            await release.future;
+          }
+          if (request.url.path.endsWith('.txt')) {
+            final unique = request.url.path.contains('first')
+                ? 'first'
+                : 'second';
+            return http.Response.bytes(
+              utf8.encode(
+                '[name="甲"]对白\n[background(image="shared")]\n[background(image="$unique")]',
+              ),
+              200,
+            );
+          }
+          return request.url.path.endsWith('.png')
+              ? http.Response.bytes([1], 200)
+              : http.Response('{}', 200);
+        }),
+      );
       addTearDown(store.close);
       final repository = StoryRepository(store);
       const first = StoryEntry('第一幕', 'test/first');
@@ -610,14 +700,18 @@ void main() {
       final operation = repository.cacheEntry(second, control: CacheControl());
       await started.future;
       expect(await repository.deleteCachedStory(first), !waitingForScript);
-      final shared = Uri.parse('https://torappu.prts.wiki/assets/avg/background/shared.png');
+      final shared = Uri.parse(
+        'https://torappu.prts.wiki/assets/avg/background/shared.png',
+      );
       expect(cache.data[shared], isNotNull);
       expect(await repository.cachedStories(), isEmpty);
       release.complete();
       expect(await operation, isEmpty);
       expect(await repository.cachedStories(), {second.path});
       store.releaseMemory();
-      final prepared = await repository.prepare(await repository.loadEntry(second));
+      final prepared = await repository.prepare(
+        await repository.loadEntry(second),
+      );
       expect(prepared.warnings, isEmpty);
       expect(cache.data[shared], isNotNull);
     });
@@ -626,15 +720,30 @@ void main() {
   test('取消缓存后不会提交离线记录', () async {
     final cache = MemoryCache();
     final control = CacheControl();
-    final store = AssetStore(cache: cache, client: MockClient((request) async => http.Response.bytes(
-      utf8.encode(request.url.path.endsWith('.txt') ? '[name="甲"]对白' : '{}'), 200,
-    )));
+    final store = AssetStore(
+      cache: cache,
+      client: MockClient(
+        (request) async => http.Response.bytes(
+          utf8.encode(
+            request.url.path.endsWith('.txt') ? '[name="甲"]对白' : '{}',
+          ),
+          200,
+        ),
+      ),
+    );
     addTearDown(store.close);
     final repository = StoryRepository(store);
     const entry = StoryEntry('取消', 'test/cancel');
-    await expectLater(repository.cacheEntry(entry, control: control,
-      onProgress: (done, total) { if (done == total) control.cancel(); },
-    ), throwsA(isA<CacheCancelled>()));
+    await expectLater(
+      repository.cacheEntry(
+        entry,
+        control: control,
+        onProgress: (done, total) {
+          if (done == total) control.cancel();
+        },
+      ),
+      throwsA(isA<CacheCancelled>()),
+    );
     expect(await repository.cachedStories(), isEmpty);
   });
 

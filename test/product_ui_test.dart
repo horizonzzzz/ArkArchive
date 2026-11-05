@@ -153,36 +153,55 @@ Future<_Repository> _mount(
 
 void main() {
   for (final size in [const Size(390, 844), const Size(1280, 800)]) {
-    testWidgets('继续观看只出现在对应剧情行，加载失败保留断点：$size', (tester) async {
+    testWidgets('多篇剧情各自在列表行显示继续入口，加载失败保留进度：$size', (tester) async {
       final repo = _Repository();
       final script = StoryScript.parse('上次的正文');
-      final progress = PlaybackProgress(
-        path: _main.path, scriptHash: PlaybackProgress.fingerprint(script),
+      PlaybackProgress progress(String path) => PlaybackProgress(
+        path: path,
+        scriptHash: PlaybackProgress.fingerprint(script),
         checkpoint: PlaybackCheckpoint(cursor: 1, trace: [0]),
       );
-      await repo.store.setPlaybackProgress(progress);
+      final mainProgress = progress(_main.path);
+      final afterProgress = progress(_after.path);
+      await repo.store.setPlaybackProgress(mainProgress);
+      await repo.store.setPlaybackProgress(afterProgress);
       await _mount(tester, size: size, repository: repo);
       await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
       await tester.pumpAndSettle();
       final button = find.byKey(ValueKey('continue-${_main.path}'));
       expect(button, findsOneWidget);
-      expect(find.text('继续观看'), findsOneWidget);
-      expect(find.byKey(ValueKey('continue-${_after.path}')), findsNothing);
+      expect(find.byKey(ValueKey('continue-${_after.path}')), findsOneWidget);
+      expect(find.byKey(ValueKey('continue-${_side.path}')), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.tap(button);
       await tester.pump();
       repo.pending!.completeError(StateError('网络暂不可用'));
       await tester.pumpAndSettle();
-      expect(repo.store.playbackProgress!.toJson(), progress.toJson());
-      expect(button, findsOneWidget);
+      expect(
+        repo.store.getPlaybackProgress(_main.path)!.toJson(),
+        mainProgress.toJson(),
+      );
+      expect(
+        repo.store.getPlaybackProgress(_after.path)!.toJson(),
+        afterProgress.toJson(),
+      );
       await tester.tap(find.text('重试'));
       await tester.pump();
-      repo.pending!.complete(StoryDocument(title: _main.title, script: StoryScript.parse('更新后的正文')));
+      repo.pending!.complete(
+        StoryDocument(title: _main.title, script: StoryScript.parse('更新后的正文')),
+      );
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('观看断点已失效'), findsOneWidget);
       await tester.tap(find.text('返回'));
       await tester.pumpAndSettle();
-      expect(repo.store.playbackProgress!.toJson(), progress.toJson());
+      expect(
+        repo.store.getPlaybackProgress(_main.path)!.toJson(),
+        mainProgress.toJson(),
+      );
+      expect(
+        repo.store.getPlaybackProgress(_after.path)!.toJson(),
+        afterProgress.toJson(),
+      );
       expect(repo.prepareCalls, 0);
       expect(tester.takeException(), isNull);
     });
@@ -190,20 +209,25 @@ void main() {
 
   testWidgets('普通播放从头开始，不触发旧断点的恢复提示', (tester) async {
     final repo = _Repository();
-    await repo.store.setPlaybackProgress(PlaybackProgress(
-      path: _main.path, scriptHash: PlaybackProgress.fingerprint(StoryScript.parse('旧正文')),
-      checkpoint: PlaybackCheckpoint(cursor: 1, trace: [0]),
-    ));
+    await repo.store.setPlaybackProgress(
+      PlaybackProgress(
+        path: _main.path,
+        scriptHash: PlaybackProgress.fingerprint(StoryScript.parse('旧正文')),
+        checkpoint: PlaybackCheckpoint(cursor: 1, trace: [0]),
+      ),
+    );
     await _mount(tester, repository: repo);
     await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('播放 ${_main.title}'));
     await tester.pump();
-    repo.pending!.complete(StoryDocument(title: _main.title, script: StoryScript.parse('新正文')));
+    repo.pending!.complete(
+      StoryDocument(title: _main.title, script: StoryScript.parse('新正文')),
+    );
     await tester.pumpAndSettle();
     expect(find.text('观看断点已失效'), findsNothing);
     expect(repo.prepareCalls, 1);
-    expect(repo.store.playbackProgress!.path, _main.path);
+    expect(repo.store.getPlaybackProgress(_main.path)!.path, _main.path);
   });
 
   for (final size in [const Size(390, 844), const Size(844, 390)]) {
