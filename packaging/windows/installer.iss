@@ -2,6 +2,10 @@
   #error AppVersion is required
 #endif
 
+#ifndef OutputBaseFilename
+  #define OutputBaseFilename "arknights_story_player-v" + AppVersion + "-windows-x64-setup"
+#endif
+
 [Setup]
 AppId=arknights_story_player
 AppName=方舟档案室
@@ -12,7 +16,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\..\dist
-OutputBaseFilename=arknights_story_player-windows-x64-setup
+OutputBaseFilename={#OutputBaseFilename}
 SetupIconFile=..\..\windows\runner\resources\app_icon.ico
 UninstallDisplayIcon={app}\arknights_story_player.exe
 Compression=lzma2

@@ -18,45 +18,21 @@
 
 </div>
 
-## 功能
+## 功能特性
 
-- 按分类浏览，搜索篇章、关卡和剧情标题。
-- 播放剧情演出，支持自动播放、分支选择、音量和播放速度设置。
-- 下载剧情及相关素材，支持离线观看和缓存管理。
-
-剧情目录、脚本和素材通过网络按需加载。首次浏览或下载需要联网；已下载内容可离线观看，缓存被系统清理后需要重新下载。
+- **丰富剧情分类与快速检索**：全面收录主线章节、活动、故事集、插曲及别传等剧情篇章；支持移动端滑动切页与全局关键词搜索，快速定位篇章、关卡代号与剧情标题；支持加载本地自定义脚本（.txt）直接播放。
+- **高还原度剧情播放引擎**：高度还原原作视觉排版与剧场级演出效果；支持角色立绘切换、背景变换、动态遮罩着色器特效与黑屏转场；支持打字机逐字输出、自由旁白贴纸、倒计时计时器与分支剧情对话选择。
+- **音频回放与播放控制**：完整支持 BGM 背景音乐与环境音、角色与剧情音效（SFX），提供主音量、BGM 与音效分立调节；支持自动播放（可自定义等待时长与打字速度）、历史对白记录回顾（Log）与全屏沉浸播放。
+- **按需加载与离线缓存管理**：剧本、图片及音频素材按需异步拉取；支持多选一键批量下载离线缓存；提供网络状态感知（移动网络下载提醒）、并发下载控制与可视化缓存管理（随时查看占用空间并支持一键清理）。
+- **多平台适配与一致体验**：跨平台原生支持 Android、Windows 与 Linux；统一的视效主题与动效规范，移动端支持底部导航毛玻璃质感与手势交互，桌面端提供便捷窗口操作体验。
 
 ## 下载与安装
 
-从 [GitHub Releases](https://github.com/horizonzzzz/arknights-story-player/releases) 下载与设备匹配的最新版本。每次正式 Release 由一个版本 tag 对应，文件名中的平台和架构用于选择安装包。
+前往 [GitHub Releases](https://github.com/horizonzzzz/arknights-story-player/releases) 下载适合您设备的最新安装包（文件名已包含对应版本号）：
 
-### Android
-
-- `arknights_story_player-android-universal.apk`：通用 APK，适合不确定设备架构时使用。
-- `arknights_story_player-android-arm64-v8a.apk`：大多数现代 Android 设备。
-- `arknights_story_player-android-armeabi-v7a.apk`：32 位 ARM 设备。
-- `arknights_story_player-android-x64.apk`：x86_64 Android 设备。
-
-在 Android 设置中允许安装来自此来源的应用，然后打开对应 APK 完成安装。不同架构的 APK 不能混用。
-
-### Windows x64
-
-- `arknights_story_player-windows-x64-setup.exe`：安装版，推荐普通用户使用。
-- `arknights_story_player-windows-x64.zip`：便携版，解压后运行 `arknights_story_player.exe`。
-
-### Linux
-
-x64 和 ARM64 各提供以下三种格式：
-
-- `arknights_story_player-linux-x64.deb` / `arknights_story_player-linux-arm64.deb`：适用于 Debian、Ubuntu 及其衍生发行版，可使用系统包管理器安装。
-- `arknights_story_player-linux-x64.AppImage` / `arknights_story_player-linux-arm64.AppImage`：下载后赋予执行权限，直接运行。
-- `arknights_story_player-linux-x64.tar.gz` / `arknights_story_player-linux-arm64.tar.gz`：解压后运行 `arknights_story_player`，适合不使用 DEB 的发行版。
-
-Linux 包依赖系统提供的 GTK、GLib、libstdc++ 等运行库，实际兼容性取决于发行版环境。AppImage 也不保证在所有发行版上都能运行。
-
-### 当前不提供
-
-当前 Release 不提供 iOS 和 macOS 版本。
+- **Android**：提供通用版及主流架构（ARM64、ARM32、x86_64）的 APK 安装包。
+- **Windows (x64)**：提供快速安装包（Setup）与免安装便携包（Zip）。
+- **Linux (x64 / ARM64)**：提供 DEB 安装包、开箱即用的 AppImage 以及独立 tar.gz 压缩包。
 
 ## 版本与兼容性
 

@@ -49,15 +49,16 @@ jobs:
       - name: Stage APKs
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/arknights_story_player-android-arm64-v8a.apk
-          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk dist/arknights_story_player-android-armeabi-v7a.apk
-          cp build/app/outputs/flutter-apk/app-x86_64-release.apk dist/arknights_story_player-android-x64.apk
+          version=$(sed -n 's/^version: \([^+]*\).*/\1/p' pubspec.yaml)
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "dist/arknights_story_player-v${version}-android-arm64-v8a.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "dist/arknights_story_player-v${version}-android-armeabi-v7a.apk"
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk "dist/arknights_story_player-v${version}-android-x64.apk"
 
       - name: Build Universal APK
         run: |
+          version=$(sed -n 's/^version: \([^+]*\).*/\1/p' pubspec.yaml)
           flutter build apk --release
-          cp build/app/outputs/flutter-apk/app-release.apk dist/arknights_story_player-android-universal.apk
-
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/arknights_story_player-v${version}-android-universal.apk"
       - name: Upload Android Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -90,8 +91,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "dist\arknights_story_player-windows-x64.zip"
-
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version: ([^+]+)').Matches.Groups[1].Value
+          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "dist\arknights_story_player-v$version-windows-x64.zip"
       - name: Build Windows Installer
         shell: pwsh
         run: |
@@ -105,7 +106,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-x64-bundle
-          path: dist/arknights_story_player-windows-x64*
+          path: dist/arknights_story_player-*-windows-x64*
 
   # ==========================================
   # 3. Linux (x86_64)
@@ -144,7 +145,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-x64-bundle
-          path: dist/arknights_story_player-linux-x64*
+          path: dist/arknights_story_player-*-linux-x64*
 
   # ==========================================
   # 4. Linux (ARM64)
@@ -178,7 +179,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-arm64-bundle
-          path: dist/arknights_story_player-linux-arm64*
+          path: dist/arknights_story_player-*-linux-arm64*
 
   # ==========================================
   # 5. tag 推送构建成功后，发布该 tag 的 Release。

@@ -28,20 +28,22 @@ TOOL
 CURL
 chmod +x "$work/bin/curl"
 export PATH="$work/bin:$PATH"
+version=$(sed -n 's/^version: \([^+]*\).*/\1/p' "$root/pubspec.yaml")
+tag_version="v$version"
 for arch in x64 arm64; do
   bundle="$work/project/build/linux/$arch/release/bundle"
   mkdir -p "$bundle/data" "$bundle/lib"
   printf '#!/bin/sh\nexit 0\n' > "$bundle/arknights_story_player"
   chmod +x "$bundle/arknights_story_player"
   bash "$work/project/packaging/linux/package.sh" "$arch" >/dev/null
-  deb="$work/project/dist/arknights_story_player-linux-$arch.deb"
+  deb="$work/project/dist/arknights_story_player-${tag_version}-linux-$arch.deb"
   expected="$arch"; [[ "$arch" != x64 ]] || expected=amd64
   [[ "$(dpkg-deb -f "$deb" Architecture)" == "$expected" ]]
   dpkg-deb -x "$deb" "$work/unpacked-$arch"
   test -x "$work/unpacked-$arch/opt/arknights-story-player/arknights_story_player"
   test -f "$work/unpacked-$arch/usr/share/applications/com.example.arknights_story_player.desktop"
-  test -f "$work/project/dist/arknights_story_player-linux-$arch.AppImage"
-  tar -tzf "$work/project/dist/arknights_story_player-linux-$arch.tar.gz" | grep -q './arknights_story_player'
+  test -f "$work/project/dist/arknights_story_player-${tag_version}-linux-$arch.AppImage"
+  tar -tzf "$work/project/dist/arknights_story_player-${tag_version}-linux-$arch.tar.gz" | grep -q './arknights_story_player'
   echo "PASS: $arch packaging layout"
 done
 if bash "$work/project/packaging/linux/package.sh" invalid >/dev/null 2>&1; then

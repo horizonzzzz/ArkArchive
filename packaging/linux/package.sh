@@ -12,6 +12,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root"
 version=$(sed -n 's/^version: \([^+]*\).*/\1/p' pubspec.yaml)
 [[ -n "$version" ]]
+tag_version="v$version"
 bundle="$root/build/linux/$arch/release/bundle"
 test -x "$bundle/arknights_story_player"
 work=$(mktemp -d)
@@ -40,7 +41,7 @@ Depends: libgtk-3-0, liblzma5, libstdc++6, libc6
 Description: Unofficial Arknights story player
 CONTROL
 chmod 755 "$work/app/DEBIAN"
-dpkg-deb --build --root-owner-group "$work/app" "dist/arknights_story_player-linux-$arch.deb"
+dpkg-deb --build --root-owner-group "$work/app" "dist/arknights_story_player-${tag_version}-linux-$arch.deb"
 
 rm -rf "$work/app/DEBIAN"
 cp "$work/app/usr/share/applications/com.example.arknights_story_player.desktop" "$work/app/arknights_story_player.desktop"
@@ -57,5 +58,5 @@ chmod +x "$work/app/AppRun"
 curl --fail --location --retry 3 "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-$appimage_arch.AppImage" -o "$work/appimagetool"
 chmod +x "$work/appimagetool"
 (cd "$work" && ./appimagetool --appimage-extract >/dev/null)
-ARCH="$appimage_arch" "$work/squashfs-root/AppRun" "$work/app" "$root/dist/arknights_story_player-linux-$arch.AppImage"
-tar -czf "dist/arknights_story_player-linux-$arch.tar.gz" -C "$bundle" .
+ARCH="$appimage_arch" "$work/squashfs-root/AppRun" "$work/app" "$root/dist/arknights_story_player-${tag_version}-linux-$arch.AppImage"
+tar -czf "dist/arknights_story_player-${tag_version}-linux-$arch.tar.gz" -C "$bundle" .
