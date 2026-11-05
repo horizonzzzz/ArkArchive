@@ -851,7 +851,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                       ),
                       SizedBox(height: 16),
                       Text(
-                        '明日方舟',
+                        '方舟档案室',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,

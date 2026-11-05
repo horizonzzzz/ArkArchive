@@ -64,6 +64,11 @@ if(MSVC)
       target_compile_options(${PLUGIN_TARGET} PRIVATE /utf-8)
     endif()
   endforeach()
+  if(TARGET just_audio_windows_plugin)
+    # 固定版本的音频插件仍使用旧 coroutine，兼容新版 MSVC 的弃用检查。
+    target_compile_definitions(just_audio_windows_plugin PRIVATE
+      _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+  endif()
 endif()
 
 # === Installation ===

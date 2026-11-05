@@ -8,7 +8,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: '明日方舟剧情播放器',
+    title: '方舟档案室',
     debugShowCheckedModeBanner: false,
     theme: buildAppTheme(),
     home: const StoryLauncher(),

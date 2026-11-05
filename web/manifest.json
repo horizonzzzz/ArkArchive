@@ -1,6 +1,6 @@
 {
-    "name": "arknights_story_player",
-    "short_name": "arknights_story_player",
+    "name": "方舟档案室",
+    "short_name": "方舟档案室",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <application
-        android:label="arknights_story_player"
+        android:label="方舟档案室"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

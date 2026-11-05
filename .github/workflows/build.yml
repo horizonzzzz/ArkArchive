@@ -2,11 +2,7 @@ name: Multi-Platform Build & Release
 
 on:
   push:
-    branches: [ main ]
-    tags: [ 'v*' ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
+    tags: [ '**' ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,6 +10,9 @@ concurrency:
 
 permissions:
   contents: write
+
+env:
+  FLUTTER_VERSION: '3.47.9'
 
 jobs:
   # ==========================================
@@ -38,19 +37,26 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build APK (Split ABI for ARM)
+      - name: Build APKs (Per ABI)
         run: flutter build apk --release --split-per-abi
 
-      - name: Stage Artifacts
+      - name: Stage APKs
         run: |
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/arknights_story_player-android-arm64-v8a.apk
           cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk dist/arknights_story_player-android-armeabi-v7a.apk
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk dist/arknights_story_player-android-x64.apk
+
+      - name: Build Universal APK
+        run: |
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk dist/arknights_story_player-android-universal.apk
 
       - name: Upload Android Artifacts
         uses: actions/upload-artifact@v4
@@ -71,6 +77,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Install Dependencies
@@ -85,11 +92,20 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist
           Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "dist\arknights_story_player-windows-x64.zip"
 
+      - name: Build Windows Installer
+        shell: pwsh
+        run: |
+          choco install innosetup --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version: ([^+]+)').Matches.Groups[1].Value
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" packaging/windows/installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-x64-bundle
-          path: dist/arknights_story_player-windows-x64.zip
+          path: dist/arknights_story_player-windows-x64*
 
   # ==========================================
   # 3. Linux (x86_64)
@@ -109,6 +125,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Install Dependencies
@@ -117,64 +134,58 @@ jobs:
       - name: Build Linux (x64)
         run: flutter build linux --release
 
-      - name: Package Linux Bundle
-        run: |
-          mkdir -p dist
-          tar -czf dist/arknights_story_player-linux-x64.tar.gz -C build/linux/x64/release/bundle .
+      - name: Test Linux Packaging
+        run: bash packaging/linux/package_test.sh
+
+      - name: Package Linux Releases
+        run: bash packaging/linux/package.sh x64
 
       - name: Upload Linux x64 Artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-x64-bundle
-          path: dist/arknights_story_player-linux-x64.tar.gz
+          path: dist/arknights_story_player-linux-x64*
 
   # ==========================================
   # 4. Linux (ARM64)
-  # Note: Uses QEMU + Docker so it works across both private and public repos.
-  # (If the repository is public or has paid ARM runners, runs-on can be switched to ubuntu-24.04-arm)
   # ==========================================
   build-linux-arm64:
     name: Linux (ARM64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Build Linux ARM64 in Docker
+      - name: Install Linux Build Dependencies
         run: |
-          docker run --rm --platform linux/arm64 \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            ghcr.io/cirruslabs/flutter:stable \
-            bash -c "
-              git config --global --add safe.directory /workspace && \
-              apt-get update && \
-              DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-                clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev && \
-              flutter config --no-analytics && \
-              flutter pub get && \
-              flutter build linux --release && \
-              mkdir -p dist && \
-              tar -czf dist/arknights_story_player-linux-arm64.tar.gz -C build/linux/arm64/release/bundle . && \
-              chmod 666 dist/arknights_story_player-linux-arm64.tar.gz
-            "
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+
+      - name: Set up Flutter
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Linux (ARM64)
+        run: flutter build linux --release
+
+      - name: Package Linux Releases
+        run: bash packaging/linux/package.sh arm64
 
       - name: Upload Linux ARM64 Artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-arm64-bundle
-          path: dist/arknights_story_player-linux-arm64.tar.gz
+          path: dist/arknights_story_player-linux-arm64*
 
   # ==========================================
-  # 5. Release Publication (triggers on Git tags 'v*')
+  # 5. tag 推送构建成功后，发布该 tag 的 Release。
   # ==========================================
   release:
     name: Publish Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     needs: [build-android, build-windows, build-linux-x64, build-linux-arm64]
     runs-on: ubuntu-latest
     steps:
@@ -194,5 +205,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ github.ref_name }}
           files: release-assets/*
           generate_release_notes: true
