@@ -271,6 +271,14 @@ class _CachePageState extends State<CachePage> {
                             : _offlineTile(entries[index]),
                       ),
                     ),
+                  const SliverToBoxAdapter(
+                    child: SafeArea(
+                      top: false,
+                      left: false,
+                      right: false,
+                      child: SizedBox.shrink(),
+                    ),
+                  ),
                 ],
               ),
             ),

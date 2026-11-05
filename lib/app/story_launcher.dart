@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
@@ -664,6 +665,27 @@ class _StoryLauncherState extends State<StoryLauncher> {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final desktop = constraints.maxWidth >= 1100;
+      final glassNavigation =
+          !desktop &&
+          _repository.store.isMobile &&
+          !MediaQuery.highContrastOf(context);
+      final navigationBar = NavigationBar(
+        backgroundColor: glassNavigation
+            ? AppColors.panel.withValues(alpha: .86)
+            : null,
+        elevation: glassNavigation ? 0 : null,
+        surfaceTintColor: glassNavigation ? Colors.transparent : null,
+        animationDuration: ArchiveMotion.duration(
+          context,
+          ArchiveMotion.stateDuration,
+        ),
+        selectedIndex: _page,
+        onDestinationSelected: (value) => setState(() => _page = value),
+        destinations: [
+          for (final item in _navigation)
+            NavigationDestination(icon: Icon(item.$1), label: item.$2),
+        ],
+      );
       return PopScope(
         canPop: !_busy && !(_page == 0 && _activeGroup != null),
         onPopInvokedWithResult: (didPop, result) {
@@ -676,7 +698,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
           }
         },
         child: Scaffold(
+          // 列表经过底栏后方，模糊才有实际内容；滚动区保留相应的底部留白。
+          extendBody: glassNavigation,
           body: SafeArea(
+            bottom: !glassNavigation,
             child: Stack(
               children: [
                 Row(
@@ -820,27 +845,22 @@ class _StoryLauncherState extends State<StoryLauncher> {
               ? null
               : AbsorbPointer(
                   absorbing: _busy,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      NavigationBar(
-                        animationDuration: ArchiveMotion.duration(
-                          context,
-                          ArchiveMotion.stateDuration,
-                        ),
-                        selectedIndex: _page,
-                        onDestinationSelected: (value) =>
-                            setState(() => _page = value),
-                        destinations: [
-                          for (final item in _navigation)
-                            NavigationDestination(
-                              icon: Icon(item.$1),
-                              label: item.$2,
+                  child: glassNavigation
+                      ? ClipRect(
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                            child: DecoratedBox(
+                              position: DecorationPosition.foreground,
+                              decoration: const BoxDecoration(
+                                border: Border(
+                                  top: BorderSide(color: AppColors.borderLight),
+                                ),
+                              ),
+                              child: navigationBar,
                             ),
-                        ],
-                      ),
-                    ],
-                  ),
+                          ),
+                        )
+                      : navigationBar,
                 ),
         ),
       );
@@ -984,6 +1004,14 @@ class _StoryLauncherState extends State<StoryLauncher> {
                 ),
               ),
               _catalogBody(groups),
+              const SliverToBoxAdapter(
+                child: SafeArea(
+                  top: false,
+                  left: false,
+                  right: false,
+                  child: SizedBox.shrink(),
+                ),
+              ),
             ],
           ),
         ),
@@ -1224,6 +1252,14 @@ class _StoryLauncherState extends State<StoryLauncher> {
                       child: _stageRow(entries[index]),
                     ),
                   ),
+                ),
+              ),
+              const SliverToBoxAdapter(
+                child: SafeArea(
+                  top: false,
+                  left: false,
+                  right: false,
+                  child: SizedBox.shrink(),
                 ),
               ),
             ],

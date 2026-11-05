@@ -126,6 +126,7 @@ Future<_Repository> _mount(
   Size size = const Size(390, 844),
   double textScale = 1,
   bool reduceMotion = false,
+  bool highContrast = false,
   _Repository? repository,
 }) async {
   await tester.binding.setSurfaceSize(size);
@@ -139,6 +140,7 @@ Future<_Repository> _mount(
         data: MediaQuery.of(context).copyWith(
           textScaler: TextScaler.linear(textScale),
           disableAnimations: reduceMotion,
+          highContrast: highContrast,
         ),
         child: child!,
       ),
@@ -150,6 +152,163 @@ Future<_Repository> _mount(
 }
 
 void main() {
+  for (final size in [const Size(390, 844), const Size(844, 390)]) {
+    testWidgets(
+      '移动端毛玻璃底栏保留安全区与列表末尾空间：$size',
+      (tester) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.padding = const FakeViewPadding(bottom: 24);
+        tester.view.viewPadding = const FakeViewPadding(bottom: 24);
+        addTearDown(tester.view.reset);
+        final groups = [
+          for (var i = 0; i < 20; i++)
+            StoryGroup('测试篇章 $i', [_main], entryType: 'MAINLINE'),
+        ];
+        await _mount(
+          tester,
+          size: size,
+          repository: _Repository(groups: groups),
+        );
+        final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
+        final navigation = find.byType(NavigationBar);
+        final barRect = tester.getRect(navigation);
+        expect(scaffold.extendBody, isTrue);
+        expect(find.byType(BackdropFilter), findsOneWidget);
+        expect(
+          find.ancestor(
+            of: find.byType(BackdropFilter),
+            matching: find.byType(ClipRect),
+          ),
+          findsWidgets,
+        );
+        expect(
+          tester.widget<NavigationBar>(navigation).backgroundColor!.a,
+          lessThan(1),
+        );
+        expect(barRect.height, 96);
+        final catalog = find.byKey(const PageStorageKey('mobile-chapters'));
+        expect(tester.getRect(catalog).bottom, barRect.bottom);
+        final scrollable = find.descendant(
+          of: catalog,
+          matching: find.byType(Scrollable),
+        );
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('chapter-测试篇章 19')),
+          300,
+          scrollable: scrollable,
+        );
+        tester
+            .state<ScrollableState>(scrollable)
+            .position
+            .jumpTo(
+              tester
+                  .state<ScrollableState>(scrollable)
+                  .position
+                  .maxScrollExtent,
+            );
+        await tester.pumpAndSettle();
+        final lastChapter = find.byKey(const ValueKey('chapter-测试篇章 19'));
+        expect(
+          tester.getRect(lastChapter).bottom,
+          lessThanOrEqualTo(barRect.top),
+        );
+        await tester.tap(lastChapter);
+        await tester.pumpAndSettle();
+        final stages = find.byKey(const PageStorageKey('stages-测试篇章 19'));
+        final stageInset = find.descendant(
+          of: stages,
+          matching: find.byType(SafeArea),
+        );
+        expect(tester.getSize(stageInset).height, barRect.height);
+        await tester.tap(find.text('离线与缓存').last);
+        await tester.pumpAndSettle();
+        final offline = find.byKey(const PageStorageKey('offline-groups'));
+        expect(tester.widget<NavigationBar>(navigation).selectedIndex, 1);
+        expect(offline, findsOneWidget);
+        final offlineScroll = tester.state<ScrollableState>(
+          find.descendant(of: offline, matching: find.byType(Scrollable)).first,
+        );
+        offlineScroll.position.jumpTo(offlineScroll.position.maxScrollExtent);
+        await tester.pumpAndSettle();
+        final offlineInset = find.descendant(
+          of: offline,
+          matching: find.byType(SafeArea),
+        );
+        expect(offlineInset, findsOneWidget);
+        expect(tester.getSize(offlineInset).height, barRect.height);
+        await tester.tap(find.text('系统设置').last);
+        await tester.pumpAndSettle();
+        final settings = tester.widget<SingleChildScrollView>(
+          find.byKey(const PageStorageKey('settings-root')),
+        );
+        expect(
+          settings.padding!.resolve(TextDirection.ltr).bottom,
+          20 + barRect.height,
+        );
+        expect(tester.takeException(), isNull);
+      },
+      variant: TargetPlatformVariant({
+        TargetPlatform.android,
+        TargetPlatform.iOS,
+      }),
+    );
+  }
+
+  testWidgets(
+    '高对比度模式使用不透明底栏',
+    (tester) async {
+      await _mount(tester, highContrast: true);
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold).first).extendBody,
+        isFalse,
+      );
+      expect(find.byType(BackdropFilter), findsNothing);
+      expect(
+        tester
+            .widget<NavigationBar>(find.byType(NavigationBar))
+            .backgroundColor,
+        isNull,
+      );
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+    }),
+  );
+
+  testWidgets(
+    '窄屏桌面端保持原有底栏',
+    (tester) async {
+      await _mount(tester);
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold).first).extendBody,
+        isFalse,
+      );
+      expect(find.byType(BackdropFilter), findsNothing);
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.windows,
+      TargetPlatform.macOS,
+      TargetPlatform.linux,
+    }),
+  );
+
+  testWidgets(
+    '宽屏移动端保留侧栏布局',
+    (tester) async {
+      await _mount(tester, size: const Size(1440, 900));
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byType(BackdropFilter), findsNothing);
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold).first).extendBody,
+        isFalse,
+      );
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+    }),
+  );
   for (final reduceMotion in [false, true]) {
     testWidgets('快速切换保留搜索与章节状态，减少动画：$reduceMotion', (tester) async {
       final repo = await _mount(tester, reduceMotion: reduceMotion);

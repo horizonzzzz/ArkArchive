@@ -171,7 +171,12 @@ class _SettingsPageState extends State<SettingsPage> {
               Expanded(
                 child: SingleChildScrollView(
                   key: PageStorageKey('settings-${_category ?? 'root'}'),
-                  padding: const EdgeInsets.all(20),
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    20,
+                    20,
+                    20 + MediaQuery.paddingOf(context).bottom,
+                  ),
                   child: Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 860),
