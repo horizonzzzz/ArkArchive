@@ -62,13 +62,15 @@ class JustAudioOutput implements StoryAudio {
       for (final name in names) {
         _requests[name] = (_requests[name] ?? 0) + 1;
         final track = _channels.remove(name);
-        if (track != null)
+        if (track != null) {
           unawaited(_fade(track, 0, c.number('fadetime'), release: true));
+        }
       }
     } else {
       final track = _channels[channel];
-      if (track != null)
+      if (track != null) {
         unawaited(_fade(track, c.number('volume', 1), c.number('fadetime')));
+      }
     }
   }
 
@@ -81,10 +83,11 @@ class JustAudioOutput implements StoryAudio {
     bool stale() =>
         _disposed || _epoch != epoch || _requests[channel] != request;
     final seconds = c.number('delay');
-    if (seconds > 0)
+    if (seconds > 0) {
       await Future<void>.delayed(
         Duration(milliseconds: (seconds * 1000).round()),
       );
+    }
     if (stale()) return;
     final key = catalog.audio(c.value('key'));
     if (key == null) {
@@ -117,16 +120,18 @@ class JustAudioOutput implements StoryAudio {
         track.indexSubscription = track.player.currentIndexStream
             .distinct()
             .listen((index) {
-              if (index == sources.length - 1 && !track.released)
+              if (index == sources.length - 1 && !track.released) {
                 unawaited(track.player.setLoopMode(LoopMode.one));
+              }
             });
       }
       if (!loop) {
         track.stateSubscription = track.player.playerStateStream.listen((
           state,
         ) {
-          if (state.processingState == ProcessingState.completed)
+          if (state.processingState == ProcessingState.completed) {
             unawaited(_release(track));
+          }
         });
       }
       final previous = _channels[channel];
@@ -165,8 +170,9 @@ class JustAudioOutput implements StoryAudio {
     try {
       for (var i = 1; i <= steps; i++) {
         if (track.released || token != track.fade) return;
-        if (seconds > 0)
+        if (seconds > 0) {
           await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
         if (track.released || token != track.fade) return;
         await track.player.setVolume(
           (from + (target.clamp(0.0, 1.0) - from) * i / steps).clamp(0.0, 1.0),
@@ -183,8 +189,9 @@ class JustAudioOutput implements StoryAudio {
     track.released = true;
     track.fade++;
     _tracks.remove(track);
-    if (identical(_channels[track.channel], track))
+    if (identical(_channels[track.channel], track)) {
       _channels.remove(track.channel);
+    }
     await track.indexSubscription?.cancel();
     await track.stateSubscription?.cancel();
     await track.player.dispose();

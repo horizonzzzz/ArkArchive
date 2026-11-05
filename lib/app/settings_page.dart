@@ -5,6 +5,7 @@ import '../story_player/data/story_repository.dart';
 import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
+import 'archive_motion.dart';
 import 'archive_widgets.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -150,33 +151,37 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
         };
-        return Column(
-          children: [
-            ArchivePageHeader(
-              key: const Key('settings-header'),
-              maxWidth: 900,
-              title: _category == null ? '系统设置' : categories[_category!].$2,
-              leading: _category == null
-                  ? null
-                  : IconButton(
-                      tooltip: '返回设置分类',
-                      onPressed: () => setState(() => _category = null),
-                      icon: const Icon(Icons.arrow_back, size: 22),
+        return ArchivePageTransition(
+          transitionKey: _category,
+          depth: _category == null ? 0 : 1,
+          child: Column(
+            children: [
+              ArchivePageHeader(
+                key: const Key('settings-header'),
+                maxWidth: 900,
+                title: _category == null ? '系统设置' : categories[_category!].$2,
+                leading: _category == null
+                    ? null
+                    : IconButton(
+                        tooltip: '返回设置分类',
+                        onPressed: () => setState(() => _category = null),
+                        icon: const Icon(Icons.arrow_back, size: 22),
+                      ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  key: PageStorageKey('settings-${_category ?? 'root'}'),
+                  padding: const EdgeInsets.all(20),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 860),
+                      child: content,
                     ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                key: PageStorageKey('settings-${_category ?? 'root'}'),
-                padding: const EdgeInsets.all(20),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 860),
-                    child: content,
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     ),

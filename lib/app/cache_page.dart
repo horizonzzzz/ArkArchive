@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../story_player/data/story_repository.dart';
 import 'app_theme.dart';
+import 'archive_motion.dart';
 import 'archive_widgets.dart';
 import 'cache_job.dart';
 
@@ -113,161 +114,168 @@ class _CachePageState extends State<CachePage> {
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && widget.active && _activity != null) _leaveActivity();
       },
-      child: Column(
-        children: [
-          ArchivePageHeader(
-            key: const Key('cache-header'),
-            title: _activity?.name ?? '离线与缓存',
-            subtitle: _activity == null
-                ? '${widget.cached.length} 幕已缓存${pending.isEmpty ? '' : ' · ${pending.length} 项下载任务'}'
-                : '已缓存 ${entries.length} 幕',
-            leading: _activity == null
-                ? null
-                : IconButton(
-                    tooltip: '返回离线与缓存',
-                    onPressed: _leaveActivity,
-                    icon: const Icon(Icons.arrow_back, size: 22),
-                  ),
-            trailing: _activity == null || entries.isEmpty
-                ? null
-                : TextButton(
-                    onPressed: widget.deleting
-                        ? null
-                        : () => setState(() {
-                            _managing = !_managing;
-                            _selectedOffline.clear();
-                          }),
-                    child: Text(_managing ? '取消选择' : '批量管理'),
-                  ),
-            bottom: _managing && entries.isNotEmpty
-                ? Wrap(
-                    spacing: 12,
-                    runSpacing: 8,
-                    children: [
-                      TextButton(
-                        onPressed: widget.deleting
-                            ? null
-                            : () => setState(() {
-                                if (_selectedOffline.length == entries.length) {
-                                  _selectedOffline.clear();
-                                } else {
-                                  _selectedOffline.addAll(
-                                    entries.map((entry) => entry.path),
-                                  );
-                                }
-                              }),
-                        child: Text(
-                          _selectedOffline.length == entries.length
-                              ? '取消全选'
-                              : '全选',
+      child: ArchivePageTransition(
+        transitionKey: (_activity?.name, _activity?.entryType),
+        depth: _activity == null ? 0 : 1,
+        child: Column(
+          children: [
+            ArchivePageHeader(
+              key: const Key('cache-header'),
+              title: _activity?.name ?? '离线与缓存',
+              subtitle: _activity == null
+                  ? '${widget.cached.length} 幕已缓存${pending.isEmpty ? '' : ' · ${pending.length} 项下载任务'}'
+                  : '已缓存 ${entries.length} 幕',
+              leading: _activity == null
+                  ? null
+                  : IconButton(
+                      tooltip: '返回离线与缓存',
+                      onPressed: _leaveActivity,
+                      icon: const Icon(Icons.arrow_back, size: 22),
+                    ),
+              trailing: _activity == null || entries.isEmpty
+                  ? null
+                  : TextButton(
+                      onPressed: widget.deleting
+                          ? null
+                          : () => setState(() {
+                              _managing = !_managing;
+                              _selectedOffline.clear();
+                            }),
+                      child: Text(_managing ? '取消选择' : '批量管理'),
+                    ),
+              bottom: _managing && entries.isNotEmpty
+                  ? Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        TextButton(
+                          onPressed: widget.deleting
+                              ? null
+                              : () => setState(() {
+                                  if (_selectedOffline.length ==
+                                      entries.length) {
+                                    _selectedOffline.clear();
+                                  } else {
+                                    _selectedOffline.addAll(
+                                      entries.map((entry) => entry.path),
+                                    );
+                                  }
+                                }),
+                          child: Text(
+                            _selectedOffline.length == entries.length
+                                ? '取消全选'
+                                : '全选',
+                          ),
                         ),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: widget.deleting || _selectedOffline.isEmpty
-                            ? null
-                            : () => widget.onDeleteCached(
-                                entries
-                                    .where(
-                                      (entry) =>
-                                          _selectedOffline.contains(entry.path),
-                                    )
-                                    .toList(),
+                        OutlinedButton.icon(
+                          onPressed: widget.deleting || _selectedOffline.isEmpty
+                              ? null
+                              : () => widget.onDeleteCached(
+                                  entries
+                                      .where(
+                                        (entry) => _selectedOffline.contains(
+                                          entry.path,
+                                        ),
+                                      )
+                                      .toList(),
+                                ),
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: Text('删除选中 (${_selectedOffline.length})'),
+                        ),
+                      ],
+                    )
+                  : null,
+            ),
+            Expanded(
+              child: CustomScrollView(
+                key: PageStorageKey('offline-${_activity?.name ?? 'groups'}'),
+                slivers: [
+                  if (_activity == null &&
+                      (widget.caching || widget.message?.isNotEmpty == true))
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (widget.caching) ...[
+                              ArchiveProgressIndicator(
+                                value: widget.total == 0
+                                    ? null
+                                    : (progress / widget.total).clamp(0, 1),
+                                semanticsLabel: '缓存总进度',
                               ),
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        label: Text('删除选中 (${_selectedOffline.length})'),
-                      ),
-                    ],
-                  )
-                : null,
-          ),
-          Expanded(
-            child: CustomScrollView(
-              key: PageStorageKey('offline-${_activity?.name ?? 'groups'}'),
-              slivers: [
-                if (_activity == null &&
-                    (widget.caching || widget.message?.isNotEmpty == true))
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (widget.caching) ...[
-                            LinearProgressIndicator(
-                              value: widget.total == 0
-                                  ? null
-                                  : (progress / widget.total).clamp(0, 1),
-                              semanticsLabel: '缓存总进度',
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '已处理 ${widget.done} / ${widget.total} 幕',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.subtext,
-                              ),
-                            ),
-                          ],
-                          if (widget.message?.isNotEmpty == true)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: SelectableText(
-                                widget.message!,
+                              const SizedBox(height: 8),
+                              Text(
+                                '已处理 ${widget.done} / ${widget.total} 幕',
                                 style: const TextStyle(
                                   fontSize: 12,
-                                  color: AppColors.secondary,
+                                  color: AppColors.subtext,
                                 ),
                               ),
-                            ),
-                        ],
+                            ],
+                            if (widget.message?.isNotEmpty == true)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: SelectableText(
+                                  widget.message!,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.secondary,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                if (_activity == null && pending.isNotEmpty)
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                    sliver: SliverList.builder(
-                      itemCount: pending.length,
-                      itemBuilder: (context, index) => _jobTile(pending[index]),
+                  if (_activity == null && pending.isNotEmpty)
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                      sliver: SliverList.builder(
+                        itemCount: pending.length,
+                        itemBuilder: (context, index) =>
+                            _jobTile(pending[index]),
+                      ),
                     ),
-                  ),
-                if (entries.isEmpty && (_activity != null || pending.isEmpty))
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: ArchiveEmpty(
-                      icon: Icons.download_for_offline_outlined,
-                      title: '暂无离线档案',
-                      message: _activity == null
-                          ? '在剧情馆进入篇章，选择需要离线阅读的剧情。'
-                          : '这个篇章的缓存已全部删除。',
-                      action: _activity != null
-                          ? null
-                          : OutlinedButton.icon(
-                              onPressed: widget.onBrowse,
-                              icon: const Icon(
-                                Icons.library_books_outlined,
-                                size: 18,
+                  if (entries.isEmpty && (_activity != null || pending.isEmpty))
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: ArchiveEmpty(
+                        icon: Icons.download_for_offline_outlined,
+                        title: '暂无离线档案',
+                        message: _activity == null
+                            ? '在剧情馆进入篇章，选择需要离线阅读的剧情。'
+                            : '这个篇章的缓存已全部删除。',
+                        action: _activity != null
+                            ? null
+                            : OutlinedButton.icon(
+                                onPressed: widget.onBrowse,
+                                icon: const Icon(
+                                  Icons.library_books_outlined,
+                                  size: 18,
+                                ),
+                                label: const Text('前往剧情馆'),
                               ),
-                              label: const Text('前往剧情馆'),
-                            ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.all(20),
+                      sliver: SliverList.builder(
+                        itemCount: _activity == null
+                            ? offlineGroups.length
+                            : entries.length,
+                        itemBuilder: (context, index) => _activity == null
+                            ? _groupTile(offlineGroups[index])
+                            : _offlineTile(entries[index]),
+                      ),
                     ),
-                  )
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.all(20),
-                    sliver: SliverList.builder(
-                      itemCount: _activity == null
-                          ? offlineGroups.length
-                          : entries.length,
-                      itemBuilder: (context, index) => _activity == null
-                          ? _groupTile(offlineGroups[index])
-                          : _offlineTile(entries[index]),
-                    ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -340,21 +348,25 @@ class _CachePageState extends State<CachePage> {
               ],
             ),
             const SizedBox(height: 8),
-            LinearProgressIndicator(
+            ArchiveProgressIndicator(
               value: job.total == 0
                   ? (job.status == CacheJobStatus.downloading ? null : 0)
                   : (job.done / job.total).clamp(0, 1),
               semanticsLabel: '${entry.title} 缓存进度',
             ),
             const SizedBox(height: 8),
-            Text(
-              status,
-              style: TextStyle(
+            AnimatedDefaultTextStyle(
+              duration: ArchiveMotion.duration(
+                context,
+                ArchiveMotion.stateDuration,
+              ),
+              style: DefaultTextStyle.of(context).style.copyWith(
                 fontSize: 12,
                 color: job.status == CacheJobStatus.failed
                     ? AppColors.danger
                     : AppColors.subtext,
               ),
+              child: Text(status),
             ),
           ],
         ),

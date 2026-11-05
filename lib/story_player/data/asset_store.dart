@@ -156,10 +156,11 @@ class AssetStore {
     }
     try {
       final data = await _cache.read(_playbackSettingsUri);
-      if (data != null)
+      if (data != null) {
         playbackSettings = PlaybackSettings.fromJson(
           jsonDecode(utf8.decode(data)) as Map<String, dynamic>,
         );
+      }
     } catch (_) {
       // Keep defaults if saved preferences cannot be read.
     }

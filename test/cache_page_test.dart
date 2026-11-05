@@ -53,7 +53,7 @@ void main() {
     await tester.tap(find.byTooltip('播放 甲幕'));
     expect(opened, first);
     await tester.tap(find.text('批量管理'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.tap(find.text('全选'));
     await tester.pump();
     await tester.tap(find.text('删除选中 (1)'));

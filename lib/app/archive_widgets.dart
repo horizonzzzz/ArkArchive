@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'archive_motion.dart';
 import 'app_theme.dart';
 
 class ArchiveHeading extends StatelessWidget {
@@ -93,7 +94,24 @@ class ArchivePageHeader extends StatelessWidget {
                 leading: leading,
                 trailing: trailing,
               ),
-              if (bottom != null) ...[const SizedBox(height: 14), bottom!],
+              // 减少动画时直接布局，避免零时长 AnimatedSize 在布局中再次标脏。
+              if (!MediaQuery.disableAnimationsOf(context))
+                AnimatedSize(
+                  duration: ArchiveMotion.stateDuration,
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.topCenter,
+                  child: bottom == null
+                      ? const SizedBox(width: double.infinity)
+                      : Padding(
+                          padding: const EdgeInsets.only(top: 14),
+                          child: bottom!,
+                        ),
+                )
+              else if (bottom != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: bottom!,
+                ),
             ],
           ),
         ),

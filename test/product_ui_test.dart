@@ -125,6 +125,7 @@ Future<_Repository> _mount(
   WidgetTester tester, {
   Size size = const Size(390, 844),
   double textScale = 1,
+  bool reduceMotion = false,
   _Repository? repository,
 }) async {
   await tester.binding.setSurfaceSize(size);
@@ -135,8 +136,10 @@ Future<_Repository> _mount(
     MaterialApp(
       theme: buildAppTheme(),
       builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context)
-            .copyWith(textScaler: TextScaler.linear(textScale)),
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(textScale),
+          disableAnimations: reduceMotion,
+        ),
         child: child!,
       ),
       home: StoryLauncher(repository: repo),
@@ -147,6 +150,46 @@ Future<_Repository> _mount(
 }
 
 void main() {
+  for (final reduceMotion in [false, true]) {
+    testWidgets('快速切换保留搜索与章节状态，减少动画：$reduceMotion', (tester) async {
+      final repo = await _mount(tester, reduceMotion: reduceMotion);
+      await tester.enterText(find.byKey(const Key('story-search')), '行动后');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('系统设置').last);
+      await tester.pump();
+      await tester.tap(find.text('音频通道'));
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(find.byTooltip('返回设置分类'), findsOneWidget);
+      await tester.tap(find.text('离线与缓存').last);
+      await tester.pump();
+      await tester.tap(find.text('剧情馆').last);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('story-search')))
+            .controller!
+            .text,
+        '行动后',
+      );
+      await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
+      await tester.pump();
+      expect(find.byKey(const Key('chapter-header')), findsOneWidget);
+      expect(find.byKey(const ValueKey('main/14-1')), findsNothing);
+      expect(find.byKey(const ValueKey('main/14-1-end')), findsOneWidget);
+      await tester.tap(find.text('选择'));
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('系统设置').last);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('返回设置分类'), findsNothing);
+      expect(find.text('音频通道'), findsOneWidget);
+      expect(repo.indexCalls, 1);
+      expect(repo.entryCalls, 0);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final size in [
     const Size(1440, 900),
     const Size(1100, 700),

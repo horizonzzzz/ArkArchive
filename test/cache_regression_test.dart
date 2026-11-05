@@ -112,7 +112,7 @@ Future<void> startQueue(WidgetTester tester, QueueRepository repository) async {
   await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
   await tester.pumpAndSettle();
   await tester.tap(find.text('选择'));
-  await tester.pump();
+  await tester.pumpAndSettle();
   await tester.ensureVisible(find.text('全选本章'));
   await tester.tap(find.text('全选本章'));
   await tester.pump();
@@ -167,6 +167,7 @@ void main() {
     );
     job.done = 3;
     await render();
+    await tester.pumpAndSettle();
     expect(
       tester
           .widgetList<LinearProgressIndicator>(
@@ -208,7 +209,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('offline-其他离线剧情')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('批量管理'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.tap(find.text('全选'));
     await tester.pump();
     await tester.tap(find.text('删除选中 (2)'));
@@ -233,7 +234,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('选择'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('全选本章'));
     await tester.tap(find.text('全选本章'));
     await tester.pump();
@@ -300,7 +301,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('选择'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('全选本章'));
     await tester.tap(find.text('全选本章'));
     await tester.pump();
@@ -413,7 +414,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('offline-其他离线剧情')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('批量管理'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     await tester.tap(find.text('全选'));
     await tester.pump();
     await tester.tap(find.text('删除选中 (1)'));

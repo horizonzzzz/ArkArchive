@@ -6,6 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../story_player/story_player.dart';
 import 'app_theme.dart';
+import 'archive_motion.dart';
 import 'archive_widgets.dart';
 import 'cache_page.dart';
 import 'cache_job.dart';
@@ -686,61 +687,66 @@ class _StoryLauncherState extends State<StoryLauncher> {
                       child: Column(
                         children: [
                           Expanded(
-                            child: IndexedStack(
-                              index: _page,
-                              children: [
-                                _library(desktop),
-                                CachePage(
-                                  // 新批次切回总览，即使缓存立即完成也不依赖中间帧。
-                                  key: ValueKey('cache-batch-$_cacheBatchId'),
-                                  groups: _groups ?? const [],
-                                  active: _page == 1,
-                                  cached: [
-                                    for (final group
-                                        in _groups ?? <StoryGroup>[])
-                                      ...group.entries.where(
-                                        (entry) => _cached.contains(entry.path),
-                                      ),
-                                  ],
-                                  caching: _caching,
-                                  done: _cachedDone,
-                                  total: _cachedTotal,
-                                  message: _cacheMessage,
-                                  onRetry: _retryFailedCacheJobs,
-                                  onOpen: _open,
-                                  jobs: _cacheJobs,
-                                  onToggleJob: _toggleCacheJob,
-                                  onRemoveJob: _removeCacheJob,
-                                  onDeleteCached: _deleteCached,
-                                  deleting: _deletingCache,
-                                  onBrowse: () => setState(() {
-                                    _page = 0;
-                                    _activeGroup = null;
-                                  }),
-                                ),
-                                SettingsPage(
-                                  active: _page == 2,
-                                  settings: _repository.store.playbackSettings,
-                                  onSettingsChanged: _changePlaybackSettings,
-                                  probe: _repository.store.probe,
-                                  concurrency: _repository.store.concurrency,
-                                  onConcurrencyChanged: _changeConcurrency,
-                                  concurrencyBusy: _movingDirectory,
-                                  isMobile: _repository.store.isMobile,
-                                  isDesktop: _repository.store.isDesktop,
-                                  caching: _caching,
-                                  cacheBytes: _cacheBytes,
-                                  cacheLocation: _cacheLocation,
-                                  onOpenDirectory: _openCacheDirectory,
-                                  onMoveDirectory: _moveCacheDirectory,
-                                  onClearCache: _clearCache,
-                                  directoryBusy:
-                                      _movingDirectory ||
-                                      _caching ||
-                                      _deletingCache ||
-                                      _busy,
-                                ),
-                              ],
+                            child: ArchivePageTransition(
+                              transitionKey: _page,
+                              child: IndexedStack(
+                                index: _page,
+                                children: [
+                                  _library(desktop),
+                                  CachePage(
+                                    // 新批次切回总览，即使缓存立即完成也不依赖中间帧。
+                                    key: ValueKey('cache-batch-$_cacheBatchId'),
+                                    groups: _groups ?? const [],
+                                    active: _page == 1,
+                                    cached: [
+                                      for (final group
+                                          in _groups ?? <StoryGroup>[])
+                                        ...group.entries.where(
+                                          (entry) =>
+                                              _cached.contains(entry.path),
+                                        ),
+                                    ],
+                                    caching: _caching,
+                                    done: _cachedDone,
+                                    total: _cachedTotal,
+                                    message: _cacheMessage,
+                                    onRetry: _retryFailedCacheJobs,
+                                    onOpen: _open,
+                                    jobs: _cacheJobs,
+                                    onToggleJob: _toggleCacheJob,
+                                    onRemoveJob: _removeCacheJob,
+                                    onDeleteCached: _deleteCached,
+                                    deleting: _deletingCache,
+                                    onBrowse: () => setState(() {
+                                      _page = 0;
+                                      _activeGroup = null;
+                                    }),
+                                  ),
+                                  SettingsPage(
+                                    active: _page == 2,
+                                    settings:
+                                        _repository.store.playbackSettings,
+                                    onSettingsChanged: _changePlaybackSettings,
+                                    probe: _repository.store.probe,
+                                    concurrency: _repository.store.concurrency,
+                                    onConcurrencyChanged: _changeConcurrency,
+                                    concurrencyBusy: _movingDirectory,
+                                    isMobile: _repository.store.isMobile,
+                                    isDesktop: _repository.store.isDesktop,
+                                    caching: _caching,
+                                    cacheBytes: _cacheBytes,
+                                    cacheLocation: _cacheLocation,
+                                    onOpenDirectory: _openCacheDirectory,
+                                    onMoveDirectory: _moveCacheDirectory,
+                                    onClearCache: _clearCache,
+                                    directoryBusy:
+                                        _movingDirectory ||
+                                        _caching ||
+                                        _deletingCache ||
+                                        _busy,
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -818,6 +824,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       NavigationBar(
+                        animationDuration: ArchiveMotion.duration(
+                          context,
+                          ArchiveMotion.stateDuration,
+                        ),
                         selectedIndex: _page,
                         onDestinationSelected: (value) =>
                             setState(() => _page = value),
@@ -1010,7 +1020,13 @@ class _StoryLauncherState extends State<StoryLauncher> {
               ],
             ),
           ),
-        Expanded(child: active == null ? catalog : _chapterDetail(active)),
+        Expanded(
+          child: ArchivePageTransition(
+            transitionKey: (active?.name, active?.entryType, _category),
+            depth: active == null ? 0 : 1,
+            child: active == null ? catalog : _chapterDetail(active),
+          ),
+        ),
       ],
     );
   }
@@ -1019,7 +1035,12 @@ class _StoryLauncherState extends State<StoryLauncher> {
     for (var i = 0; i < _categories.length; i++)
       Semantics(
         selected: _category == i,
-        child: DecoratedBox(
+        child: AnimatedContainer(
+          duration: ArchiveMotion.duration(
+            context,
+            ArchiveMotion.stateDuration,
+          ),
+          curve: Curves.easeOutCubic,
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
