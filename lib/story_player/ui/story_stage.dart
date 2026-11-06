@@ -18,7 +18,9 @@ class StoryStage extends StatelessWidget {
     this.slideMaskShader,
     this.sprites = const {},
     this.fontFamily = 'StoryNotoSans',
-    this.onFastForwardChanged,
+    this.onFastForwardStart,
+    this.onFastForwardMove,
+    this.onFastForwardEnd,
   });
   final StoryEngine engine;
   final MediaCatalog catalog;
@@ -27,7 +29,12 @@ class StoryStage extends StatelessWidget {
   final String fontFamily;
   final ui.FragmentShader? slideMaskShader;
   final Map<String, ui.Image> sprites;
-  final ValueChanged<bool>? onFastForwardChanged;
+
+  /// 长按快进：按下进入 2 倍速，按住下滑提升到 4/8/16 倍，松手结束。
+  /// 均回传全局坐标，供播放器把下滑距离换算为倍速档位。
+  final void Function(Offset globalPosition)? onFastForwardStart;
+  final ValueChanged<Offset>? onFastForwardMove;
+  final VoidCallback? onFastForwardEnd;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -73,19 +80,20 @@ class StoryStage extends StatelessWidget {
             behavior: HitTestBehavior.opaque,
             onTap: engine.advance,
             onLongPressStart:
-                onFastForwardChanged != null &&
+                onFastForwardStart != null &&
                     engine.cursor > 0 &&
                     !engine.finished &&
                     !engine.paused &&
                     s.choices.isEmpty
-                ? (_) => onFastForwardChanged!(true)
+                ? (details) => onFastForwardStart!(details.globalPosition)
                 : null,
-            onLongPressEnd: onFastForwardChanged == null
+            onLongPressMoveUpdate: onFastForwardMove == null
                 ? null
-                : (_) => onFastForwardChanged!(false),
-            onLongPressCancel: onFastForwardChanged == null
+                : (details) => onFastForwardMove!(details.globalPosition),
+            onLongPressEnd: onFastForwardEnd == null
                 ? null
-                : () => onFastForwardChanged!(false),
+                : (_) => onFastForwardEnd!(),
+            onLongPressCancel: onFastForwardEnd,
             child: Stack(
               fit: StackFit.expand,
               children: [

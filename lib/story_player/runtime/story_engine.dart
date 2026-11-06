@@ -423,8 +423,11 @@ class StoryEngine extends ChangeNotifier {
   bool get typing => state.dialogueVisible && state.revealed < totalCharacters;
   bool get waitingInput => _waitingInput;
 
-  bool _fastForwarding = false;
-  bool get fastForwarding => _fastForwarding;
+  /// 临时快进倍率：0 表示关闭；2/4/8/16 表示按住长按期间剧情时钟的倍速。
+  /// 长按期间手动模式（default）也会临时自动推进对白，松手即停，不改动 autoMode。
+  int _fastForwarding = 0;
+  bool get fastForwarding => _fastForwarding > 0;
+  int get fastForwardMultiplier => _fastForwarding;
   double _lastClockUs = 0, _playbackUs = 0;
 
   PlaySpeed get currentSpeed => switch (autoMode) {
@@ -448,11 +451,14 @@ class StoryEngine extends ChangeNotifier {
     _ => defaultSpeed,
   };
 
-  void setFastForward(bool value) {
+  /// 设置临时快进倍率；小于 2 视为关闭。切换前先按旧倍率结算已过时间。
+  void setFastForward(int multiplier) {
+    final value = multiplier >= 2 ? multiplier : 0;
     if (_fastForwarding == value || _disposed) return;
     // 先按旧倍率结算，避免把上次 tick 后的时间误算到新倍率。
     _lastTick = _nowUs();
     _fastForwarding = value;
+    if (value == 0 && autoMode == 'default') _autoClickAt = -1;
     _changed();
   }
 
@@ -460,7 +466,7 @@ class StoryEngine extends ChangeNotifier {
     final clockUs =
         (elapsed?.call().inMicroseconds ?? _clock.elapsedMicroseconds) + .0;
     // 所有演出共用逻辑时钟，使运行中的动画和等待也能即时切换倍率。
-    _playbackUs += (clockUs - _lastClockUs) * (_fastForwarding ? 2 : 1);
+    _playbackUs += (clockUs - _lastClockUs) * (_fastForwarding > 0 ? _fastForwarding : 1);
     _lastClockUs = clockUs;
     return _playbackUs;
   }
@@ -668,7 +674,7 @@ class StoryEngine extends ChangeNotifier {
         !running &&
         !finished &&
         state.choices.isEmpty &&
-        autoMode != 'default') {
+        (autoMode != 'default' || _fastForwarding > 0)) {
       if (_autoClickAt < 0) {
         _autoClickAt =
             now +

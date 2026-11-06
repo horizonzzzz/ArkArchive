@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../app/app_theme.dart';
 import '../data/media_catalog.dart';
 import '../data/playback_progress.dart';
 import '../data/story_repository.dart';
@@ -44,9 +45,14 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   ui.Image? slideMask;
   static const fontFamily = 'StoryNotoSans';
   bool ready = false;
-  bool _fastForwarding = false;
+  int _fastForwarding = 0;
   bool _resumeFailed = false, _progressErrorReported = false;
   int _savedRevision = 0;
+
+  /// 长按快进档位与换挡步长：每下滑一步（64 逻辑像素）提升一档。
+  static const _fastForwardSpeeds = [2, 4, 8, 16];
+  static const _fastForwardSlideStep = 64.0;
+  Offset? _fastForwardOrigin;
 
   @override
   void initState() {
@@ -191,7 +197,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _setFastForward(false);
+    _fastForwardEnd();
     if (state != AppLifecycleState.resumed) {
       unawaited(_saveProgress(force: true));
     }
@@ -226,7 +232,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   }
 
   Future<void> _showLog({bool diagnostics = false}) async {
-    _setFastForward(false);
+    _fastForwardEnd();
     final wasPaused = engine.paused;
     await engine.setPaused(true);
     if (!mounted) return;
@@ -276,10 +282,32 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     if (mounted && !wasPaused) await engine.setPaused(false);
   }
 
-  void _setFastForward(bool value) {
-    if (!mounted || _fastForwarding == value) return;
-    engine.setFastForward(value);
-    setState(() => _fastForwarding = value);
+  void _setFastForward(int multiplier) {
+    if (!mounted || _fastForwarding == multiplier) return;
+    engine.setFastForward(multiplier);
+    setState(() => _fastForwarding = multiplier);
+  }
+
+  /// 长按开始：进入 2 倍速快进；手动模式下剧情也会自动推进。
+  void _fastForwardStart(Offset globalPosition) {
+    _fastForwardOrigin = globalPosition;
+    _setFastForward(2);
+  }
+
+  /// 按住下滑换挡：每下滑一步提升一档，上滑回退。
+  void _fastForwardMove(Offset globalPosition) {
+    final origin = _fastForwardOrigin;
+    if (origin == null || _fastForwarding == 0) return;
+    final level =
+        ((globalPosition.dy - origin.dy) / _fastForwardSlideStep)
+            .clamp(0.0, 3.0)
+            .toInt();
+    _setFastForward(_fastForwardSpeeds[level]);
+  }
+
+  void _fastForwardEnd() {
+    _fastForwardOrigin = null;
+    _setFastForward(0);
   }
 
   Widget _overlayButton({
@@ -315,7 +343,9 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                 slideMaskShader: slideMaskShader,
                 sprites: sprites,
                 fontFamily: fontFamily,
-                onFastForwardChanged: _setFastForward,
+                onFastForwardStart: _fastForwardStart,
+                onFastForwardMove: _fastForwardMove,
+                onFastForwardEnd: _fastForwardEnd,
               ),
             ),
           if (!ready)
@@ -389,29 +419,14 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                 );
               },
             ),
-          if (_fastForwarding)
+          if (_fastForwarding > 0)
             Positioned.fill(
               child: IgnorePointer(
-                child: Center(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
-                      child: Text(
-                        '2× 加速中',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 24),
+                    child: _FastForwardSpeedPanel(selected: _fastForwarding),
                   ),
                 ),
               ),
@@ -502,4 +517,150 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     super.dispose();
   }
+}
+
+/// 长按快进时的倍速面板：竖向列出 2/4/8/16 倍速，样式对齐官方播放器——
+/// 淡灰色半透明边框、框内近乎透明、直角；选中项为略粗的白色框，
+/// 仅向右突出并承载快进图标；文字统一白色。
+class _FastForwardSpeedPanel extends StatelessWidget {
+  const _FastForwardSpeedPanel({required this.selected});
+
+  final int selected;
+  static const speeds = [2, 4, 8, 16];
+  static const _itemExtent = 44.0;
+  static const _width = 108.0;
+
+  /// 选中框向右突出宽度（约为面板宽的 20%）。
+  static const _protrusion = 20.0;
+  static const _edgeColor = Color(0x59ffffff); // 淡灰描边：白 35%
+  static const _panelFill = Color(0x38000000); // 近乎透明底：黑 22%
+  static const _frameFill = Color(0x59000000); // 选中底：黑 35%
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedIndex = speeds.indexOf(selected);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 120),
+      curve: Curves.easeOut,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(
+          offset: Offset(8 * (1 - t), 0),
+          child: child,
+        ),
+      ),
+      child: Semantics(
+        label: '长按快进中，当前 $selected x倍速，下滑提升倍速',
+        liveRegion: true,
+        child: SizedBox(
+          width: _width,
+          height: speeds.length * _itemExtent,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // 面板主体：左边框、上下边框；右边框避开选中档位，由外凸白框跨越。
+              Positioned.fill(
+                child: DecoratedBox(
+                  key: const Key('fast-forward-speed-panel'),
+                  decoration: const BoxDecoration(
+                    color: _panelFill,
+                    border: Border(
+                      top: BorderSide(color: _edgeColor),
+                      left: BorderSide(color: _edgeColor),
+                      bottom: BorderSide(color: _edgeColor),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      for (final speed in speeds)
+                        SizedBox(
+                          key: ValueKey('fast-forward-speed-$speed'),
+                          width: double.infinity,
+                          height: _itemExtent,
+                          // 选中档位由下方外凸白框绘制。
+                          child: speed == selected
+                              ? null
+                              : Center(child: _label(speed)),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              // 右边框分段补齐：选中档位上下各留空。
+              if (selectedIndex > 0)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  width: 1,
+                  height: selectedIndex * _itemExtent,
+                  child: const ColoredBox(color: _edgeColor),
+                ),
+              if (selectedIndex < speeds.length - 1)
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  width: 1,
+                  height: (speeds.length - selectedIndex - 1) * _itemExtent,
+                  child: const ColoredBox(color: _edgeColor),
+                ),
+              // 选中档位：白色 2px 直角框，向右突出并承载快进图标。
+              Positioned(
+                left: 0,
+                top: selectedIndex * _itemExtent,
+                width: _width + _protrusion,
+                height: _itemExtent,
+                child: DecoratedBox(
+                  key: const Key('fast-forward-speed-selected-frame'),
+                  decoration: BoxDecoration(
+                    color: _frameFill,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(child: Center(child: _label(selected))),
+                      const Padding(
+                        padding: EdgeInsets.only(right: 4),
+                        child: Icon(
+                          Icons.fast_forward,
+                          size: 20,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _label(int speed) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(
+        '${speed}x',
+        style: TextStyle(
+          fontFamily: AppTypography.bender,
+          fontFamilyFallback: const [AppTypography.sans],
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          letterSpacing: .5,
+          color: Colors.white,
+        ),
+      ),
+      const SizedBox(width: 4),
+      Text(
+        '倍速',
+        style: TextStyle(
+          fontFamily: AppTypography.sans,
+          fontSize: 11,
+          color: Colors.white,
+        ),
+      ),
+    ],
+  );
 }

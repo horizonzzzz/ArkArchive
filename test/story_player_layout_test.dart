@@ -57,7 +57,7 @@ void main() {
     expect(find.byTooltip('速度'), findsNothing);
     expect(find.byTooltip('快速模式'), findsNothing);
     expect(find.byTooltip('暂停'), findsNothing);
-    expect(find.text('2× 加速中'), findsNothing);
+    expect(find.byKey(const Key('fast-forward-speed-panel')), findsNothing);
     expect(
       tester.getSize(find.byType(StoryStage)),
       tester.getSize(find.byType(Scaffold)),
@@ -95,7 +95,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('长按舞台显示二倍速，松手恢复且不推进剧情', (tester) async {
+  testWidgets('长按舞台进入快进并显示倍速面板，下滑换挡，松手恢复手动', (tester) async {
     final stage = await openPlayer(tester);
     final hold = await tester.startGesture(
       tester.getCenter(find.byKey(const Key('story-stage'))),
@@ -103,15 +103,69 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(stage.engine.fastForwarding, isFalse);
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('2× 加速中'), findsOneWidget);
     expect(stage.engine.fastForwarding, isTrue);
+    expect(stage.engine.fastForwardMultiplier, 2);
+    expect(find.byKey(const Key('fast-forward-speed-panel')), findsOneWidget);
+    for (final label in ['2x', '4x', '8x', '16x']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.text('倍速'), findsNWidgets(4));
+    // 面板样式对齐参考：淡灰描边、近乎透明底、直角，右边框在选中档位处留空。
+    final panelRect = tester.getRect(
+      find.byKey(const Key('fast-forward-speed-panel')),
+    );
+    final panelDecoration =
+        tester
+            .widget<DecoratedBox>(
+              find.byKey(const Key('fast-forward-speed-panel')),
+            )
+            .decoration as BoxDecoration;
+    expect(panelDecoration.color, const Color(0x38000000));
+    expect(panelDecoration.border?.top.color, const Color(0x59ffffff));
+    expect((panelDecoration.border as Border).right, BorderSide.none);
+    expect(panelDecoration.borderRadius, isNull);
+    // 选中档位：白色 2px 直角框，向右突出约 20%，突出区带快进图标。
+    Rect frameRect() => tester.getRect(
+      find.byKey(const Key('fast-forward-speed-selected-frame')),
+    );
+    final frameDecoration =
+        tester
+            .widget<DecoratedBox>(
+              find.byKey(const Key('fast-forward-speed-selected-frame')),
+            )
+            .decoration as BoxDecoration;
+    expect(frameDecoration.color, const Color(0x59000000));
+    expect(frameDecoration.border?.top.color, Colors.white);
+    expect(frameDecoration.border?.top.width, 2);
+    expect(tester.getSize(
+      find.byKey(const Key('fast-forward-speed-selected-frame')),
+    ), const Size(128, 44));
+    expect(frameRect().top, panelRect.top);
+    expect(frameRect().right, greaterThan(panelRect.right));
+    expect(find.byIcon(Icons.fast_forward), findsOneWidget);
+    // 按住下滑换挡：每 64 逻辑像素一档，上滑回退。
+    await hold.moveBy(const Offset(0, 70));
+    await tester.pump();
+    expect(stage.engine.fastForwardMultiplier, 4);
+    expect(frameRect().top, panelRect.top + 44);
+    await hold.moveBy(const Offset(0, 62));
+    await tester.pump();
+    expect(stage.engine.fastForwardMultiplier, 8);
+    expect(frameRect().top, panelRect.top + 88);
+    await hold.moveBy(const Offset(0, 60));
+    await tester.pump();
+    expect(stage.engine.fastForwardMultiplier, 16);
+    expect(frameRect().top, panelRect.top + 132);
+    await hold.moveBy(const Offset(0, -132));
+    await tester.pump();
+    expect(stage.engine.fastForwardMultiplier, 2);
+    expect(frameRect().top, panelRect.top);
     await hold.up();
     await tester.pump();
-    expect(find.text('2× 加速中'), findsNothing);
     expect(stage.engine.fastForwarding, isFalse);
-    expect(stage.engine.state.text, '第一句');
-    expect(stage.engine.state.history, hasLength(1));
+    expect(find.byKey(const Key('fast-forward-speed-panel')), findsNothing);
     expect(stage.engine.autoMode, 'default');
+    expect(find.text('2x'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -124,14 +178,14 @@ void main() {
     await cancelled.cancel();
     await tester.pump();
     expect(stage.engine.fastForwarding, isFalse);
-    expect(find.text('2× 加速中'), findsNothing);
+    expect(find.byKey(const Key('fast-forward-speed-panel')), findsNothing);
     final hold = await tester.startGesture(center);
     await tester.pump(const Duration(milliseconds: 600));
     expect(stage.engine.fastForwarding, isTrue);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     await tester.pump();
     expect(stage.engine.fastForwarding, isFalse);
-    expect(find.text('2× 加速中'), findsNothing);
+    expect(find.byKey(const Key('fast-forward-speed-panel')), findsNothing);
     await hold.up();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -145,7 +199,7 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 600));
       expect(stage.engine.fastForwarding, isFalse);
-      expect(find.text('2× 加速中'), findsNothing);
+      expect(find.byKey(const Key('fast-forward-speed-panel')), findsNothing);
       await hold.cancel();
       await tester.pump();
     }
