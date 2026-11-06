@@ -1,5 +1,22 @@
 // 根据 PRTS 活动一览生成，优先使用原活动的图片。
 const activityImages = <String, String>{
+  'rogue_0': 'https://media.prts.wiki/thumb/e/e4/活动预告_夏活2020_08.jpg/650px-活动预告_夏活2020_08.jpg?v=gh5tv00jjacgch4km7n82p7h54h9bcw',
+  'special': 'https://media.prts.wiki/thumb/7/74/活动预告_罗德岛防御协议_01.jpg/650px-活动预告_罗德岛防御协议_01.jpg?v=f7fzq86hzvm2t719kf9wz321a7kjmkm',
+  'crisis': 'https://media.prts.wiki/thumb/a/ad/危机合约-限时活动.jpg/650px-危机合约-限时活动.jpg?v=qx6v251br0d0uaatsibw2lg4d2019dz',
+  'act1lock': 'https://media.prts.wiki/thumb/9/97/活动预告_荷谟伊智境_01.jpg/650px-活动预告_荷谟伊智境_01.jpg?v=ejr134q9rrmthwccb20pj4s797pu1jg',
+  'apf2020': 'https://media.prts.wiki/thumb/4/43/标题图_四月辑录2020.png/650px-标题图_四月辑录2020.png?v=d3eylauarwc56zrmm6fksgo8r0ovi60',
+  'apf2021': 'https://media.prts.wiki/thumb/3/38/标题图_四月辑录2021.png/650px-标题图_四月辑录2021.png?v=cmyp4d7qeoolqf0xvlx3lj8g5ywu72r',
+  'act3fun': 'https://media.prts.wiki/thumb/6/61/标题图_四月辑录2022.png/650px-标题图_四月辑录2022.png?v=f9m5e59q8s2vgj2hahw3rzwnlin5vjh',
+  'act4fun': 'https://media.prts.wiki/thumb/0/05/标题图_四月辑录2023.png/650px-标题图_四月辑录2023.png?v=k03dstuwth7ujyel1ek4xxmkz778pi5',
+  'act5fun': 'https://media.prts.wiki/thumb/0/0d/标题图_四月辑录2024.png/650px-标题图_四月辑录2024.png?v=p4nfsi29uzmu6ec8vues7d5y8dac9jq',
+  'act6fun': 'https://media.prts.wiki/thumb/0/07/标题图_四月辑录2025.png/650px-标题图_四月辑录2025.png?v=pjlso48kicsqk9eqri3x03wr7koupv7',
+  'act7fun': 'https://media.prts.wiki/thumb/0/02/标题图_四月辑录2026.png/650px-标题图_四月辑录2026.png?v=8t4uvdi7rx6aq5eql61fsrpb16hlwb4',
+  'rogue_1': 'https://media.prts.wiki/thumb/b/bd/主题图_傀影与猩红孤钻.png/650px-主题图_傀影与猩红孤钻.png?v=9ocfa7i1e6p4njcxqwtnwwhlnci52un',
+  'rogue_2': 'https://media.prts.wiki/thumb/e/e5/主题图_水月与深蓝之树.png/650px-主题图_水月与深蓝之树.png?v=lokaqqpkduqsx6sye3ny9y9xuucn4xd',
+  'rogue_3': 'https://media.prts.wiki/thumb/f/f7/主题图_探索者的银凇止境.png/650px-主题图_探索者的银凇止境.png?v=ndpojko5ghh1a207qc2xmhuzsdi1m1h',
+  'rogue_4': 'https://media.prts.wiki/thumb/f/fb/主题图_萨卡兹的无终奇语.png/650px-主题图_萨卡兹的无终奇语.png?v=nrp8ofm1tvmiv708ey60uq6okelva1k',
+  'rogue_5': 'https://media.prts.wiki/thumb/d/d8/主题图_岁的界园志异.png/650px-主题图_岁的界园志异.png?v=0qxv3gw1cy7d5ni130tgemkn9vuy9cd',
+  'rogue_6': 'https://media.prts.wiki/thumb/d/d0/主题图_沉沦者的黑流树海.png/650px-主题图_沉沦者的黑流树海.png?v=7fatps5o4cgxoelvjo9pydkc53mcia1',
   '1stact': 'https://media.prts.wiki/thumb/2/2e/%E9%AA%91%E5%85%B5%E4%B8%8E%E7%8C%8E%E4%BA%BA-%E9%A2%84%E5%91%8A%E5%85%AC%E5%91%8A.png/650px-%E9%AA%91%E5%85%B5%E4%B8%8E%E7%8C%8E%E4%BA%BA-%E9%A2%84%E5%91%8A%E5%85%AC%E5%91%8A.png?v=i3rmj8ikpcs9myiggj4zx3dhucjdd1c', // 骑兵与猎人
   'act3d0': 'https://media.prts.wiki/thumb/3/34/%E6%B4%BB%E5%8A%A8%E9%A2%84%E5%91%8A-%E7%81%AB%E8%93%9D%E4%B9%8B%E5%BF%83%E6%B4%BB%E5%8A%A8.png/650px-%E6%B4%BB%E5%8A%A8%E9%A2%84%E5%91%8A-%E7%81%AB%E8%93%9D%E4%B9%8B%E5%BF%83%E6%B4%BB%E5%8A%A8.png?v=pqko5clgf5d7kjpio0uqsynwe8qpn8l', // 火蓝之心
   'act5d0': 'https://media.prts.wiki/thumb/c/c2/%E5%96%A7%E9%97%B9%E6%B3%95%E5%88%99-%E9%99%90%E6%97%B6%E6%B4%BB%E5%8A%A8.jpg/650px-%E5%96%A7%E9%97%B9%E6%B3%95%E5%88%99-%E9%99%90%E6%97%B6%E6%B4%BB%E5%8A%A8.jpg?v=lwla9guuladk48jn74kjq190w9x8ct4', // 喧闹法则

@@ -600,7 +600,12 @@ void main() {
     );
     addTearDown(offline.close);
     final offlineRepository = StoryRepository(offline);
-    expect(await offlineRepository.loadIndex(), isEmpty);
+    expect(
+      (await offlineRepository.loadIndex()).every(
+        (group) => group.entryType == 'GAMEPLAY',
+      ),
+      isTrue,
+    );
     final document = await offlineRepository.loadEntry(entry);
     expect(document.script.commands.single.text, '对白');
     expect((await offlineRepository.prepare(document)).warnings, isEmpty);
@@ -611,6 +616,38 @@ void main() {
       throwsA(isA<http.ClientException>()),
     );
     expect(await repository.cachedStories(), isNot(contains(missing.path)));
+  });
+  test('PRTS 剧情页可缓存并离线读取', () async {
+    final cache = MemoryCache();
+    const entry = StoryEntry('序章', 'https://prts.wiki/w/RO-BEG/NBT');
+    final store = AssetStore(
+      cache: cache,
+      client: MockClient(
+        (request) async => request.url.host == 'prts.wiki'
+            ? http.Response(
+                jsonEncode({
+                  'parse': {
+                    'text': {'*': '<pre id="datas_txt">[name="甲"]对白</pre>'},
+                  },
+                }),
+                200,
+                headers: {'content-type': 'text/html; charset=utf-8'},
+              )
+            : http.Response('{}', 200),
+      ),
+    );
+    addTearDown(store.close);
+    final repository = StoryRepository(store);
+    expect(await repository.cacheEntry(entry), isEmpty);
+    expect(await repository.cachedStories(), contains(entry.path));
+    final offline = AssetStore(
+      cache: cache,
+      client: MockClient((_) async => throw http.ClientException('离线')),
+    );
+    addTearDown(offline.close);
+    final document = await StoryRepository(offline).loadEntry(entry);
+    expect(document.title, '序章');
+    expect(document.script.commands.single.text, '对白');
   });
   test('删除单幕只回收独占素材，保留其他离线剧情共用资源', () async {
     final cache = MemoryCache();
@@ -779,12 +816,77 @@ void main() {
     expect(cache.data[shared], isNotNull);
     expect(await repository.cachedStories(), {'test/old'});
   });
+  test('玩法目录在线更新并在断网时使用上次成功结果', () async {
+    final cache = MemoryCache();
+    var version = '旧结局';
+    var offline = false;
+    final store = AssetStore(
+      cache: cache,
+      client: MockClient((request) async {
+        if (request.url == StoryRepository.gameplayIndexUri) {
+          if (offline) throw http.ClientException('离线');
+          return http.Response(
+            jsonEncode({
+              'parse': {
+                'text': {
+                  '*':
+                      '<table><tr><th>活动剧情一览</th></tr><tr><th rowspan="1">集成战略</th><th>新主题</th><td><a href="/w/NEW/NBT">$version</a></td></tr></table>',
+                },
+              },
+            }),
+            200,
+            headers: {'content-type': 'text/html; charset=utf-8'},
+          );
+        }
+        return http.Response('{}', 200);
+      }),
+    );
+    addTearDown(store.close);
+    final repository = StoryRepository(store);
+    expect((await repository.loadIndex()).single.entries.single.title, '旧结局');
+    version = '新结局';
+    expect((await repository.loadIndex()).single.entries.single.title, '新结局');
+    offline = true;
+    expect((await repository.loadIndex()).single.entries.single.title, '新结局');
+    await repository.clearCache();
+    expect((await repository.loadIndex()).single.entries.single.title, '新结局');
+  });
   test(
     'PRTS HTML 从 datas_txt 提取脚本；索引使用实际 storyTxt 且不按 storyCanShow 过滤',
     () async {
       final store = AssetStore(
         cache: MemoryCache(),
         client: MockClient((r) async {
+          if (r.url == StoryRepository.gameplayIndexUri) {
+            return http.Response(
+              jsonEncode({
+                'parse': {
+                  'text': {
+                    '*': '''<table><tr><th>活动剧情一览</th></tr>
+              <tr><th rowspan="2">特殊</th><th>剧情</th><td><a href="/w/Test/END">多维合作</a></td></tr>
+              <tr><th>危机合约</th><td><a href="/w/CC/NBT">危机合约</a></td></tr>
+              <tr><th rowspan="2">集成战略</th><th>刻俄柏的灰蕈迷境</th><td><a href="/w/RO-BEG/NBT">序章</a></td></tr>
+              <tr><th>新增主题</th><td><a href="/w/NEW/NBT">新结局</a></td></tr>
+              <tr><th rowspan="1">生息演算</th><th>不包含</th><td><a href="/w/OTHER">其他</a></td></tr>
+            </table>''',
+                  },
+                },
+              }),
+              200,
+              headers: {'content-type': 'text/html; charset=utf-8'},
+            );
+          }
+          if (r.url.path == '/api.php') {
+            return http.Response(
+              jsonEncode({
+                'parse': {
+                  'text': {'*': '<pre id="datas_txt">[name="甲"]对白</pre>'},
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          }
           if (r.url.host == 'prts.wiki') {
             return http.Response(
               '<h1 id="firstHeading">测试剧情</h1><pre id="datas_txt">[name="甲"]对白</pre>',
@@ -828,18 +930,37 @@ void main() {
       expect(story.title, '测试剧情');
       expect(story.script.commands.single.text, '对白');
       final groups = await repository.loadIndex();
-      expect(groups.single.name, '测试章节');
-      expect(groups.single.id, 'chapter-id');
+      expect(groups.first.name, '测试章节');
+      expect(groups.first.id, 'chapter-id');
       // storyCanShow=0 的主线与干员密录同样进目录，否则整类剧情会被滤掉。
-      expect(groups.single.entries.map((e) => e.path), [
+      expect(groups.first.entries.map((e) => e.path), [
         'obt/test/story',
         'obt/test/hidden',
       ]);
-      expect(groups.single.entries.first.title, 'TEST 测试 行动前');
-      expect(groups.single.entryType, 'MAINLINE');
-      expect(groups.single.entries.first.code, 'TEST');
-      expect(groups.single.entries.first.name, '测试');
-      expect(groups.single.entries.first.tag, '行动前');
+      expect(groups.first.entries.first.title, 'TEST 测试 行动前');
+      expect(groups.first.entryType, 'MAINLINE');
+      expect(groups.first.entries.first.code, 'TEST');
+      expect(groups.first.entries.first.name, '测试');
+      expect(groups.first.entries.first.tag, '行动前');
+      final gameplay = groups
+          .where((group) => group.entryType == 'GAMEPLAY')
+          .toList();
+      expect(gameplay.map((group) => group.name), [
+        '特殊',
+        '危机合约',
+        '刻俄柏的灰蕈迷境',
+        '新增主题',
+      ]);
+      final ro0 = gameplay.singleWhere((group) => group.id == 'rogue_0');
+      expect(ro0.entries.single.path, 'https://prts.wiki/w/RO-BEG/NBT');
+      expect(
+        (await repository.loadEntry(ro0.entries.single))
+            .script
+            .commands
+            .single
+            .text,
+        '对白',
+      );
       expect(const StoryGroup('旧调用', []).entryType, 'NONE');
       expect(const StoryEntry('旧标题', 'old/path').name, isEmpty);
     },

@@ -589,6 +589,38 @@ void main() {
     expect(find.text('缓存占用：1.0 MB'), findsOneWidget);
   });
 
+  testWidgets('玩法衍生分类展示并打开剧情', (tester) async {
+    await _mount(
+      tester,
+      size: const Size(1440, 900),
+      repository: _Repository(
+        groups: const [
+          StoryGroup(
+            '傀影与猩红孤钻',
+            [
+              StoryEntry(
+                '序章',
+                'obt/roguelike/ro1/level_rogue1_entry',
+                name: '序章',
+              ),
+            ],
+            id: 'rogue_1',
+            entryType: 'GAMEPLAY',
+          ),
+        ],
+      ),
+    );
+    await tester.tap(find.byKey(const Key('category-4')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('chapter-傀影与猩红孤钻')), findsOneWidget);
+    expect(find.byType(ShaderMask), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('chapter-傀影与猩红孤钻')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('obt/roguelike/ro1/level_rogue1_entry')),
+      findsOneWidget,
+    );
+  });
   testWidgets('分类和搜索保留真实条目，未知分类不丢失', (tester) async {
     await _mount(tester, size: const Size(1440, 900));
     await tester.tap(find.byKey(const Key('category-2')));
@@ -609,7 +641,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('category-4')));
     await tester.pumpAndSettle();
-    expect(find.text('玩法衍生档案待接入'), findsOneWidget);
+    expect(find.text('没有匹配的剧情'), findsOneWidget);
     await tester.tap(find.text('查看全部剧情'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('story-search')), '行动后');

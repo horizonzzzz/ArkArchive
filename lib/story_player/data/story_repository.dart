@@ -7,6 +7,27 @@ import 'asset_store.dart';
 import 'cache_control.dart';
 import 'media_catalog.dart';
 
+const _gameplayIds = <String, String>{
+  '特殊': 'special',
+  '危机合约': 'crisis',
+  '荷谟伊智境': 'act1lock',
+  '长夜临光': 'act13side',
+  '断罪者的挑战状': 'apf2020',
+  '泰拉 说唱之夜！': 'apf2021',
+  '狂弹要塞！罗德大兵集结': 'act3fun',
+  '主播U：全能系美少女': 'act4fun',
+  '好得不能再好了！泰拉投资大师课': 'act5fun',
+  'ARKnoNIGHTS': 'act6fun',
+  'Rhodes Island Epic 黑色博士坠落': 'act7fun',
+  '刻俄柏的灰蕈迷境': 'rogue_0',
+  '傀影与猩红孤钻': 'rogue_1',
+  '水月与深蓝之树': 'rogue_2',
+  '探索者的银凇止境': 'rogue_3',
+  '萨卡兹的无终奇语': 'rogue_4',
+  '岁的界园志异': 'rogue_5',
+  '沉沦者的黑流树海': 'rogue_6',
+};
+
 class StoryDocument {
   const StoryDocument({required this.title, required this.script});
   final String title;
@@ -52,6 +73,25 @@ class StoryRepository {
   static final storyBase = Uri.parse(
     'https://torappu.prts.wiki/gamedata/latest/story/',
   );
+  static final gameplayIndexUri = _wikiApiUri('剧情一览');
+  static Uri _wikiApiUri(String page) => Uri.https('prts.wiki', '/api.php', {
+    'action': 'parse',
+    'format': 'json',
+    'prop': 'text',
+    'origin': '*',
+    'page': page,
+  });
+
+  static String _wikiApiHtml(String text) {
+    final data = jsonDecode(text);
+    final parsed = data is Map ? data['parse'] : null;
+    final values = parsed is Map ? parsed['text'] : null;
+    final content = values is Map ? values['*'] : null;
+    if (content is! String || content.isEmpty) {
+      throw const FormatException('PRTS 接口未返回页面内容');
+    }
+    return content;
+  }
 
   static final _offlineIndexUri = Uri.parse(
     'https://local.invalid/offline-stories-v1',
@@ -96,7 +136,7 @@ class StoryRepository {
     await _changeCachedStories((entries) => entries.clear());
     _cacheCatalog = null;
     // 保留目录供下次离线启动浏览，先撤销离线标记以防清理中途失败。
-    await store.clearCache(keep: {indexUri});
+    await store.clearCache(keep: {indexUri, gameplayIndexUri});
   }
 
   Future<void> forgetCachedStory(StoryEntry entry) =>
@@ -175,7 +215,7 @@ class StoryRepository {
       final assets = catalog.dependencies(document.script, warnings);
       _activeAssets[entry.path] = {
         indexUri,
-        storyBase.resolve('${entry.path}.txt'),
+        _entryUri(entry),
         ...MediaCatalog.tableUris,
         ...assets,
       };
@@ -183,7 +223,7 @@ class StoryRepository {
       errors.addAll(
         await store.preload({
           indexUri,
-          storyBase.resolve('${entry.path}.txt'),
+          _entryUri(entry),
           ...MediaCatalog.tableUris,
           ...assets,
         }, onProgress: onProgress),
@@ -192,7 +232,7 @@ class StoryRepository {
       if (errors.isEmpty) {
         final manifest = {
           indexUri,
-          storyBase.resolve('${entry.path}.txt'),
+          _entryUri(entry),
           ...MediaCatalog.tableUris,
           ...assets,
         };
@@ -219,7 +259,9 @@ class StoryRepository {
   Future<StoryDocument> load(Uri uri, {String? title}) async {
     final text = utf8.decode(await store.load(uri));
     if (uri.host == 'prts.wiki' || uri.host == 'www.prts.wiki') {
-      final page = html.parse(text);
+      final page = html.parse(
+        uri.path == '/api.php' ? _wikiApiHtml(text) : text,
+      );
       final script = page.querySelector('#datas_txt')?.text;
       if (script == null || script.trim().isEmpty) {
         throw const FormatException('页面没有 #datas_txt 剧情脚本');
@@ -241,8 +283,96 @@ class StoryRepository {
     );
   }
 
+  Uri _entryUri(StoryEntry entry) {
+    final uri = Uri.tryParse(entry.path);
+    if (uri != null &&
+        uri.scheme == 'https' &&
+        uri.host == 'prts.wiki' &&
+        uri.path.startsWith('/w/')) {
+      return _wikiApiUri(uri.path.substring(3));
+    }
+    return storyBase.resolve('${entry.path}.txt');
+  }
+
   Future<StoryDocument> loadEntry(StoryEntry entry) =>
-      load(storyBase.resolve('${entry.path}.txt'), title: entry.title);
+      load(_entryUri(entry), title: entry.title);
+
+  List<StoryGroup> _parseGameplayIndex(String source) {
+    final document = html.parse(source);
+    final table = document
+        .querySelectorAll('table')
+        .where(
+          (table) => table
+              .querySelectorAll('th')
+              .any((th) => th.text.trim() == '活动剧情一览'),
+        )
+        .firstOrNull;
+    if (table == null) throw const FormatException('未找到活动剧情一览');
+    final groups = <StoryGroup>[];
+    String? section;
+    var remaining = 0;
+    for (final row in table.querySelectorAll('tr')) {
+      final cells = row.children;
+      final headers = cells.where((cell) => cell.localName == 'th').toList();
+      final values = cells.where((cell) => cell.localName == 'td').toList();
+      if (headers.isEmpty || values.isEmpty) continue;
+      final first = headers.first;
+      final span = int.tryParse(first.attributes['rowspan'] ?? '');
+      if (span != null) {
+        section = first.text.trim();
+        remaining = span;
+      }
+      if (remaining > 0 && {'特殊', '四月辑录', '集成战略'}.contains(section)) {
+        final name = headers.last.text.trim();
+        final groupName = name == '剧情' ? section! : name;
+        final entries = <StoryEntry>[];
+        for (final link in values.first.querySelectorAll('a[href]')) {
+          final title = link.text.trim();
+          final uri = gameplayIndexUri.resolve(link.attributes['href']!);
+          if (title.isEmpty ||
+              uri.scheme != 'https' ||
+              uri.host != 'prts.wiki' ||
+              !uri.path.startsWith('/w/')) {
+            continue;
+          }
+          entries.add(StoryEntry(title, uri.toString(), name: title));
+        }
+        if (entries.isNotEmpty) {
+          groups.add(
+            StoryGroup(
+              groupName,
+              entries,
+              id: _gameplayIds[groupName] ?? groupName,
+              entryType: 'GAMEPLAY',
+            ),
+          );
+        }
+      }
+      if (remaining > 0) remaining--;
+      if (remaining == 0) section = null;
+    }
+    if (groups.isEmpty) throw const FormatException('活动剧情一览没有玩法剧情');
+    return groups;
+  }
+
+  Future<List<StoryGroup>> _loadGameplayIndex() async {
+    try {
+      final bytes = await store.fetchRemote(gameplayIndexUri);
+      final groups = _parseGameplayIndex(_wikiApiHtml(utf8.decode(bytes)));
+      try {
+        await store.writeCache(gameplayIndexUri, bytes);
+      } catch (_) {}
+      return groups;
+    } catch (_) {
+      final cached = await store.readCache(gameplayIndexUri);
+      if (cached == null) return [];
+      try {
+        return _parseGameplayIndex(_wikiApiHtml(utf8.decode(cached)));
+      } catch (_) {
+        return [];
+      }
+    }
+  }
 
   /// 目录来自 PRTS 的剧情索引表；播放器组件不关心它的来源。
   Future<List<StoryGroup>> loadIndex() async {
@@ -283,7 +413,7 @@ class StoryRepository {
         );
       }
     }
-    return result;
+    return [...result, ...await _loadGameplayIndex()];
   }
 
   Future<PreparedStory> prepare(

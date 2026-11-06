@@ -309,6 +309,15 @@ class AssetStore {
   }
 
   Uint8List? peek(Uri uri) => _memory[uri];
+  Future<Uint8List> fetchRemote(Uri uri) async {
+    final response = await _get(uri);
+    if (response.statusCode != 200) {
+      throw http.ClientException('HTTP ${response.statusCode}：$uri', uri);
+    }
+    if (response.bodyBytes.isEmpty) throw FormatException('资源为空：$uri');
+    return response.bodyBytes;
+  }
+
   Future<Uint8List> load(Uri uri) async {
     await (Zone.current[_cacheControlZone] as CacheControl?)?.checkpoint();
     if (_movingCache) throw StateError('缓存目录迁移中');

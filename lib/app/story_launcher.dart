@@ -647,6 +647,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
     'MAINLINE' => 1,
     'ACTIVITY' => 2,
     'MINI_ACTIVITY' => 3,
+    'GAMEPLAY' => 4,
     _ => 5,
   };
 
@@ -1148,8 +1149,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
     } else if (groups.isEmpty) {
       status = ArchiveEmpty(
         icon: Icons.search_off,
-        title: category == 4 ? '玩法衍生档案待接入' : '没有匹配的剧情',
-        message: category == 4 ? '当前索引未提供完整的玩法衍生目录，后续将在这里接入。' : '试试其他关键词或切换分类。',
+        title: '没有匹配的剧情',
+        message: '试试其他关键词或切换分类。',
         action: TextButton(
           onPressed: () {
             _search.clear();
