@@ -37,7 +37,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
   String? _indexError;
   String? _playError;
   StoryEntry? _opening;
-  bool _openingResume = false;
   String _filter = '';
   int _category = 0;
   int _page = 0;
@@ -543,7 +542,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
     }
   }
 
-  Future<void> _open(StoryEntry entry, {bool resume = false}) async {
+  Future<void> _open(StoryEntry entry) async {
     if (_busy || _deletingCache || _movingDirectory) return;
     if (_caching) {
       ScaffoldMessenger.of(context)
@@ -554,7 +553,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
       _busy = true;
       _playError = null;
       _opening = entry;
-      _openingResume = resume;
       _done = 0;
       _total = 0;
     });
@@ -566,32 +564,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
         throw const FormatException('脚本中没有可播放内容');
       }
       final scriptHash = PlaybackProgress.fingerprint(document.script);
-      final saved = resume
-          ? _repository.store.getPlaybackProgress(entry.path)
-          : null;
-      PlaybackCheckpoint? checkpoint = saved?.checkpoint;
-      if (saved != null && !saved.matches(document.script)) {
-        if (!mounted) return;
-        final restart = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('观看断点已失效'),
-            content: const Text('剧情内容已更新，无法恢复原观看位置。是否从头观看？'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('返回'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('从头观看'),
-              ),
-            ],
-          ),
-        );
-        if (restart != true) return;
-        checkpoint = null;
-      }
+      // 有保存进度时作为可选恢复点传入播放器，是否失效由「从上次继续」点击时校验。
+      final saved = _repository.store.getPlaybackProgress(entry.path);
       final prepared = await _repository.prepare(
         document,
         onProgress: (done, total) {
@@ -611,7 +585,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
           builder: (_) => StoryPlayer(
             story: prepared,
             settings: _repository.store.playbackSettings,
-            checkpoint: checkpoint,
+            resumable: saved,
             onProgress: (position) {
               progressWrite = position == null
                   ? _repository.store.removePlaybackProgress(entry.path)
@@ -737,6 +711,19 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                         ),
                                     ],
                                     caching: _caching,
+                                    progressPaths: {
+                                      for (final group
+                                          in _groups ?? <StoryGroup>[])
+                                        for (final entry in group.entries)
+                                          if (_cached.contains(entry.path) &&
+                                              _repository
+                                                  .store
+                                                  .getPlaybackProgress(
+                                                    entry.path,
+                                                  ) !=
+                                              null)
+                                            entry.path,
+                                    },
                                     done: _cachedDone,
                                     total: _cachedTotal,
                                     message: _cacheMessage,
@@ -1011,7 +998,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                   ),
                 ),
                 TextButton(
-                  onPressed: () => _open(_opening!, resume: _openingResume),
+                  onPressed: () => _open(_opening!),
                   child: const Text('重试'),
                 ),
                 IconButton(
@@ -1292,88 +1279,100 @@ class _StoryLauncherState extends State<StoryLauncher> {
     );
   }
 
-  Widget _stageRow(StoryEntry entry) => Material(
-    key: ValueKey(entry.path),
-    color: Colors.transparent,
-    child: InkWell(
-      onTap: () => _open(entry),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      if (entry.code.isNotEmpty)
-                        Text(
-                          entry.code,
-                          style: AppTypography.tacticalCode.copyWith(
-                            color: AppColors.subtext,
-                            fontSize: 13,
-                          ),
-                        ),
-                      if (entry.tag.isNotEmpty)
-                        ArchiveTag(entry.tag, color: AppColors.subtext),
-                      if (_cached.contains(entry.path))
-                        const ArchiveTag('已缓存', color: AppColors.indicator),
+  Widget _stageRow(StoryEntry entry) {
+    final hasProgress =
+        _repository.store.getPlaybackProgress(entry.path) != null;
+    final hasMeta =
+        hasProgress ||
+        entry.code.isNotEmpty ||
+        entry.tag.isNotEmpty ||
+        _cached.contains(entry.path);
+    return Material(
+      key: ValueKey(entry.path),
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _open(entry),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (hasMeta) ...[
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (hasProgress)
+                            ArchiveTag(
+                              '继续观看',
+                              key: ValueKey('continue-${entry.path}'),
+                              color: AppColors.yellow,
+                            ),
+                          if (entry.code.isNotEmpty)
+                            Text(
+                              entry.code,
+                              style: AppTypography.tacticalCode.copyWith(
+                                color: AppColors.subtext,
+                                fontSize: 13,
+                              ),
+                            ),
+                          if (entry.tag.isNotEmpty)
+                            ArchiveTag(entry.tag, color: AppColors.subtext),
+                          if (_cached.contains(entry.path))
+                            const ArchiveTag(
+                              '已缓存',
+                              color: AppColors.indicator,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                     ],
-                  ),
-                  if (entry.code.isNotEmpty || entry.tag.isNotEmpty)
-                    const SizedBox(height: 8),
-                  Text(
-                    entry.name.isEmpty ? entry.title : entry.name,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.text,
-                      height: 1.5,
+                    Text(
+                      entry.name.isEmpty ? entry.title : entry.name,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.text,
+                        height: 1.5,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: '播放 ${entry.title}',
+                onPressed: () => _open(entry),
+                icon: const Icon(Icons.play_arrow, size: 22),
+              ),
+              PopupMenuButton<String>(
+                tooltip: '${entry.title}的更多操作',
+                onSelected: (_) => _cacheEntry(entry),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'cache',
+                    enabled:
+                        !_cached.contains(entry.path) &&
+                        !_caching &&
+                        !_busy &&
+                        !_deletingCache &&
+                        !_movingDirectory,
+                    child: Text(_cached.contains(entry.path) ? '已缓存' : '缓存'),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 8),
-            if (_repository.store.getPlaybackProgress(entry.path) != null)
-              TextButton.icon(
-                key: ValueKey('continue-${entry.path}'),
-                onPressed: _busy ? null : () => _open(entry, resume: true),
-                icon: const Icon(Icons.history, size: 18),
-                label: const Text('继续观看'),
-              ),
-            IconButton(
-              tooltip: '播放 ${entry.title}',
-              onPressed: () => _open(entry),
-              icon: const Icon(Icons.play_arrow, size: 22),
-            ),
-            PopupMenuButton<String>(
-              tooltip: '${entry.title}的更多操作',
-              onSelected: (_) => _cacheEntry(entry),
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'cache',
-                  enabled:
-                      !_cached.contains(entry.path) &&
-                      !_caching &&
-                      !_busy &&
-                      !_deletingCache &&
-                      !_movingDirectory,
-                  child: Text(_cached.contains(entry.path) ? '已缓存' : '缓存'),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   @override
   void dispose() {

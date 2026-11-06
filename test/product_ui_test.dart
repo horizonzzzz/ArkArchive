@@ -80,6 +80,9 @@ class _Repository extends StoryRepository {
   bool failIndex = false;
   bool cacheIndex = false;
   bool failCache = false;
+
+  /// 允许 prepare 返回可播放的 PreparedStory，用于需要进入播放器的用例。
+  bool allowPrepare = false;
   Completer<StoryDocument>? pending;
 
   @override
@@ -104,7 +107,15 @@ class _Repository extends StoryRepository {
     void Function(int, int)? onProgress,
   }) async {
     prepareCalls++;
-    throw StateError('本测试不应准备或下载资源');
+    if (!allowPrepare) {
+      throw StateError('本测试不应准备或下载资源');
+    }
+    return PreparedStory(
+      document,
+      MediaCatalog(variables: {}, characters: {}, backgroundPpu: {}),
+      store,
+      const [],
+    );
   }
 
   @override
@@ -193,8 +204,8 @@ void main() {
     expect(find.byKey(const Key('chapter-header')), findsOneWidget);
   });
   for (final size in [const Size(390, 844), const Size(1280, 800)]) {
-    testWidgets('多篇剧情各自在列表行显示继续入口，加载失败保留进度：$size', (tester) async {
-      final repo = _Repository();
+    testWidgets('列表行用标识提示继续观看，加载失败与未恢复退出都保留进度：$size', (tester) async {
+      final repo = _Repository()..allowPrepare = true;
       final script = StoryScript.parse('上次的正文');
       PlaybackProgress progress(String path) => PlaybackProgress(
         path: path,
@@ -208,12 +219,14 @@ void main() {
       await _mount(tester, size: size, repository: repo);
       await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
       await tester.pumpAndSettle();
-      final button = find.byKey(ValueKey('continue-${_main.path}'));
-      expect(button, findsOneWidget);
+      // 有进度的行内显示「继续观看」标识，行内不再有占宽度的长按钮。
+      expect(find.byKey(ValueKey('continue-${_main.path}')), findsOneWidget);
       expect(find.byKey(ValueKey('continue-${_after.path}')), findsOneWidget);
       expect(find.byKey(ValueKey('continue-${_side.path}')), findsNothing);
+      expect(find.widgetWithText(TextButton, '继续观看'), findsNothing);
       expect(tester.takeException(), isNull);
-      await tester.tap(button);
+      // 点播放从头加载，失败时不丢进度。
+      await tester.tap(find.byTooltip('播放 ${_main.title}'));
       await tester.pump();
       repo.pending!.completeError(StateError('网络暂不可用'));
       await tester.pumpAndSettle();
@@ -225,30 +238,35 @@ void main() {
         repo.store.getPlaybackProgress(_after.path)!.toJson(),
         afterProgress.toJson(),
       );
+      // 重试后旧断点作为可选恢复点展示，不提前拦截。
       await tester.tap(find.text('重试'));
       await tester.pump();
       repo.pending!.complete(
         StoryDocument(title: _main.title, script: StoryScript.parse('更新后的正文')),
       );
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.text('观看断点已失效'), findsOneWidget);
-      await tester.tap(find.text('返回'));
+      await tester.runAsync(() async {
+        final deadline = DateTime.now().add(const Duration(seconds: 5));
+        while (find.text('从上次继续').evaluate().isEmpty &&
+            DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          await tester.pump();
+        }
+      });
+      expect(find.text('从上次继续'), findsOneWidget);
+      // 未点恢复直接退出，进度保持原样。
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(
         repo.store.getPlaybackProgress(_main.path)!.toJson(),
         mainProgress.toJson(),
       );
-      expect(
-        repo.store.getPlaybackProgress(_after.path)!.toJson(),
-        afterProgress.toJson(),
-      );
-      expect(repo.prepareCalls, 0);
+      expect(repo.prepareCalls, 1);
       expect(tester.takeException(), isNull);
     });
   }
 
   testWidgets('普通播放从头开始，不触发旧断点的恢复提示', (tester) async {
-    final repo = _Repository();
+    final repo = _Repository()..allowPrepare = true;
     await repo.store.setPlaybackProgress(
       PlaybackProgress(
         path: _main.path,
@@ -264,10 +282,43 @@ void main() {
     repo.pending!.complete(
       StoryDocument(title: _main.title, script: StoryScript.parse('新正文')),
     );
-    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (find.text('从上次继续').evaluate().isEmpty &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
+      }
+    });
     expect(find.text('观看断点已失效'), findsNothing);
+    // 旧进度仍以可选恢复点呈现，点击时才校验。
+    expect(find.text('从上次继续'), findsOneWidget);
     expect(repo.prepareCalls, 1);
-    expect(repo.store.getPlaybackProgress(_main.path)!.path, _main.path);
+  });
+
+  testWidgets('窄屏有进度的长标题行不换行撑高行高', (tester) async {
+    const entry = StoryEntry('恶徒行于荒野的彼端测试', 'long/entry');
+    final repo = _Repository(
+      groups: const [StoryGroup('长标题章', [entry], entryType: 'MAINLINE')],
+    );
+    await repo.store.setPlaybackProgress(
+      PlaybackProgress(
+        path: entry.path,
+        scriptHash: 'a' * 64,
+        checkpoint: PlaybackCheckpoint(cursor: 1, trace: [0]),
+      ),
+    );
+    await _mount(tester, size: const Size(360, 800), repository: repo);
+    await tester.tap(find.byKey(const ValueKey('chapter-长标题章')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('continue-${entry.path}')), findsOneWidget);
+    final rowHeight = tester
+        .renderObject<RenderBox>(find.byKey(const ValueKey('long/entry')))
+        .size
+        .height;
+    // 有进度时行内只剩两个 48px 图标钮，长标题保持单行，行高不再被换行撑大。
+    expect(rowHeight, lessThan(90));
+    expect(tester.takeException(), isNull);
   });
 
   for (final size in [const Size(390, 844), const Size(844, 390)]) {

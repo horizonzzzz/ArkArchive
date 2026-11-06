@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data/media_catalog.dart';
+import '../data/playback_progress.dart';
 import '../data/story_repository.dart';
 import '../data/playback_settings.dart';
 import '../runtime/just_audio_output.dart';
@@ -20,13 +21,16 @@ class StoryPlayer extends StatefulWidget {
     required this.story,
     this.audio,
     this.settings = const PlaybackSettings(),
-    this.checkpoint,
+    this.resumable,
     this.onProgress,
   });
   final PreparedStory story;
   final StoryAudio? audio;
   final PlaybackSettings settings;
-  final PlaybackCheckpoint? checkpoint;
+
+  /// 可选恢复点：存在时开始画面额外提供「从上次继续」入口，
+  /// 点击后才校验并恢复；不传入或进度失效时仅可从头播放。
+  final PlaybackProgress? resumable;
   final Future<void> Function(PlaybackCheckpoint?)? onProgress;
   @override
   State<StoryPlayer> createState() => _StoryPlayerState();
@@ -145,18 +149,27 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
       engine.warn('字体加载失败：$e');
     }
     if (!mounted) return;
-    if (widget.checkpoint != null) {
-      try {
-        await engine.restore(widget.checkpoint!);
-      } catch (_) {
-        _resumeFailed = true;
-        engine.theaterMode = false;
-        await engine.setPaused(true);
-      }
-      if (!mounted) return;
-    }
     setState(() => ready = true);
     _progressChanged();
+  }
+
+  /// 校验可选恢复点并沿断点重放；失效时复用播放器内的断点失效界面。
+  Future<void> _resumeFromCheckpoint() async {
+    final saved = widget.resumable;
+    if (saved == null) return;
+    try {
+      if (!saved.matches(widget.story.document.script)) {
+        throw const FormatException('观看断点已失效');
+      }
+      await engine.restore(saved.checkpoint);
+    } catch (_) {
+      _resumeFailed = true;
+      engine.theaterMode = false;
+      await engine.setPaused(true);
+      if (mounted) setState(() {});
+      return;
+    }
+    if (mounted) _progressChanged();
   }
 
   /// 参考播放器 widget 内嵌的 UI 贴图；用于地点印章、通讯窗口与相框。
@@ -338,8 +351,18 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
           else
             AnimatedBuilder(
               animation: engine,
-              builder: (context, _) => engine.cursor == 0 || engine.finished
-                  ? FilledButton.icon(
+              builder: (context, _) {
+                if (engine.cursor != 0 && !engine.finished) {
+                  return const SizedBox.shrink();
+                }
+                final canResume =
+                    widget.resumable != null &&
+                    engine.cursor == 0 &&
+                    !engine.finished;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FilledButton.icon(
                       onPressed: engine.finished
                           ? engine.restart
                           : engine.start,
@@ -347,8 +370,24 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                         engine.finished ? Icons.replay : Icons.play_arrow,
                       ),
                       label: Text(engine.finished ? '重新播放' : '开始播放'),
-                    )
-                  : const SizedBox.shrink(),
+                    ),
+                    if (canResume) ...[
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white.withValues(alpha: .9),
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: .3),
+                          ),
+                        ),
+                        onPressed: _resumeFromCheckpoint,
+                        icon: const Icon(Icons.history),
+                        label: const Text('从上次继续'),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           if (_fastForwarding)
             Positioned.fill(

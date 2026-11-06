@@ -6,7 +6,7 @@ import 'package:arknights_story_player/story_player/ui/story_stage.dart';
 Future<StoryEngine> _mountPlayer(
   WidgetTester tester, {
   required StoryScript script,
-  PlaybackCheckpoint? checkpoint,
+  PlaybackProgress? resumable,
   required List<PlaybackCheckpoint?> saved,
 }) async {
   final assets = AssetStore();
@@ -21,7 +21,7 @@ Future<StoryEngine> _mountPlayer(
     await tester.pumpWidget(MaterialApp(home: StoryPlayer(
       story: story,
       audio: SilentStoryAudio(),
-      checkpoint: checkpoint,
+      resumable: resumable,
       onProgress: (value) async { saved.add(value); },
     )));
     final deadline = DateTime.now().add(const Duration(seconds: 5));
@@ -40,6 +40,7 @@ void main() {
     final saved = <PlaybackCheckpoint?>[];
     await _mountPlayer(tester, script: StoryScript.parse('正文'), saved: saved);
     expect(saved, isEmpty);
+    expect(find.text('从上次继续'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     expect(saved, isEmpty);
   });
@@ -78,7 +79,7 @@ void main() {
     expect(saved.length, writes);
   });
 
-  testWidgets('继续观看自动恢复当前句，不需要再点开始播放', (tester) async {
+  testWidgets('有可选恢复点时，点从上次继续恢复当前句', (tester) async {
     final script = StoryScript.parse('第一句\n第二句');
     final original = StoryEngine(script);
     await original.start();
@@ -87,12 +88,56 @@ void main() {
     final checkpoint = original.checkpoint!;
     original.dispose();
     final saved = <PlaybackCheckpoint?>[];
-    final restored = await _mountPlayer(tester,
-      script: script, checkpoint: checkpoint, saved: saved);
-    expect(find.text('开始播放'), findsNothing);
+    final restored = await _mountPlayer(
+      tester,
+      script: script,
+      resumable: PlaybackProgress(
+        path: 'test/story',
+        scriptHash: PlaybackProgress.fingerprint(script),
+        checkpoint: checkpoint,
+      ),
+      saved: saved,
+    );
+    // 不自动恢复：开始画面同时提供从头与续播两个入口。
+    expect(find.text('开始播放'), findsOneWidget);
+    expect(find.text('从上次继续'), findsOneWidget);
+    expect(restored.state.text, isNot('第二句'));
+    await tester.tap(find.text('从上次继续'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
     expect(restored.state.text, '第二句');
     expect(restored.state.revealed, 0);
     expect(saved.single!.toJson(), checkpoint.toJson());
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('断点失效时点从上次继续提示失效，不清除原进度', (tester) async {
+    final script = StoryScript.parse('第一句\n第二句');
+    final original = StoryEngine(script);
+    await original.start();
+    await original.advance();
+    await original.advance();
+    final checkpoint = original.checkpoint!;
+    original.dispose();
+    final saved = <PlaybackCheckpoint?>[];
+    final stale = PlaybackProgress(
+      path: 'test/story',
+      // 脚本已更新，指纹与断点记录不一致。
+      scriptHash: PlaybackProgress.fingerprint(StoryScript.parse('内容已更新')),
+      checkpoint: checkpoint,
+    );
+    final engine = await _mountPlayer(
+      tester,
+      script: script,
+      resumable: stale,
+      saved: saved,
+    );
+    await tester.tap(find.text('从上次继续'));
+    await tester.pump();
+    expect(find.text('观看断点已失效，无法恢复原观看位置。'), findsOneWidget);
+    expect(find.text('从头观看'), findsOneWidget);
+    expect(engine.cursor, 0);
+    expect(saved, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

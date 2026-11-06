@@ -12,6 +12,7 @@ class CachePage extends StatefulWidget {
     this.groups = const [],
     this.active = true,
     required this.cached,
+    this.progressPaths = const <String>{},
     required this.onBrowse,
     required this.onRetry,
     required this.onOpen,
@@ -28,6 +29,9 @@ class CachePage extends StatefulWidget {
   final List<StoryGroup> groups;
   final bool active;
   final List<StoryEntry> cached;
+
+  /// 存有观看进度的条目路径，行内以「继续观看」标识提示。
+  final Set<String> progressPaths;
   final VoidCallback onBrowse;
   final VoidCallback onRetry;
   final ValueChanged<StoryEntry> onOpen;
@@ -405,9 +409,22 @@ class _CachePageState extends State<CachePage> {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                entry.title,
-                style: const TextStyle(fontSize: 14, height: 1.5),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (widget.progressPaths.contains(entry.path)) ...[
+                    ArchiveTag(
+                      '继续观看',
+                      key: ValueKey('continue-${entry.path}'),
+                      color: AppColors.yellow,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  Text(
+                    entry.title,
+                    style: const TextStyle(fontSize: 14, height: 1.5),
+                  ),
+                ],
               ),
             ),
           ),

@@ -74,6 +74,45 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('已缓存剧情有观看进度时行内显示继续观看标识', (tester) async {
+    const first = StoryEntry('甲幕', 'a/1');
+    const second = StoryEntry('乙幕', 'b/1');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CachePage(
+            groups: const [
+              StoryGroup('活动甲', [first]),
+              StoryGroup('活动乙', [second]),
+            ],
+            cached: const [first, second],
+            progressPaths: const {'a/1'},
+            jobs: const {},
+            onBrowse: () {},
+            onRetry: () {},
+            onOpen: (_) {},
+            onToggleJob: (_) {},
+            onRemoveJob: (_) {},
+            onDeleteCached: (_) {},
+            deleting: false,
+            caching: false,
+            done: 0,
+            total: 0,
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('offline-活动甲')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('continue-a/1')), findsOneWidget);
+    await tester.tap(find.byTooltip('返回离线与缓存'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('offline-活动乙')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('continue-b/1')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('单幕缓存可暂停、恢复和移除', (tester) async {
     const entry = StoryEntry('测试剧情', 'test/story');
     final job = CacheJob(entry)
