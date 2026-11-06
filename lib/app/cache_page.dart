@@ -33,7 +33,7 @@ class CachePage extends StatefulWidget {
   /// 存有观看进度的条目路径，行内以「继续观看」标识提示。
   final Set<String> progressPaths;
   final VoidCallback onBrowse;
-  final VoidCallback onRetry;
+  final ValueChanged<CacheJob> onRetry;
   final ValueChanged<StoryEntry> onOpen;
   final Map<String, CacheJob> jobs;
   final ValueChanged<CacheJob> onToggleJob;
@@ -316,6 +316,10 @@ class _CachePageState extends State<CachePage> {
 
   Widget _jobTile(CacheJob job) {
     final entry = job.entry;
+    final active =
+        job.status == CacheJobStatus.waiting ||
+        job.status == CacheJobStatus.downloading ||
+        job.status == CacheJobStatus.paused;
     final status = switch (job.status) {
       CacheJobStatus.waiting => '等待中',
       CacheJobStatus.paused => '已暂停',
@@ -337,7 +341,7 @@ class _CachePageState extends State<CachePage> {
                     style: const TextStyle(fontSize: 14, height: 1.5),
                   ),
                 ),
-                if (widget.caching && job.status != CacheJobStatus.failed)
+                if (active)
                   IconButton(
                     tooltip:
                         '${job.control.paused ? '恢复' : '暂停'} ${entry.title}',
@@ -346,10 +350,10 @@ class _CachePageState extends State<CachePage> {
                       job.control.paused ? Icons.play_arrow : Icons.pause,
                     ),
                   ),
-                if (!widget.caching && job.status == CacheJobStatus.failed)
+                if (job.status == CacheJobStatus.failed)
                   IconButton(
                     tooltip: '重试失败任务',
-                    onPressed: widget.onRetry,
+                    onPressed: () => widget.onRetry(job),
                     icon: const Icon(Icons.refresh),
                   ),
                 IconButton(
@@ -431,7 +435,8 @@ class _CachePageState extends State<CachePage> {
           if (!_managing) ...[
             IconButton(
               tooltip: '播放 ${entry.title}',
-              onPressed: widget.deleting || widget.caching
+              // 下载任务在后台继续执行，已缓存剧情随时可以播放。
+              onPressed: widget.deleting
                   ? null
                   : () => widget.onOpen(entry),
               icon: const Icon(Icons.play_arrow),

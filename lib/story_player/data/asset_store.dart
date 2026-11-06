@@ -33,7 +33,13 @@ class AssetStore {
   static final _playbackProgressUri = Uri.parse(
     'https://local.invalid/story-playback-progress-v1',
   );
+  static final _mobileDataApprovedUri = Uri.parse(
+    'https://local.invalid/story-mobile-data-approved-v1',
+  );
   final Map<String, PlaybackProgress> playbackProgresses = {};
+
+  /// 用户已批准在移动数据网络下缓存；为 true 时不再弹确认框。
+  bool mobileDataApproved = false;
   PlaybackProgress? getPlaybackProgress(String path) =>
       playbackProgresses[path];
   static final _cacheDownloadZone = Object();
@@ -72,6 +78,7 @@ class AssetStore {
           _settingsUri,
           _playbackSettingsUri,
           _playbackProgressUri,
+          _mobileDataApprovedUri,
           ...keep,
         },
       );
@@ -169,6 +176,12 @@ class AssetStore {
       // 存储不可用时仍允许使用默认值播放。
     }
     try {
+      final data = await _cache.read(_mobileDataApprovedUri);
+      mobileDataApproved = data != null && utf8.decode(data) == '1';
+    } catch (_) {
+      // 移动数据偏好损坏或不可读时保持默认，重新提示确认。
+    }
+    try {
       final data = await _cache.read(_playbackSettingsUri);
       if (data != null) {
         playbackSettings = PlaybackSettings.fromJson(
@@ -213,6 +226,19 @@ class AssetStore {
             Uint8List.fromList(utf8.encode('$value')),
           ),
         );
+    _settingsWrite = write;
+    await write;
+  }
+
+  Future<void> setMobileDataApproved(bool value) async {
+    if (_movingCache) throw StateError('缓存目录迁移中');
+    mobileDataApproved = value;
+    final write = _settingsWrite.catchError((_) {}).then(
+      (_) => _cache.write(
+        _mobileDataApprovedUri,
+        Uint8List.fromList(utf8.encode(value ? '1' : '0')),
+      ),
+    );
     _settingsWrite = write;
     await write;
   }

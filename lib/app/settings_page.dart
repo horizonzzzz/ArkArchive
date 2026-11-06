@@ -27,6 +27,8 @@ class SettingsPage extends StatefulWidget {
     this.settings = const PlaybackSettings(),
     this.onSettingsChanged,
     this.probe,
+    this.mobileDataPrompt = true,
+    this.onMobileDataPromptChanged,
   });
   final bool concurrencyBusy;
   final bool active;
@@ -44,6 +46,10 @@ class SettingsPage extends StatefulWidget {
   final VoidCallback onMoveDirectory;
   final bool directoryBusy;
   final VoidCallback onClearCache;
+
+  /// 移动端非 Wi-Fi 缓存前是否提示确认；关闭后不再弹确认框。
+  final bool mobileDataPrompt;
+  final ValueChanged<bool>? onMobileDataPromptChanged;
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
@@ -252,9 +258,16 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _storage(bool wide) => _section([
     if (widget.isMobile) ...[
-      const Text(
-        '使用移动数据缓存前会提示确认。',
-        style: TextStyle(fontSize: 12, color: AppColors.muted),
+      SwitchListTile(
+        key: const ValueKey('setting-移动数据缓存提示'),
+        contentPadding: EdgeInsets.zero,
+        title: const Text('移动数据缓存提示', style: TextStyle(fontSize: 13)),
+        subtitle: const Text(
+          '关闭后，使用移动数据缓存前不再弹窗确认。',
+          style: TextStyle(fontSize: 12, color: AppColors.subtext),
+        ),
+        value: widget.mobileDataPrompt,
+        onChanged: widget.onMobileDataPromptChanged,
       ),
       const Divider(height: 20),
     ],

@@ -43,10 +43,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
   bool _busy = false;
   int _done = 0, _total = 0;
   Set<String> _cached = {};
-  bool _caching = false;
-  int _cachedDone = 0;
-  int _cachedTotal = 0;
-  int _cacheBatchId = 0;
   String? _cacheMessage;
   final Map<String, CacheJob> _cacheJobs = {};
   bool _networkPaused = false;
@@ -54,6 +50,20 @@ class _StoryLauncherState extends State<StoryLauncher> {
   bool _networkStopped = false;
   Future<bool>? _networkConfirmation;
   StreamSubscription<List<ConnectivityResult>>? _cacheNetworkSubscription;
+
+  bool _isJobActive(CacheJob job) =>
+      job.status == CacheJobStatus.waiting ||
+      job.status == CacheJobStatus.downloading ||
+      job.status == CacheJobStatus.paused;
+
+  /// 队列中是否存在进行中的下载任务；期间可继续添加任务，也可播放已缓存剧情。
+  bool get _hasActiveJobs => _cacheJobs.values.any(_isJobActive);
+
+  /// 「已处理 X / Y 幕」的已处理数：队列里已到达终态的任务数。
+  int get _cachedDone =>
+      _cacheJobs.values.where((job) => !_isJobActive(job)).length;
+
+  int get _cachedTotal => _cacheJobs.length;
 
   void _syncCacheJobs() {
     var available = _repository.store.concurrency;
@@ -142,7 +152,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   }
 
   Future<void> _moveCacheDirectory() async {
-    if (_busy || _caching || _deletingCache || _movingDirectory) return;
+    if (_busy || _hasActiveJobs || _deletingCache || _movingDirectory) return;
     setState(() => _movingDirectory = true);
     try {
       final path = await getDirectoryPath(confirmButtonText: '选择缓存目录');
@@ -177,6 +187,20 @@ class _StoryLauncherState extends State<StoryLauncher> {
     }
   }
 
+  Future<void> _changeMobileDataPrompt(bool enabled) async {
+    // setMobileDataApproved 同步更新字段，先重建让开关状态立即生效。
+    setState(() {});
+    try {
+      await _repository.store.setMobileDataApproved(!enabled);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('提示设置无法保存，当前选择仅在本次运行中生效。')),
+        );
+      }
+    }
+  }
+
   Future<void> _changePlaybackSettings(PlaybackSettings value) async {
     try {
       final write = _repository.store.setPlaybackSettings(value);
@@ -194,8 +218,12 @@ class _StoryLauncherState extends State<StoryLauncher> {
   Future<bool> _checkCacheNetwork([
     List<ConnectivityResult>? connections,
   ]) async {
-    if (!_caching || _networkStopped) return false;
-    if (!_repository.store.isMobile || _mobileApproved) return true;
+    if (_networkStopped) return false;
+    if (!_repository.store.isMobile ||
+        _mobileApproved ||
+        _repository.store.mobileDataApproved) {
+      return true;
+    }
     if (connections == null) {
       try {
         connections = await _repository.store.cacheConnections();
@@ -214,24 +242,54 @@ class _StoryLauncherState extends State<StoryLauncher> {
       _networkPaused = true;
       _syncCacheJobs();
     });
-    final confirmation = showDialog<bool>(
+    var dontAskAgain = false;
+    final confirmation = showDialog<(bool, bool)?>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('使用移动数据缓存？'),
-        content: const Text('当前网络可能使用移动数据。剧情图片和音频可能消耗较多流量，是否继续本次缓存？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('停止缓存'),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('使用移动数据缓存？'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                '当前网络可能使用移动数据。剧情图片和音频可能消耗较多流量，是否继续本次缓存？',
+              ),
+              CheckboxListTile(
+                key: const ValueKey('mobile-data-dont-ask'),
+                value: dontAskAgain,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text('不再提示'),
+                onChanged: (value) =>
+                    setDialogState(() => dontAskAgain = value ?? false),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('继续缓存'),
-          ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, (false, dontAskAgain)),
+              child: const Text('停止缓存'),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, (true, dontAskAgain)),
+              child: const Text('继续缓存'),
+            ),
+          ],
+        ),
       ),
-    ).then((value) => value == true);
+    ).then((result) {
+      // 只有批准继续时才按勾选持久化偏好；拒绝不持久化，下次仍会询问。
+      if (result?.$1 == true && result?.$2 == true) {
+        unawaited(
+          _repository.store.setMobileDataApproved(true).catchError((_) {}),
+        );
+      }
+      return result?.$1 == true;
+    });
     _networkConfirmation = confirmation;
     try {
       final allowed = await confirmation;
@@ -259,123 +317,125 @@ class _StoryLauncherState extends State<StoryLauncher> {
     }
   }
 
-  Future<void> _retryFailedCacheJobs() async {
-    final failed = _cacheJobs.values.where(
-      (job) => job.status == CacheJobStatus.failed,
-    );
-    if (failed.isNotEmpty) await _cacheEntry(failed.first.entry);
-  }
+  void _retryCacheJob(CacheJob job) => _cacheEntry(job.entry);
 
+  /// 把一段剧情加入下载队列并立即开始执行；已有任务在下载时同样可以继续添加。
+  /// 完成与否由每个任务自行上报，全部结束后在 [_checkCacheSettled] 收尾。
   Future<void> _cacheEntry(StoryEntry entry) async {
-    if (_busy ||
-        _caching ||
-        _deletingCache ||
-        _movingDirectory ||
-        _cached.contains(entry.path)) {
-      return;
-    }
-    setState(() {
-      _caching = true;
+    if (_busy || _deletingCache || _movingDirectory) return;
+    if (_cached.contains(entry.path)) return;
+    final existing = _cacheJobs[entry.path];
+    if (existing != null && _isJobActive(existing)) return;
+    if (!_hasActiveJobs) {
+      // 新一轮下载会话：移动数据批准与停止状态重新确认。
       _mobileApproved = false;
       _networkStopped = false;
-    });
-    final jobs = <CacheJob>[];
-    try {
-      if (_repository.store.isMobile) {
-        _cacheNetworkSubscription = _repository.store.cacheConnectionChanges
-            .listen(
-              (connections) {
-                unawaited(_checkCacheNetwork(connections));
-              },
-              onError: (Object _) {
-                unawaited(_checkCacheNetwork([]));
-              },
-            );
+    }
+    final allowed = await _checkCacheNetwork();
+    if (!allowed) {
+      if (mounted && _networkStopped) {
+        setState(() => _cacheMessage = '已停止缓存，未继续使用移动数据。');
       }
-      if (!await _checkCacheNetwork() || _networkStopped || !mounted) return;
-      jobs.add(CacheJob(entry));
-      setState(() {
-        _cacheJobs
-          ..clear()
-          ..addEntries(jobs.map((job) => MapEntry(job.entry.path, job)));
-        _cachedDone = 0;
-        _cachedTotal = jobs.length;
-        _cacheBatchId++;
-        _cacheMessage = null;
-        _page = 1;
-        _syncCacheJobs();
-      });
-      Future<void> worker(CacheJob job) async {
-        try {
-          await job.control.checkpoint();
-          job.started = true;
-          job.status = CacheJobStatus.downloading;
+      return;
+    }
+    if (!mounted) return;
+    final job = CacheJob(entry);
+    setState(() {
+      _cacheJobs[entry.path] = job;
+      _cacheMessage = null;
+      _syncCacheJobs();
+    });
+    _ensureCacheNetworkSubscription();
+    unawaited(_runJob(job));
+  }
+
+  void _ensureCacheNetworkSubscription() {
+    if (!_repository.store.isMobile || _cacheNetworkSubscription != null) {
+      return;
+    }
+    _cacheNetworkSubscription = _repository.store.cacheConnectionChanges
+        .listen(
+          (connections) {
+            if (!_hasActiveJobs && _networkConfirmation == null) return;
+            unawaited(_checkCacheNetwork(connections));
+          },
+          onError: (Object _) {
+            if (!_hasActiveJobs && _networkConfirmation == null) return;
+            unawaited(_checkCacheNetwork([]));
+          },
+        );
+  }
+
+  Future<void> _runJob(CacheJob job) async {
+    try {
+      await job.control.checkpoint();
+      job.started = true;
+      job.status = CacheJobStatus.downloading;
+      if (mounted) setState(() {});
+      final errors = await _repository.cacheEntry(
+        job.entry,
+        control: job.control,
+        onProgress: (done, total) {
+          job.done = done;
+          job.total = total;
           if (mounted) setState(() {});
-          final errors = await _repository.cacheEntry(
-            job.entry,
-            control: job.control,
-            onProgress: (done, total) {
-              job.done = done;
-              job.total = total;
-              if (mounted) setState(() {});
-            },
-          );
-          await job.control.checkpoint();
-          if (errors.isEmpty) {
-            job.status = CacheJobStatus.completed;
-            _cached.add(job.entry.path);
-          } else {
-            job.status = CacheJobStatus.failed;
-            job.error = errors.join('；');
-          }
-        } on CacheCancelled {
-          job.status = CacheJobStatus.cancelled;
-          if (job.started) {
-            try {
-              await _repository.forgetCachedStory(job.entry);
-            } catch (error) {
-              job.error = '无法删除离线记录：$error';
-              job.status = CacheJobStatus.failed;
-            }
-          }
+        },
+      );
+      await job.control.checkpoint();
+      if (errors.isEmpty) {
+        job.status = CacheJobStatus.completed;
+        _cached.add(job.entry.path);
+      } else {
+        job.status = CacheJobStatus.failed;
+        job.error = errors.join('；');
+      }
+    } on CacheCancelled {
+      job.status = CacheJobStatus.cancelled;
+      if (job.started) {
+        try {
+          await _repository.forgetCachedStory(job.entry);
         } catch (error) {
+          job.error = '无法删除离线记录：$error';
           job.status = CacheJobStatus.failed;
-          job.error = '$error';
-        } finally {
-          _syncCacheJobs();
-          if (mounted) setState(() => _cachedDone++);
         }
       }
-
-      await Future.wait(jobs.map(worker));
-      _repository.store.releaseMemory();
-      await _refreshCacheInfo();
     } catch (error) {
-      if (mounted) setState(() => _cacheMessage = '缓存无法继续：$error');
+      job.status = CacheJobStatus.failed;
+      job.error = '$error';
     } finally {
-      final subscription = _cacheNetworkSubscription;
-      _cacheNetworkSubscription = null;
-      // 取消监听立即生效，界面收尾不等待平台释放订阅。
-      unawaited(subscription?.cancel());
-      if (mounted) {
-        final failures = jobs.where(
-          (job) => job.status == CacheJobStatus.failed,
-        );
-        setState(() {
-          _caching = false;
-          _networkPaused = false;
-          _cacheMessage = [
-            if (_networkStopped) '已停止缓存，未继续使用移动数据。',
-            if (jobs.isNotEmpty)
-              '缓存完成，共 ${jobs.where((job) => job.status == CacheJobStatus.completed).length} 幕。',
-            if (failures.isNotEmpty)
-              '部分剧情缓存失败：\n${failures.map((job) => '${job.entry.title}：${job.error}').join('\n')}',
-            if (jobs.isEmpty && !_networkStopped && _cacheMessage != null)
-              _cacheMessage!,
-          ].join('\n');
-        });
-      }
+      _syncCacheJobs();
+      if (mounted) setState(() {});
+      _checkCacheSettled();
     }
+  }
+
+  /// 队列里不再有进行中的任务时统一收尾：断开网络监听并汇总提示。
+  /// 用户中途删除任务或重试失败任务都会改变队列，因此每次任务结束都要重新检查。
+  void _checkCacheSettled() {
+    if (_hasActiveJobs) return;
+    final subscription = _cacheNetworkSubscription;
+    _cacheNetworkSubscription = null;
+    // 取消监听立即生效，界面收尾不等待平台释放订阅。
+    unawaited(subscription?.cancel());
+    _repository.store.releaseMemory();
+    unawaited(_refreshCacheInfo());
+    if (!mounted) return;
+    final stopped = _networkStopped;
+    final completed = _cacheJobs.values
+        .where((job) => job.status == CacheJobStatus.completed)
+        .length;
+    final failures = _cacheJobs.values
+        .where((job) => job.status == CacheJobStatus.failed)
+        .toList();
+    setState(() {
+      _networkPaused = false;
+      _cacheMessage = [
+        if (stopped) '已停止缓存，未继续使用移动数据。',
+        if (_cacheJobs.isNotEmpty) '缓存完成，共 $completed 幕。',
+        if (failures.isNotEmpty)
+          '部分剧情缓存失败：\n${failures.map((job) => '${job.entry.title}：${job.error}').join('\n')}',
+      ].join('\n');
+    });
   }
 
   void _toggleCacheJob(CacheJob job) {
@@ -465,7 +525,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   }
 
   Future<void> _clearCache() async {
-    if (_caching || _busy || _deletingCache || _movingDirectory) return;
+    if (_hasActiveJobs || _busy || _deletingCache || _movingDirectory) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -490,7 +550,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
     );
     if (confirm != true ||
         !mounted ||
-        _caching ||
+        _hasActiveJobs ||
         _busy ||
         _deletingCache ||
         _movingDirectory) {
@@ -544,11 +604,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
 
   Future<void> _open(StoryEntry entry) async {
     if (_busy || _deletingCache || _movingDirectory) return;
-    if (_caching) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('请等待批量缓存完成后播放。')));
-      return;
-    }
+    // 下载任务在后台继续执行，播放已缓存剧情不再被缓存中拦截。
     setState(() {
       _busy = true;
       _playError = null;
@@ -698,8 +754,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                 children: [
                                   _library(desktop),
                                   CachePage(
-                                    // 新批次切回总览，即使缓存立即完成也不依赖中间帧。
-                                    key: ValueKey('cache-batch-$_cacheBatchId'),
                                     groups: _groups ?? const [],
                                     active: _page == 1,
                                     cached: [
@@ -710,7 +764,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                               _cached.contains(entry.path),
                                         ),
                                     ],
-                                    caching: _caching,
+                                    caching: _hasActiveJobs,
                                     progressPaths: {
                                       for (final group
                                           in _groups ?? <StoryGroup>[])
@@ -727,7 +781,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                     done: _cachedDone,
                                     total: _cachedTotal,
                                     message: _cacheMessage,
-                                    onRetry: _retryFailedCacheJobs,
+                                    onRetry: _retryCacheJob,
                                     onOpen: _open,
                                     jobs: _cacheJobs,
                                     onToggleJob: _toggleCacheJob,
@@ -750,15 +804,19 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                     concurrencyBusy: _movingDirectory,
                                     isMobile: _repository.store.isMobile,
                                     isDesktop: _repository.store.isDesktop,
-                                    caching: _caching,
+                                    caching: _hasActiveJobs,
                                     cacheBytes: _cacheBytes,
                                     cacheLocation: _cacheLocation,
+                                    mobileDataPrompt:
+                                        !_repository.store.mobileDataApproved,
+                                    onMobileDataPromptChanged:
+                                        _changeMobileDataPrompt,
                                     onOpenDirectory: _openCacheDirectory,
                                     onMoveDirectory: _moveCacheDirectory,
                                     onClearCache: _clearCache,
                                     directoryBusy:
                                         _movingDirectory ||
-                                        _caching ||
+                                        _hasActiveJobs ||
                                         _deletingCache ||
                                         _busy,
                                   ),
@@ -1282,8 +1340,11 @@ class _StoryLauncherState extends State<StoryLauncher> {
   Widget _stageRow(StoryEntry entry) {
     final hasProgress =
         _repository.store.getPlaybackProgress(entry.path) != null;
+    final job = _cacheJobs[entry.path];
+    final activeJob = job != null && _isJobActive(job);
     final hasMeta =
         hasProgress ||
+        activeJob ||
         entry.code.isNotEmpty ||
         entry.tag.isNotEmpty ||
         _cached.contains(entry.path);
@@ -1322,6 +1383,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
                             ),
                           if (entry.tag.isNotEmpty)
                             ArchiveTag(entry.tag, color: AppColors.subtext),
+                          if (activeJob)
+                            const ArchiveTag('缓存中', color: AppColors.green),
                           if (_cached.contains(entry.path))
                             const ArchiveTag(
                               '已缓存',
@@ -1359,11 +1422,17 @@ class _StoryLauncherState extends State<StoryLauncher> {
                     value: 'cache',
                     enabled:
                         !_cached.contains(entry.path) &&
-                        !_caching &&
+                        !activeJob &&
                         !_busy &&
                         !_deletingCache &&
                         !_movingDirectory,
-                    child: Text(_cached.contains(entry.path) ? '已缓存' : '缓存'),
+                    child: Text(
+                      _cached.contains(entry.path)
+                          ? '已缓存'
+                          : activeJob
+                          ? '缓存中'
+                          : '缓存',
+                    ),
                   ),
                 ],
               ),

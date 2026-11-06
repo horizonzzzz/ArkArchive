@@ -723,6 +723,9 @@ void main() {
     await tester.tap(find.text('缓存'));
     await tester.pumpAndSettle();
     expect(repo.entryCalls, 1);
+    // 失败任务在缓存页展示并可直接重试。
+    await tester.tap(find.text('离线与缓存').last);
+    await tester.pumpAndSettle();
     expect(find.byTooltip('重试失败任务'), findsOneWidget);
     repo.failCache = false;
     await tester.tap(find.byTooltip('重试失败任务'));

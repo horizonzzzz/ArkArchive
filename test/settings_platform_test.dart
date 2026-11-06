@@ -36,7 +36,11 @@ void main() {
           platform == TargetPlatform.macOS ||
           platform == TargetPlatform.linux;
       expect(
-        find.text('使用移动数据缓存前会提示确认。'),
+        find.text('关闭后，使用移动数据缓存前不再弹窗确认。'),
+        mobile ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('setting-移动数据缓存提示')),
         mobile ? findsOneWidget : findsNothing,
       );
       expect(find.text('打开目录'), desktop ? findsOneWidget : findsNothing);

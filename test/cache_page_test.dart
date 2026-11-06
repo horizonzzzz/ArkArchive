@@ -25,7 +25,7 @@ void main() {
               cached: cached,
               jobs: const {},
               onBrowse: () {},
-              onRetry: () {},
+              onRetry: (_) {},
               onOpen: (entry) => opened = entry,
               onToggleJob: (_) {},
               onRemoveJob: (_) {},
@@ -89,7 +89,7 @@ void main() {
             progressPaths: const {'a/1'},
             jobs: const {},
             onBrowse: () {},
-            onRetry: () {},
+            onRetry: (_) {},
             onOpen: (_) {},
             onToggleJob: (_) {},
             onRemoveJob: (_) {},
@@ -130,7 +130,7 @@ void main() {
                 cached: const [],
                 jobs: visible ? {entry.path: job} : {},
                 onBrowse: () {},
-                onRetry: () {},
+                onRetry: (_) {},
                 onOpen: (_) {},
                 onDeleteCached: (_) {},
                 onToggleJob: (item) => update(() {
@@ -170,6 +170,54 @@ void main() {
     expect(find.text('测试剧情'), findsNothing);
   });
 
+  testWidgets('下载中已缓存条目仍可播放，失败任务可直接重试', (tester) async {
+    const cached = StoryEntry('已缓存剧情', 'a/1');
+    final failed = CacheJob(const StoryEntry('失败剧情', 'b/1'))
+      ..status = CacheJobStatus.failed
+      ..error = '网络不可用';
+    StoryEntry? opened;
+    CacheJob? retried;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CachePage(
+            cached: const [cached],
+            jobs: {failed.entry.path: failed},
+            onBrowse: () {},
+            onRetry: (job) => retried = job,
+            onOpen: (entry) => opened = entry,
+            onToggleJob: (_) {},
+            onRemoveJob: (_) {},
+            onDeleteCached: (_) {},
+            deleting: false,
+            caching: true,
+            done: 0,
+            total: 1,
+          ),
+        ),
+      ),
+    );
+    // 总览页：下载中失败任务也显示重试按钮。
+    final retry = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.refresh),
+    );
+    expect(retry.onPressed, isNotNull);
+    await tester.tap(find.byTooltip('重试失败任务'));
+    await tester.pump();
+    expect(retried, same(failed));
+    // 下钻后：已缓存条目在下载中仍可播放。
+    await tester.tap(find.byKey(const ValueKey('offline-其他离线剧情')));
+    await tester.pumpAndSettle();
+    final play = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.play_arrow),
+    );
+    expect(play.onPressed, isNotNull);
+    await tester.tap(find.byTooltip('播放 ${cached.title}'));
+    await tester.pump();
+    expect(opened, cached);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final mobile in [true, false]) {
     testWidgets(mobile ? '移动端显示流量确认说明' : '桌面端只显示缓存目录', (tester) async {
       var cleared = false;
@@ -199,7 +247,11 @@ void main() {
       await tester.tap(find.text('存储与缓存'));
       await tester.pumpAndSettle();
       expect(
-        find.text('使用移动数据缓存前会提示确认。'),
+        find.text('关闭后，使用移动数据缓存前不再弹窗确认。'),
+        mobile ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('setting-移动数据缓存提示')),
         mobile ? findsOneWidget : findsNothing,
       );
       expect(find.text('本地媒体缓存目录'), mobile ? findsNothing : findsOneWidget);
