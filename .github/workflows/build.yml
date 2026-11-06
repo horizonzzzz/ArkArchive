@@ -91,22 +91,34 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -euo pipefail
-          apksigner=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -1)
-          [ -x "$apksigner" ] || { echo "::error::未找到 apksigner"; exit 1; }
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          apksigner=$(find "${sdk_root}/build-tools" -maxdepth 2 \( -type f -o -type l \) -name 'apksigner*' 2>/dev/null | sort -V | tail -1)
+          if [ ! -f "$apksigner" ]; then
+            echo "::error::未找到 apksigner（SDK 根目录: ${sdk_root:-<未设置>}）"
+            exit 1
+          fi
+          echo "apksigner: $apksigner"
+          echo "apksigner 版本: $("$apksigner" version 2>&1 | tr -d '\r')"
           expected=$(keytool -list -v -keystore android/app/upload-keystore.jks \
             -alias "$ANDROID_KEY_ALIAS" -storepass "$ANDROID_KEYSTORE_PASSWORD" \
-            | sed -n 's/^.*SHA256: //p' | head -1 | tr -d ':' | tr 'A-Z' 'a-z')
+            | sed -n 's/^.*SHA256: //p' | head -1 | tr -d ':\r ' | tr 'A-Z' 'a-z')
           [ -n "$expected" ] || { echo "::error::无法从密钥库读取证书 SHA-256"; exit 1; }
           for apk in dist/*.apk; do
-            mapfile -t actual < <("$apksigner" verify --print-certs "$apk" \
-              | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr 'A-Z' 'a-z')
-            if [ "${#actual[@]}" -ne 1 ] || [ "${actual[0]}" != "$expected" ]; then
-              echo "::error::$apk 的签名与上传密钥库不一致（可能是 debug 签名）"
-              echo "expected: $expected"
-              printf 'actual: %s\n' "${actual[@]:-<空>}"
+            if ! report=$("$apksigner" verify --print-certs "$apk" 2>&1); then
+              echo "::error::$apk 签名校验未通过"
+              printf '%s\n' "$report"
               exit 1
             fi
-            echo "签名校验通过: $apk -> ${actual[0]}"
+            actual=$(printf '%s\n' "$report" | sed -n 's/^.*SHA-256 digest: *//p' | head -1 | tr -d ':\r ' | tr 'A-Z' 'a-z')
+            signers=$(printf '%s\n' "$report" | grep -c 'SHA-256 digest:' || true)
+            if [ "$signers" -ne 1 ] || [ "$actual" != "$expected" ]; then
+              echo "::error::$apk 的签名与上传密钥库不一致（可能是 debug 签名）"
+              echo "expected: $expected"
+              echo "actual: ${actual:-<空>}（签名者数量: $signers）"
+              printf '%s\n' "$report"
+              exit 1
+            fi
+            echo "签名校验通过: $apk -> $actual"
           done
       - name: Upload Android Artifacts
         uses: actions/upload-artifact@v4
