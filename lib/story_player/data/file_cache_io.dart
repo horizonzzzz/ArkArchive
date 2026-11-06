@@ -6,17 +6,26 @@ import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
 class FileCache {
-  FileCache({Future<Directory> Function()? supportDirectory})
-    : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
+  FileCache({
+    Future<Directory> Function()? supportDirectory,
+    Future<void> Function(String, List<String>)? startProcess,
+  }) : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory,
+       _startProcess =
+           startProcess ??
+           ((executable, arguments) async {
+             await Process.start(executable, arguments);
+           });
 
   final Future<Directory> Function() _supportDirectory;
+  final Future<void> Function(String, List<String>) _startProcess;
   Future<Directory>? _directory;
   Future<Directory>? _activeFolder;
   final Map<Uri, Future<void>> _writes = {};
 
   Future<Directory> _root() => _directory ??= _supportDirectory();
-  Future<File> _config() async =>
-      File('${(await _root()).path}/story_cache_directory.json');
+  Future<File> _config() async => File(
+    '${(await _root()).path}${Platform.pathSeparator}story_cache_directory.json',
+  );
 
   Future<Directory> _folder() async {
     final folder = _activeFolder ??= _resolveFolder();
@@ -40,7 +49,9 @@ class FileCache {
       if (!await selected.exists()) throw FileSystemException('缓存目录不存在', path);
       return selected;
     }
-    final folder = Directory('${(await _root()).path}/story_assets');
+    final folder = Directory(
+      '${(await _root()).path}${Platform.pathSeparator}story_assets',
+    );
     await folder.create(recursive: true);
     return folder;
   }
@@ -104,13 +115,13 @@ class FileCache {
     if (!await directory.exists()) {
       throw FileSystemException('缓存目录不存在', directory.path);
     }
-    final path = directory.absolute.path;
+    final path = await directory.resolveSymbolicLinks();
     if (Platform.isWindows) {
-      await Process.start('explorer.exe', ['/n,', path]);
+      await _startProcess('explorer.exe', ['/n,', path]);
     } else if (Platform.isMacOS) {
-      await Process.start('open', [path]);
+      await _startProcess('open', [path]);
     } else if (Platform.isLinux) {
-      await Process.start('xdg-open', [path]);
+      await _startProcess('xdg-open', [path]);
     } else {
       throw UnsupportedError('当前平台不支持打开缓存目录');
     }
@@ -151,7 +162,7 @@ class FileCache {
     final name = sha256.convert(utf8.encode(uri.toString()));
     final extension =
         RegExp(r'\.[a-zA-Z0-9]{1,8}$').firstMatch(uri.path)?.group(0) ?? '.bin';
-    return File('${folder.path}/$name$extension');
+    return File('${folder.path}${Platform.pathSeparator}$name$extension');
   }
 
   Future<Uint8List?> read(Uri uri) async {

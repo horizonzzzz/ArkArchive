@@ -5,6 +5,37 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:arknights_story_player/story_player/data/file_cache_io.dart';
 
 void main() {
+  test('Windows 打开默认及自定义缓存目录时使用系统规范路径', () async {
+    final root = await Directory.systemTemp.createTemp('缓存目录 空格-');
+    addTearDown(() => root.delete(recursive: true));
+    final support = await Directory('${root.path}/support').create();
+    final selected = await Directory('${root.path}/自定义 缓存/story_assets')
+        .create(recursive: true);
+    final calls = <List<String>>[];
+    FileCache cache() => FileCache(
+      supportDirectory: () async => support,
+      startProcess: (executable, arguments) async {
+        calls.add([executable, ...arguments]);
+      },
+    );
+    final initial = cache();
+    await initial.openDirectory();
+    expect(calls.single, [
+      'explorer.exe',
+      '/n,',
+      await Directory((await initial.location())!).resolveSymbolicLinks(),
+    ]);
+    await File('${support.path}/story_cache_directory.json')
+        .writeAsString('"${selected.path.replaceAll(r'\', '/')}"');
+    await cache().openDirectory();
+    expect(calls.last, [
+      'explorer.exe',
+      '/n,',
+      await selected.resolveSymbolicLinks(),
+    ]);
+    expect(calls.every((call) => !call.last.contains('/')), isTrue);
+  }, skip: !Platform.isWindows);
+
   test('缓存目录迁移保留数据，重启后使用新目录且不覆盖已有目录', () async {
     final root = await Directory.systemTemp.createTemp('story-cache-test-');
     addTearDown(() => root.delete(recursive: true));
