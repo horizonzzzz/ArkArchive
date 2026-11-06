@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
+
 import 'package:flutter/foundation.dart';
 
 import '../script.dart';
@@ -25,24 +26,58 @@ class PlaySpeed {
 }
 
 const buttonSpeeds = [
-  PlaySpeed(typingMs: 40, animateRatio: 1, autoWaitBase: 1.5, autoWaitPerChar: .03),
-  PlaySpeed(typingMs: 10, animateRatio: 1, autoWaitBase: .5, autoWaitPerChar: .015),
-  PlaySpeed(typingMs: 10, animateRatio: 1, autoWaitBase: .25, autoWaitPerChar: .01),
+  PlaySpeed(
+    typingMs: 40,
+    animateRatio: 1,
+    autoWaitBase: 1.5,
+    autoWaitPerChar: .03,
+  ),
+  PlaySpeed(
+    typingMs: 10,
+    animateRatio: 1,
+    autoWaitBase: .5,
+    autoWaitPerChar: .015,
+  ),
+  PlaySpeed(
+    typingMs: 10,
+    animateRatio: 1,
+    autoWaitBase: .25,
+    autoWaitPerChar: .01,
+  ),
 ];
 
 const quickSpeeds = [
-  PlaySpeed(typingMs: 10, animateRatio: 0, autoWaitBase: .2, autoWaitPerChar: 0),
+  PlaySpeed(
+    typingMs: 10,
+    animateRatio: 0,
+    autoWaitBase: .2,
+    autoWaitPerChar: 0,
+  ),
   PlaySpeed(typingMs: 5, animateRatio: 0, autoWaitBase: .1, autoWaitPerChar: 0),
-  PlaySpeed(typingMs: 2.5, animateRatio: 0, autoWaitBase: .05, autoWaitPerChar: 0),
-  PlaySpeed(typingMs: 1.25, animateRatio: 0, autoWaitBase: .025, autoWaitPerChar: 0),
+  PlaySpeed(
+    typingMs: 2.5,
+    animateRatio: 0,
+    autoWaitBase: .05,
+    autoWaitPerChar: 0,
+  ),
+  PlaySpeed(
+    typingMs: 1.25,
+    animateRatio: 0,
+    autoWaitBase: .025,
+    autoWaitPerChar: 0,
+  ),
 ];
 
 /// 默认打字间隔（毫秒），参考端以 40ms 为基准换算贴纸与 multiline 的 delay 参数。
 const baseTypingMs = 40.0;
 
 class _Animation {
-  _Animation(this.durationMs, this.update, {this.loop = false, double delayMs = 0})
-      : elapsed = -delayMs;
+  _Animation(
+    this.durationMs,
+    this.update, {
+    this.loop = false,
+    double delayMs = 0,
+  }) : elapsed = -delayMs;
   final double durationMs;
   final void Function(double) update;
   final bool loop;
@@ -61,7 +96,9 @@ class ShakePath {
     for (final seg in segments) {
       final end = start + seg.ratio;
       if (c <= end || identical(seg, segments.last)) {
-        final local = seg.ratio > 0 ? ((c - start) / seg.ratio).clamp(0.0, 1.0) : 1.0;
+        final local = seg.ratio > 0
+            ? ((c - start) / seg.ratio).clamp(0.0, 1.0)
+            : 1.0;
         return Offset(x + (seg.x - x) * local, y + (seg.y - y) * local);
       }
       start = end;
@@ -107,7 +144,10 @@ ShakePath buildShakePath({
     final theta = angle * math.pi / 180;
     final phi = rr(-rand, rand) * math.pi / 180;
     final d = math.cos(theta);
-    final f = Offset(d * xStrength * math.cos(phi), math.sin(theta) * xStrength);
+    final f = Offset(
+      d * xStrength * math.cos(phi),
+      math.sin(theta) * xStrength,
+    );
     final damp = fadeOut ? 1 - r / count : 1.0;
     if (!vectorBased) {
       segments.add((ratio: weight / total, x: f.dx * damp, y: f.dy * damp));
@@ -117,7 +157,11 @@ ShakePath buildShakePath({
     final h = clamp3(Offset(m.dx, f.dy), yStrength);
     final n = Offset(m.dx, h.dy).distance;
     final dir = n <= 1e-5 ? Offset.zero : Offset(m.dx / n, h.dy / n);
-    segments.add((ratio: weight / total, x: dir.dx * xStrength * damp, y: dir.dy * xStrength * damp));
+    segments.add((
+      ratio: weight / total,
+      x: dir.dx * xStrength * damp,
+      y: dir.dy * xStrength * damp,
+    ));
   }
   return ShakePath(segments);
 }
@@ -142,7 +186,9 @@ double applyEase(String? name, double t) {
     case 'OutCubic':
       i = 1 - (1 - x) * (1 - x) * (1 - x);
     case 'InOutCubic':
-      i = x < .5 ? 4 * x * x * x : 1 - (-2 * x + 2) * (-2 * x + 2) * (-2 * x + 2) / 2;
+      i = x < .5
+          ? 4 * x * x * x
+          : 1 - (-2 * x + 2) * (-2 * x + 2) * (-2 * x + 2) / 2;
     case 'InSine':
       i = 1 - math.cos(x * math.pi / 2);
     case 'OutSine':
@@ -154,7 +200,9 @@ double applyEase(String? name, double t) {
     case 'OutQuart':
       i = 1 - (1 - x) * (1 - x) * (1 - x) * (1 - x);
     case 'InOutQuart':
-      i = x < .5 ? 8 * x * x * x * x : 1 - (-2 * x + 2) * (-2 * x + 2) * (-2 * x + 2) * (-2 * x + 2) / 2;
+      i = x < .5
+          ? 8 * x * x * x * x
+          : 1 - (-2 * x + 2) * (-2 * x + 2) * (-2 * x + 2) * (-2 * x + 2) / 2;
     case 'InQuint':
       i = x * x * x * x * x;
     case 'OutQuint':
@@ -162,7 +210,13 @@ double applyEase(String? name, double t) {
     case 'InOutQuint':
       i = x < .5
           ? 16 * x * x * x * x * x
-          : 1 - (-2 * x + 2) * (-2 * x + 2) * (-2 * x + 2) * (-2 * x + 2) * (-2 * x + 2) / 2;
+          : 1 -
+                (-2 * x + 2) *
+                    (-2 * x + 2) *
+                    (-2 * x + 2) *
+                    (-2 * x + 2) *
+                    (-2 * x + 2) /
+                    2;
     case 'InExpo':
       i = x == 0 ? 0 : math.pow(2, 10 * x - 10).toDouble();
     case 'OutExpo':
@@ -188,11 +242,16 @@ double applyEase(String? name, double t) {
     case 'OutBounce':
       i = _outBounce(x);
     case 'InOutBounce':
-      i = x < .5 ? (1 - _outBounce(1 - 2 * x)) / 2 : (1 + _outBounce(2 * x - 1)) / 2;
+      i = x < .5
+          ? (1 - _outBounce(1 - 2 * x)) / 2
+          : (1 + _outBounce(2 * x - 1)) / 2;
     case 'InBack':
       i = 2.70158 * x * x * x - 1.70158 * x * x;
     case 'OutBack':
-      i = 1 + 2.70158 * (x - 1) * (x - 1) * (x - 1) + 1.70158 * (x - 1) * (x - 1);
+      i =
+          1 +
+          2.70158 * (x - 1) * (x - 1) * (x - 1) +
+          1.70158 * (x - 1) * (x - 1);
     case 'Flash':
       i = x;
     case 'InFlash':
@@ -234,7 +293,15 @@ class _Motion {
 }
 
 class _StickerStep {
-  _StickerStep(this.kind, this.durationMs, this.join, this.fromPos, this.toPos, {this.from = 0, this.to = 0});
+  _StickerStep(
+    this.kind,
+    this.durationMs,
+    this.join,
+    this.fromPos,
+    this.toPos, {
+    this.from = 0,
+    this.to = 0,
+  });
   final String kind; // position | rotation | alpha
   final double durationMs;
   final bool join;
@@ -276,8 +343,10 @@ class StoryEngine extends ChangeNotifier {
   final double? autoWaitSeconds;
   final Duration Function()? elapsed;
   final bool firstRead;
+
   /// 从 character.json 读取立绘标称尺寸，供 zoom 轴心位移计算。
   final Offset? Function(String name)? characterArtSize;
+
   /// 图片原始宽度（像素），供 showitem cutin 窗口缺省宽度计算（参考端回退 100）。
   final double? Function(String image)? imageNaturalWidth;
   final Map<String, CommandHandler> handlers = {};
@@ -297,18 +366,23 @@ class StoryEngine extends ChangeNotifier {
   final Map<String, StoryCommand> _resumeTracks = {};
   bool _rebuilding = false;
 
-  int get checkpointRevision => cursor > 0 || running || _playbackTrace.isNotEmpty
-      ? _playbackTrace.length + 1 : 0;
+  int get checkpointRevision =>
+      cursor > 0 || running || _playbackTrace.isNotEmpty
+      ? _playbackTrace.length + 1
+      : 0;
 
   PlaybackCheckpoint? get checkpoint {
     if (_rebuilding || finished) return null;
     if (running && cursor == 0 && _playbackTrace.isEmpty) {
       return PlaybackCheckpoint(cursor: 0, trace: const []);
     }
-    return !running && (_waitingInput || state.choices.isNotEmpty) &&
-        _playbackTrace.isNotEmpty
-        ? PlaybackCheckpoint(cursor: cursor, trace: _playbackTrace) : null;
+    return !running &&
+            (_waitingInput || state.choices.isNotEmpty) &&
+            _playbackTrace.isNotEmpty
+        ? PlaybackCheckpoint(cursor: cursor, trace: _playbackTrace)
+        : null;
   }
+
   double _lastTick = 0, _typingTime = 0, _typingScale = 1, _autoClickAt = -1;
   bool running = false,
       finished = false,
@@ -349,19 +423,48 @@ class StoryEngine extends ChangeNotifier {
   bool get typing => state.dialogueVisible && state.revealed < totalCharacters;
   bool get waitingInput => _waitingInput;
 
+  bool _fastForwarding = false;
+  bool get fastForwarding => _fastForwarding;
+  double _lastClockUs = 0, _playbackUs = 0;
+
   PlaySpeed get currentSpeed => switch (autoMode) {
     'button_auto' when autoWaitSeconds != null => PlaySpeed(
-      typingMs: typingInterval.inMicroseconds / 1000 * buttonSpeeds[math.min(speedLevel, buttonSpeeds.length - 1)].typingMs / 40,
+      typingMs:
+          typingInterval.inMicroseconds /
+          1000 *
+          buttonSpeeds[math.min(speedLevel, buttonSpeeds.length - 1)].typingMs /
+          40,
       animateRatio: 1,
-      autoWaitBase: autoWaitSeconds! * buttonSpeeds[math.min(speedLevel, buttonSpeeds.length - 1)].autoWaitBase / 1.5,
+      autoWaitBase:
+          autoWaitSeconds! *
+          buttonSpeeds[math.min(speedLevel, buttonSpeeds.length - 1)]
+              .autoWaitBase /
+          1.5,
       autoWaitPerChar: 0,
     ),
-    'button_auto' => buttonSpeeds[math.min(speedLevel, buttonSpeeds.length - 1)],
+    'button_auto' =>
+      buttonSpeeds[math.min(speedLevel, buttonSpeeds.length - 1)],
     'quick_play' => quickSpeeds[math.min(speedLevel, quickSpeeds.length - 1)],
     _ => defaultSpeed,
   };
 
-  double _nowUs() => (elapsed?.call().inMicroseconds ?? _clock.elapsedMicroseconds) + .0;
+  void setFastForward(bool value) {
+    if (_fastForwarding == value || _disposed) return;
+    // 先按旧倍率结算，避免把上次 tick 后的时间误算到新倍率。
+    _lastTick = _nowUs();
+    _fastForwarding = value;
+    _changed();
+  }
+
+  double _nowUs() {
+    final clockUs =
+        (elapsed?.call().inMicroseconds ?? _clock.elapsedMicroseconds) + .0;
+    // 所有演出共用逻辑时钟，使运行中的动画和等待也能即时切换倍率。
+    _playbackUs += (clockUs - _lastClockUs) * (_fastForwarding ? 2 : 1);
+    _lastClockUs = clockUs;
+    return _playbackUs;
+  }
+
   double scaled(double seconds) => seconds * currentSpeed.animateRatio;
 
   String translate(String text) => text.replaceAllMapped(
@@ -395,14 +498,18 @@ class StoryEngine extends ChangeNotifier {
   Offset _point(String text, [Offset? fallback]) {
     final parts = text.split(',');
     if (parts.length != 2) return fallback ?? Offset.zero;
-    final x = double.tryParse(parts[0].trim()), y = double.tryParse(parts[1].trim());
-    return x != null && y != null && x.isFinite && y.isFinite ? Offset(x, y) : fallback ?? Offset.zero;
+    final x = double.tryParse(parts[0].trim()),
+        y = double.tryParse(parts[1].trim());
+    return x != null && y != null && x.isFinite && y.isFinite
+        ? Offset(x, y)
+        : fallback ?? Offset.zero;
   }
 
   bool _hasPoint(String text) {
     final parts = text.split(',');
     if (parts.length != 2) return false;
-    return double.tryParse(parts[0].trim()) != null && double.tryParse(parts[1].trim()) != null;
+    return double.tryParse(parts[0].trim()) != null &&
+        double.tryParse(parts[1].trim()) != null;
   }
 
   List<double> _numbers(String text) => text
@@ -425,7 +532,9 @@ class StoryEngine extends ChangeNotifier {
       const fitModes = {0: 'DEFAULT', 1: 'BLACK_MASK'};
       var fit = c.value('fit_mode', 'DEFAULT').toUpperCase();
       final numeric = int.tryParse(fit);
-      if (numeric != null && fitModes.containsKey(numeric)) fit = fitModes[numeric]!;
+      if (numeric != null && fitModes.containsKey(numeric)) {
+        fit = fitModes[numeric]!;
+      }
       final tutorial = c.flag('is_tutorial');
       final videoOnly = c.flag('is_video_only');
       final skippableArg = c.args['is_skippable'];
@@ -435,8 +544,12 @@ class StoryEngine extends ChangeNotifier {
         title: c.text,
         isTutorial: tutorial,
         isVideoOnly: videoOnly,
-        isSkippable: skippableArg == null ? !tutorial : c.flag('is_skippable', true),
-        isAutoable: autoableArg == null ? !tutorial && !videoOnly : c.flag('is_autoable', true),
+        isSkippable: skippableArg == null
+            ? !tutorial
+            : c.flag('is_skippable', true),
+        isAutoable: autoableArg == null
+            ? !tutorial && !videoOnly
+            : c.flag('is_autoable', true),
       );
       break;
     }
@@ -446,7 +559,10 @@ class StoryEngine extends ChangeNotifier {
     for (var i = 0; i < script.commands.length; i++) {
       final c = script.commands[i];
       if (c.tag == 'skipnode') {
-        _skipNodes.add((index: i, mode: c.value('mode') == 'nofirstskip' ? 'nofirstskip' : 'skip'));
+        _skipNodes.add((
+          index: i,
+          mode: c.value('mode') == 'nofirstskip' ? 'nofirstskip' : 'skip',
+        ));
       } else if (c.tag == 'skiptothis' && _skipToIndex < 0) {
         _skipToIndex = i;
       }
@@ -457,7 +573,9 @@ class StoryEngine extends ChangeNotifier {
     final active = !finished;
     final hasNode = _skipToIndex >= 0 || _skipNodes.isNotEmpty;
     final beforeTarget = _skipToIndex < 0 || cursor <= _skipToIndex;
-    final allowed = state.metadata.isSkippable && (_currentSkipMode != 'nofirstskip' || firstRead);
+    final allowed =
+        state.metadata.isSkippable &&
+        (_currentSkipMode != 'nofirstskip' || firstRead);
     return active && hasNode && beforeTarget && allowed;
   }
 
@@ -483,7 +601,9 @@ class StoryEngine extends ChangeNotifier {
     if (typing) {
       _typingTime += dt;
       final interval = math.max(0, currentSpeed.typingMs * _typingScale);
-      final count = interval <= 0 ? totalCharacters : (_typingTime / interval).floor();
+      final count = interval <= 0
+          ? totalCharacters
+          : (_typingTime / interval).floor();
       if (count != state.revealed) {
         state.revealed = math.min(count, totalCharacters);
         changed = true;
@@ -495,7 +615,9 @@ class StoryEngine extends ChangeNotifier {
       final total = plainText(overlay.text).runes.length;
       if (overlay.revealed >= total) continue;
       overlay.typingTime += dt;
-      final count = overlay.typingMs <= 0 ? total : (overlay.typingTime / overlay.typingMs).floor();
+      final count = overlay.typingMs <= 0
+          ? total
+          : (overlay.typingTime / overlay.typingMs).floor();
       final revealed = math.min(count, total);
       if (revealed != overlay.revealed) {
         overlay.revealed = revealed;
@@ -505,7 +627,9 @@ class StoryEngine extends ChangeNotifier {
     final timer = state.timer;
     if (timer != null && timer.visible && timer.startMicros >= 0) {
       final seconds = ((now - timer.startMicros) / 1e6).floor();
-      final clamped = timer.limitSeconds >= 0 ? math.min(seconds, timer.limitSeconds) : seconds;
+      final clamped = timer.limitSeconds >= 0
+          ? math.min(seconds, timer.limitSeconds)
+          : seconds;
       if (clamped != timer.elapsedSeconds) {
         timer.elapsedSeconds = clamped;
         changed = true;
@@ -518,8 +642,12 @@ class StoryEngine extends ChangeNotifier {
       }
     }
     if (_shakePath != null) {
-      final raw = _shakeDurationMs <= 0 ? 1.0 : (now - _shakeStartUs) / 1000 / _shakeDurationMs;
-      state.shake = _shakePath!.at(_shakeInfinite ? raw % 1.0 : raw.clamp(0.0, 1.0));
+      final raw = _shakeDurationMs <= 0
+          ? 1.0
+          : (now - _shakeStartUs) / 1000 / _shakeDurationMs;
+      state.shake = _shakePath!.at(
+        _shakeInfinite ? raw % 1.0 : raw.clamp(0.0, 1.0),
+      );
       changed = true;
       if (!_shakeInfinite && (now - _shakeStartUs) / 1000 >= _shakeDurationMs) {
         state.shake = Offset.zero;
@@ -531,14 +659,23 @@ class StoryEngine extends ChangeNotifier {
     if (_tickMotions(now)) changed = true;
     if (_waitingInput &&
         !typing &&
-        !overlays.any((o) => o != null && o.visible && o.revealed < plainText(o.text).runes.length) &&
+        !overlays.any(
+          (o) =>
+              o != null &&
+              o.visible &&
+              o.revealed < plainText(o.text).runes.length,
+        ) &&
         !running &&
         !finished &&
         state.choices.isEmpty &&
         autoMode != 'default') {
       if (_autoClickAt < 0) {
         _autoClickAt =
-            now + (currentSpeed.autoWaitBase + plainText(state.text).length * currentSpeed.autoWaitPerChar) * 1e6;
+            now +
+            (currentSpeed.autoWaitBase +
+                    plainText(state.text).length *
+                        currentSpeed.autoWaitPerChar) *
+                1e6;
       } else if (now >= _autoClickAt) {
         _autoClickAt = -1;
         unawaited(advance());
@@ -562,7 +699,9 @@ class StoryEngine extends ChangeNotifier {
       }
       final shake = motion.shake;
       if (shake != null) {
-        final t = motion.shakeDurationMs <= 0 ? 1.0 : (nowUs - motion.shakeStartUs) / 1000 / motion.shakeDurationMs;
+        final t = motion.shakeDurationMs <= 0
+            ? 1.0
+            : (nowUs - motion.shakeStartUs) / 1000 / motion.shakeDurationMs;
         if (t >= 1) {
           node.shakeOffsetX = 0;
           node.shakeOffsetY = 0;
@@ -575,7 +714,9 @@ class StoryEngine extends ChangeNotifier {
         changed = true;
       }
       if (motion.jumpStartUs >= 0) {
-        final t = motion.jumpDurationMs <= 0 ? 1.0 : (nowUs - motion.jumpStartUs) / 1000 / motion.jumpDurationMs;
+        final t = motion.jumpDurationMs <= 0
+            ? 1.0
+            : (nowUs - motion.jumpStartUs) / 1000 / motion.jumpDurationMs;
         if (t >= 1) {
           node.jumpOffsetY = 0;
           motion.jumpStartUs = -1;
@@ -583,7 +724,9 @@ class StoryEngine extends ChangeNotifier {
           final r = math.min(_easeOutCubic(t), 1) / motion.jumpCycle;
           final o = r.floorToDouble();
           final s = r - o;
-          node.jumpOffsetY = motion.jumpPower * (o % 2 == 0 ? _easeOutQuad(s) : _easeOutQuad(1 - s));
+          node.jumpOffsetY =
+              motion.jumpPower *
+              (o % 2 == 0 ? _easeOutQuad(s) : _easeOutQuad(1 - s));
         }
         changed = true;
       }
@@ -591,7 +734,14 @@ class StoryEngine extends ChangeNotifier {
     return changed;
   }
 
-  void _startShake(String slot, double durationMs, double power, double times, double randomness, {bool stop = false}) {
+  void _startShake(
+    String slot,
+    double durationMs,
+    double power,
+    double times,
+    double randomness, {
+    bool stop = false,
+  }) {
     final node = state.characters.lastWhereOrNull((n) => n.slot == slot);
     final motion = _motions[slot] ??= _Motion();
     if (stop || node == null) {
@@ -638,19 +788,29 @@ class StoryEngine extends ChangeNotifier {
   }
 
   Future<void> animate(
-    String key, double seconds, void Function(double) update, {
-    String? ease, bool loop = false, double delay = 0,
+    String key,
+    double seconds,
+    void Function(double) update, {
+    String? ease,
+    bool loop = false,
+    double delay = 0,
   }) {
     final previous = _animations.remove(key);
-    if (previous != null && !previous.done.isCompleted) previous.done.complete();
+    if (previous != null && !previous.done.isCompleted) {
+      previous.done.complete();
+    }
     if (_disposed) return Future.value();
     if (seconds <= 0 || (_rebuilding && !loop)) {
       update(applyEase(ease, 1));
       _changed();
       return Future.value();
     }
-    final a = _Animation(seconds * 1000, (t) => update(applyEase(ease, t)),
-        loop: loop, delayMs: math.max(0, delay) * 1000);
+    final a = _Animation(
+      seconds * 1000,
+      (t) => update(applyEase(ease, t)),
+      loop: loop,
+      delayMs: math.max(0, delay) * 1000,
+    );
     _animations[key] = a;
     update(applyEase(ease, 0));
     _changed();
@@ -659,8 +819,11 @@ class StoryEngine extends ChangeNotifier {
 
   void _cancelAnimation(String key) {
     final animation = _animations.remove(key);
-    if (animation != null && !animation.done.isCompleted) animation.done.complete();
+    if (animation != null && !animation.done.isCompleted) {
+      animation.done.complete();
+    }
   }
+
   void _cancelAnimations() {
     for (final a in _animations.values) {
       if (!a.done.isCompleted) a.done.complete();
@@ -691,7 +854,11 @@ class StoryEngine extends ChangeNotifier {
   }
 
   Future<void> advance() async {
-    if (_disposed || paused || running || finished || state.choices.isNotEmpty) {
+    if (_disposed ||
+        paused ||
+        running ||
+        finished ||
+        state.choices.isNotEmpty) {
       return;
     }
     if (typing) {
@@ -749,10 +916,14 @@ class StoryEngine extends ChangeNotifier {
   }
 
   bool _applyChoice(String value) {
-    final index = state.choices.indexWhere((c) => c.value == value && !c.disabled);
+    final index = state.choices.indexWhere(
+      (c) => c.value == value && !c.disabled,
+    );
     if (index < 0) return false;
     _playbackTrace.add(-index - 2);
-    _selectedValue = index < _decisionValues.length ? _decisionValues[index] : 0;
+    _selectedValue = index < _decisionValues.length
+        ? _decisionValues[index]
+        : 0;
     _predicates = null;
     state.choices = [];
     return true;
@@ -769,12 +940,18 @@ class StoryEngine extends ChangeNotifier {
         return false;
       }
       _flushMultiline();
-      _showDialogue(c.tag == 'aside' ? '' : c.value('name'), c.text, line: c.line);
+      _showDialogue(
+        c.tag == 'aside' ? '' : c.value('name'),
+        c.text,
+        line: c.line,
+      );
       _resetMultiline();
       return true;
     }
     if (c.tag == 'endtip') {
-      if ((autoMode != 'default' || _rebuilding) && !state.metadata.isVideoOnly && c.text.isNotEmpty) {
+      if ((autoMode != 'default' || _rebuilding) &&
+          !state.metadata.isVideoOnly &&
+          c.text.isNotEmpty) {
         _flushMultiline();
         _showDialogue('', c.text, line: c.line);
         _resetMultiline();
@@ -846,7 +1023,9 @@ class StoryEngine extends ChangeNotifier {
       }
       cursor = saved.cursor;
       _skipNodeIndex = _skipNodes.where((node) => node.index < cursor).length;
-      if (_skipNodeIndex > 0) _currentSkipMode = _skipNodes[_skipNodeIndex - 1].mode;
+      if (_skipNodeIndex > 0) {
+        _currentSkipMode = _skipNodes[_skipNodeIndex - 1].mode;
+      }
       _resetMotions();
       _autoClickAt = -1;
       for (final command in _resumeTracks.values) {
@@ -863,11 +1042,18 @@ class StoryEngine extends ChangeNotifier {
 
   Future<void> _executeAudio(StoryCommand c) async {
     if (!_rebuilding) return audio.execute(c);
-    final channel = c.tag.contains('music') ? 'music' : c.value('channel', c.value('key'));
+    final channel = c.tag.contains('music')
+        ? 'music'
+        : c.value('channel', c.value('key'));
     if (c.tag.startsWith('play')) {
       if (channel == 'music' || c.flag('loop')) {
-        _resumeTracks[channel] = StoryCommand(c.tag,
-          {...c.args, 'delay': '0', 'crossfade': '0', 'fadetime': '0'}, c.text, c.line, c.raw);
+        _resumeTracks[channel] = StoryCommand(
+          c.tag,
+          {...c.args, 'delay': '0', 'crossfade': '0', 'fadetime': '0'},
+          c.text,
+          c.line,
+          c.raw,
+        );
       } else {
         _resumeTracks.remove(channel);
       }
@@ -880,16 +1066,30 @@ class StoryEngine extends ChangeNotifier {
     } else {
       final track = _resumeTracks[channel];
       if (track != null) {
-        _resumeTracks[channel] = StoryCommand(track.tag,
-          {...track.args, 'volume': c.value('volume', '1')}, track.text, track.line, track.raw);
+        _resumeTracks[channel] = StoryCommand(
+          track.tag,
+          {...track.args, 'volume': c.value('volume', '1')},
+          track.text,
+          track.line,
+          track.raw,
+        );
       }
     }
   }
 
   bool _predicateActive() =>
-      _selectedValue == 0 || _predicates == null || _predicates!.isEmpty || _predicates!.contains(_selectedValue);
+      _selectedValue == 0 ||
+      _predicates == null ||
+      _predicates!.isEmpty ||
+      _predicates!.contains(_selectedValue);
 
-  void _showDialogue(String speaker, String text, {int line = 0, int startIndex = 0, bool log = true}) {
+  void _showDialogue(
+    String speaker,
+    String text, {
+    int line = 0,
+    int startIndex = 0,
+    bool log = true,
+  }) {
     _overlayLogSource = null;
     state.speaker = translate(speaker);
     state.text = translate(text).replaceAll(r'\n', '\n');
@@ -914,9 +1114,7 @@ class StoryEngine extends ChangeNotifier {
     _multilineText += text;
     _multilineEnd = c.flag('end');
     final delayArg = double.tryParse(c.value('delay'));
-    _typingScale = delayArg == null
-        ? 1
-        : delayArg / (baseTypingMs / 1000);
+    _typingScale = delayArg == null ? 1 : delayArg / (baseTypingMs / 1000);
     _showDialogue(
       _multilineName,
       _multilineText,
@@ -926,7 +1124,9 @@ class StoryEngine extends ChangeNotifier {
     );
     _multilineShownChars = totalCharacters;
     if (_multilineEnd) {
-      state.history.add(DialogueLine(translate(_multilineName), _multilineText, c.line));
+      state.history.add(
+        DialogueLine(translate(_multilineName), _multilineText, c.line),
+      );
       _resetMultiline();
     }
   }
@@ -934,7 +1134,9 @@ class StoryEngine extends ChangeNotifier {
   void _flushMultiline() {
     if (_multilineText.isEmpty || _multilineLogged) return;
     _multilineLogged = true;
-    state.history.add(DialogueLine(translate(_multilineName), _multilineText, cursor));
+    state.history.add(
+      DialogueLine(translate(_multilineName), _multilineText, cursor),
+    );
   }
 
   void _resetMultiline() {
@@ -954,7 +1156,8 @@ class StoryEngine extends ChangeNotifier {
       result = true;
     }
     for (final sticker in state.stickers.values) {
-      if (sticker.visible && sticker.revealed < plainText(sticker.text).runes.length) {
+      if (sticker.visible &&
+          sticker.revealed < plainText(sticker.text).runes.length) {
         sticker.revealed = plainText(sticker.text).runes.length;
         result = true;
       }
@@ -981,7 +1184,9 @@ class StoryEngine extends ChangeNotifier {
     } else if (_skipNodeIndex < _skipNodes.length) {
       final node = _skipNodes[_skipNodeIndex++];
       _currentSkipMode = node.mode;
-      final allowed = state.metadata.isSkippable && (_currentSkipMode != 'nofirstskip' || firstRead);
+      final allowed =
+          state.metadata.isSkippable &&
+          (_currentSkipMode != 'nofirstskip' || firstRead);
       cursor = allowed ? node.index + 1 : script.commands.length;
     } else {
       cursor = script.commands.length;
@@ -1068,7 +1273,8 @@ class StoryEngine extends ChangeNotifier {
     _changed();
   }
 
-  void setAutoPlay(bool value) => setAutoMode(value ? 'button_auto' : 'default');
+  void setAutoPlay(bool value) =>
+      setAutoMode(value ? 'button_auto' : 'default');
 
   /// 自动播放模式：default（手动）/ button_auto（自动）/ quick_play（快速）。
   void setAutoMode(String mode) {
@@ -1101,11 +1307,17 @@ class StoryEngine extends ChangeNotifier {
         return;
       }
       final options = rawOptions.split(';');
-      final values = c.value('values').split(';').map((s) => int.tryParse(s.trim()) ?? 0).toList();
+      final values = c
+          .value('values')
+          .split(';')
+          .map((s) => int.tryParse(s.trim()) ?? 0)
+          .toList();
       state.choices = [
         for (var i = 0; i < options.length; i++)
           Choice(
-            translate(options[i].startsWith('&') ? options[i].substring(1) : options[i]),
+            translate(
+              options[i].startsWith('&') ? options[i].substring(1) : options[i],
+            ),
             i < values.length ? values[i].toString() : '0',
             disabled: options[i].startsWith('&'),
           ),
@@ -1165,7 +1377,14 @@ class StoryEngine extends ChangeNotifier {
       warn('第 ${c.line} 行：spellsticker 依赖 FZTYSK/RoHMinSink 字体（未获授权），本轮跳过');
     });
     register('spellstickerclear', (_) async {});
-    for (final tag in ['playmusic', 'stopmusic', 'musicvolume', 'playsound', 'stopsound', 'soundvolume']) {
+    for (final tag in [
+      'playmusic',
+      'stopmusic',
+      'musicvolume',
+      'playsound',
+      'stopsound',
+      'soundvolume',
+    ]) {
       register(tag, _executeAudio);
     }
     // ---- 图层与场景 ----
@@ -1218,16 +1437,17 @@ class StoryEngine extends ChangeNotifier {
     final seconds = scaled(c.number('fadetime'));
     if (key.isEmpty) {
       final epoch = _epoch;
-      final future = animate(c.tag, seconds, (t) {
-        for (final previous in old) {
-          previous.alpha = 1 - t;
-        }
-      }).then((_) {
-        if (epoch == _epoch) {
-          layers.removeWhere(old.contains);
-          _changed();
-        }
-      });
+      final future =
+          animate(c.tag, seconds, (t) {
+            for (final previous in old) {
+              previous.alpha = 1 - t;
+            }
+          }).then((_) {
+            if (epoch == _epoch) {
+              layers.removeWhere(old.contains);
+              _changed();
+            }
+          });
       if (c.flag('block')) await future;
       return;
     }
@@ -1271,7 +1491,8 @@ class StoryEngine extends ChangeNotifier {
       c.args.containsKey('xto') ? c.number('xto') : from.dx,
       c.args.containsKey('yto') ? c.number('yto') : from.dy,
     );
-    final sxf = c.number('xscalefrom', image.scaleX), syf = c.number('yscalefrom', image.scaleY);
+    final sxf = c.number('xscalefrom', image.scaleX),
+        syf = c.number('yscalefrom', image.scaleY);
     final sxt = c.number('xscaleto', sxf), syt = c.number('yscaleto', syf);
     final loop = c.flag('loop');
     final seconds = c.number('duration');
@@ -1279,12 +1500,18 @@ class StoryEngine extends ChangeNotifier {
     if (loop && c.flag('block')) {
       warn('第 ${c.line} 行：${c.tag} 的 loop 与 block 同时为真，忽略 block');
     }
-    final future = animate(c.tag, seconds, (t) {
-      image.x = _lerp(from.dx, to.dx, t);
-      image.y = _lerp(from.dy, to.dy, t);
-      image.scaleX = _lerp(sxf, sxt, t);
-      image.scaleY = _lerp(syf, syt, t);
-    }, ease: ease, loop: loop);
+    final future = animate(
+      c.tag,
+      seconds,
+      (t) {
+        image.x = _lerp(from.dx, to.dx, t);
+        image.y = _lerp(from.dy, to.dy, t);
+        image.scaleX = _lerp(sxf, sxt, t);
+        image.scaleY = _lerp(syf, syt, t);
+      },
+      ease: ease,
+      loop: loop,
+    );
     if (c.flag('block') && !loop) await future;
   }
 
@@ -1326,8 +1553,15 @@ class StoryEngine extends ChangeNotifier {
     final isSlider = ['slider', 'verticalslider'].contains(style);
     state.blockerStyle = isSlider ? style : 'default';
     state.blockerInverse = c.flag('inverse');
-    state.blockerImage = state.blockerStyle == 'default' ? c.value('image') : '';
-    final hasFrom = ['rfrom', 'gfrom', 'bfrom', 'afrom'].any(c.args.containsKey);
+    state.blockerImage = state.blockerStyle == 'default'
+        ? c.value('image')
+        : '';
+    final hasFrom = [
+      'rfrom',
+      'gfrom',
+      'bfrom',
+      'afrom',
+    ].any(c.args.containsKey);
     final fromR = color('rfrom', state.blockerColor.r),
         fromG = color('gfrom', state.blockerColor.g),
         fromB = color('bfrom', state.blockerColor.b),
@@ -1336,7 +1570,12 @@ class StoryEngine extends ChangeNotifier {
     final toA = c.args.containsKey('a') ? color('a', 1) : 1.0;
     final seconds = scaled(c.number('fadetime'));
     if (seconds <= 0) {
-      state.blockerColor = Color.from(alpha: 1, red: toR, green: toG, blue: toB);
+      state.blockerColor = Color.from(
+        alpha: 1,
+        red: toR,
+        green: toG,
+        blue: toB,
+      );
       state.blockerAlpha = toA;
       if (toA <= 0) state.blockerImage = '';
       _changed();
@@ -1351,7 +1590,11 @@ class StoryEngine extends ChangeNotifier {
         green: _lerp(fromG, toG, t),
         blue: _lerp(fromB, toB, t),
       );
-      state.blockerAlpha = _lerp(c.args.containsKey('afrom') ? fromA : from, toA, t);
+      state.blockerAlpha = _lerp(
+        c.args.containsKey('afrom') ? fromA : from,
+        toA,
+        t,
+      );
       if (t >= 1 && toA <= 0) state.blockerImage = '';
     });
     if (epoch == _epoch && state.blockerAlpha <= 0) {
@@ -1365,25 +1608,32 @@ class StoryEngine extends ChangeNotifier {
     if (direction < 0) {
       final old = state.curtains.values.toList();
       final epoch = _epoch;
-      unawaited(animate('curtain', seconds, (t) {
-        final e = _easeOutQuad(t);
-        for (final item in old) {
-          item.fill = _lerp(item.fill, 0, e);
-          item.alpha = _lerp(item.alpha, 0, e);
-        }
-      }).then((_) {
-        if (epoch == _epoch) {
-          state.curtains.removeWhere((key, item) => old.contains(item) && item.fill <= 0);
-          _changed();
-        }
-      }));
+      unawaited(
+        animate('curtain', seconds, (t) {
+          final e = _easeOutQuad(t);
+          for (final item in old) {
+            item.fill = _lerp(item.fill, 0, e);
+            item.alpha = _lerp(item.alpha, 0, e);
+          }
+        }).then((_) {
+          if (epoch == _epoch) {
+            state.curtains.removeWhere(
+              (key, item) => old.contains(item) && item.fill <= 0,
+            );
+            _changed();
+          }
+        }),
+      );
       return;
     }
     if (direction > 7) {
       warn('第 ${c.line} 行：curtain 方向无效：$direction');
       return;
     }
-    final item = state.curtains.putIfAbsent(direction, () => CurtainState(direction));
+    final item = state.curtains.putIfAbsent(
+      direction,
+      () => CurtainState(direction),
+    );
     final fillFrom = c.number('fillfrom', 1), fillTo = c.number('fillto', 0);
     final hasAlpha = c.args.containsKey('a') && c.number('a') >= 0;
     final double alphaFrom = hasAlpha ? c.number('afrom', item.alpha) : 1.0;
@@ -1399,13 +1649,17 @@ class StoryEngine extends ChangeNotifier {
     }
 
     if (delayMs > 0) {
-      unawaited(Future<void>.delayed(Duration(milliseconds: delayMs.toInt())).then((_) {
-        if (epoch == _epoch) {
-          unawaited(animate('curtain:$direction', seconds, update));
-        }
-      }));
+      unawaited(
+        Future<void>.delayed(Duration(milliseconds: delayMs.toInt())).then((_) {
+          if (epoch == _epoch) {
+            unawaited(animate('curtain:$direction', seconds, update));
+          }
+        }),
+      );
       if (c.flag('block')) {
-        await Future<void>.delayed(Duration(milliseconds: (delayMs + seconds * 1000).toInt()));
+        await Future<void>.delayed(
+          Duration(milliseconds: (delayMs + seconds * 1000).toInt()),
+        );
       }
       return;
     }
@@ -1427,13 +1681,16 @@ class StoryEngine extends ChangeNotifier {
     }
     if (effect != 'Grayscale') return;
     final target = c.number('amount', 1);
-    final hasInit = c.args.containsKey('initamount') && c.number('initamount') >= 0;
+    final hasInit =
+        c.args.containsKey('initamount') && c.number('initamount') >= 0;
     final from = hasInit ? c.number('initamount') : state.grayscale;
     state.grayscale = from;
     final epoch = _epoch;
     final future = animate('camerafx', seconds, (t) {
       final eased = 1 - (1 - t) * (1 - t);
-      state.grayscale = t >= 1 ? (keep ? target : 0) : _lerp(from, target, eased);
+      state.grayscale = t >= 1
+          ? (keep ? target : 0)
+          : _lerp(from, target, eased);
     });
     if (c.flag('block')) await future;
     if (epoch != _epoch) return;
@@ -1447,7 +1704,9 @@ class StoryEngine extends ChangeNotifier {
     }
     final scaledDuration = c.number('duration', -1) * currentSpeed.animateRatio;
     final infinite = scaledDuration < 0;
-    final durationMs = infinite ? 10000.0 : math.max(0.0, scaledDuration * 1000);
+    final durationMs = infinite
+        ? 10000.0
+        : math.max(0.0, scaledDuration * 1000);
     if (_rebuilding && !infinite) {
       _cancelShake();
       return;
@@ -1485,13 +1744,16 @@ class StoryEngine extends ChangeNotifier {
   Future<void> _focusOut(StoryCommand c) async {
     final type = c.value('type');
     final id = c.value('id');
-    if (!['char', 'bg', 'cg', 'lbg'].contains(type) && !(type == 'cgitem' && id.isNotEmpty)) {
+    if (!['char', 'bg', 'cg', 'lbg'].contains(type) &&
+        !(type == 'cgitem' && id.isNotEmpty)) {
       warn('第 ${c.line} 行：未支持的 focusout 类型：$type');
       return;
     }
     final key = type == 'cgitem' ? 'cgitem:$id' : type;
     final fromArg = double.tryParse(c.value('from'));
-    final from = fromArg != null && fromArg >= 0 ? fromArg : (state.focus[key] ?? 0);
+    final from = fromArg != null && fromArg >= 0
+        ? fromArg
+        : (state.focus[key] ?? 0);
     final to = c.number('to', 0);
     final seconds = c.number('duration');
     await _transition(c, 'focus:$key', seconds, (t) {
@@ -1502,7 +1764,9 @@ class StoryEngine extends ChangeNotifier {
   Future<void> _focusParam(StoryCommand c) {
     state.focusBlur = c.flag('blur', true);
     final effect = c.value('effect');
-    state.focusColor = ['Grayscale', 'Colorinverse'].contains(effect) ? effect : 'None';
+    state.focusColor = ['Grayscale', 'Colorinverse'].contains(effect)
+        ? effect
+        : 'None';
     _changed();
     return Future.value();
   }
@@ -1527,13 +1791,14 @@ class StoryEngine extends ChangeNotifier {
     if (rawSlot.isEmpty) {
       final old = state.characters.toList();
       final epoch = _epoch;
-      final future = animate('clearCharacters', seconds, (t) {
-        for (final node in old) {
-          node.alpha = 1 - t;
-        }
-      }).then((_) {
-        if (epoch == _epoch) state.characters.removeWhere(old.contains);
-      });
+      final future =
+          animate('clearCharacters', seconds, (t) {
+            for (final node in old) {
+              node.alpha = 1 - t;
+            }
+          }).then((_) {
+            if (epoch == _epoch) state.characters.removeWhere(old.contains);
+          });
       if (c.flag('isblock')) await future;
       return;
     }
@@ -1557,8 +1822,12 @@ class StoryEngine extends ChangeNotifier {
       final old = nodes;
       final afrom = double.tryParse(c.value('afrom'));
       final ato = double.tryParse(c.value('ato'));
-      final alphaFrom = (afrom != null && ato != null) ? afrom.clamp(0.0, 1.0).toDouble() : 0.0;
-      final alphaTo = (afrom != null && ato != null) ? ato.clamp(0.0, 1.0).toDouble() : 1.0;
+      final alphaFrom = (afrom != null && ato != null)
+          ? afrom.clamp(0.0, 1.0).toDouble()
+          : 0.0;
+      final alphaTo = (afrom != null && ato != null)
+          ? ato.clamp(0.0, 1.0).toDouble()
+          : 1.0;
       final focusSlots = _focusSlots(c.value('focus', 'all'));
       final fresh = StageCharacter(slot, name)
         ..brightness = focusSlots.contains(slot) ? 1 : .5
@@ -1569,14 +1838,15 @@ class StoryEngine extends ChangeNotifier {
       node = fresh;
       final next = fresh;
       final epoch = _epoch;
-      final fade = animate('character:$slot', seconds, (t) {
-        next.contentAlpha = _lerp(alphaFrom, alphaTo, t);
-        for (final previous in old) {
-          previous.alpha = 1 - t;
-        }
-      }).then((_) {
-        if (epoch == _epoch) state.characters.removeWhere(old.contains);
-      });
+      final fade =
+          animate('character:$slot', seconds, (t) {
+            next.contentAlpha = _lerp(alphaFrom, alphaTo, t);
+            for (final previous in old) {
+              previous.alpha = 1 - t;
+            }
+          }).then((_) {
+            if (epoch == _epoch) state.characters.removeWhere(old.contains);
+          });
       // 槽位排队截止：阻塞时等待整段入场动画。
       if (block) {
         await fade;
@@ -1601,54 +1871,82 @@ class StoryEngine extends ChangeNotifier {
       target.jumpOffsetY = 0;
     }
     if (action == 'jump' && seconds > 0) {
-      _startJump(slot, c.number('power', 0), c.number('times', 0), seconds * 1000);
+      _startJump(
+        slot,
+        c.number('power', 0),
+        c.number('times', 0),
+        seconds * 1000,
+      );
     }
     final hasAngle = c.args.containsKey('angle');
     if (hasAngle) {
       final fromAngle = target.rotationDeg;
-      final toAngle = (c.flag('inverse') ? -1 : 1) * (c.number('angle') + 360 * c.number('circles').truncate());
-      unawaited(animate('characterRotate:$slot', seconds, (t) {
-        target.rotationDeg = _lerp(fromAngle, toAngle, t);
-      }));
+      final toAngle =
+          (c.flag('inverse') ? -1 : 1) *
+          (c.number('angle') + 360 * c.number('circles').truncate());
+      unawaited(
+        animate('characterRotate:$slot', seconds, (t) {
+          target.rotationDeg = _lerp(fromAngle, toAngle, t);
+        }),
+      );
     }
     // 位置补间：move/setpos 从 posfrom 到 posto；jump 相对位移。
     final hasPos = c.args.containsKey('posfrom') || c.args.containsKey('posto');
     if (hasPos) {
-      final to = _hasPoint(c.value('posto')) ? _point(c.value('posto')) : Offset.zero;
+      final to = _hasPoint(c.value('posto'))
+          ? _point(c.value('posto'))
+          : Offset.zero;
       Offset from;
       if (action == 'jump' && seconds > 0) {
         from = Offset(target.actionX, target.actionY);
         // jump 的 posto 为相对位移。
-        unawaited(animate('characterMotion:$slot', seconds, (t) {
-          target.actionX = _lerp(from.dx, from.dx + to.dx, _easeOutCubic(t));
-          target.actionY = _lerp(from.dy, from.dy + to.dy, _easeOutCubic(t));
-        }));
+        unawaited(
+          animate('characterMotion:$slot', seconds, (t) {
+            target.actionX = _lerp(from.dx, from.dx + to.dx, _easeOutCubic(t));
+            target.actionY = _lerp(from.dy, from.dy + to.dy, _easeOutCubic(t));
+          }),
+        );
       } else {
-        from = _hasPoint(c.value('posfrom')) ? _point(c.value('posfrom')) : Offset(target.actionX, target.actionY);
+        from = _hasPoint(c.value('posfrom'))
+            ? _point(c.value('posfrom'))
+            : Offset(target.actionX, target.actionY);
         final duration = action == 'setpos' ? 0.0 : seconds;
-        unawaited(animate('characterMotion:$slot', duration, (t) {
-          target.actionX = _lerp(from.dx, to.dx, t);
-          target.actionY = _lerp(from.dy, to.dy, t);
-        }));
+        unawaited(
+          animate('characterMotion:$slot', duration, (t) {
+            target.actionX = _lerp(from.dx, to.dx, t);
+            target.actionY = _lerp(from.dy, to.dy, t);
+          }),
+        );
       }
     }
     // zoom：以 poszoom 为轴心缩放。
-    final hasZoom = action == 'zoom' && (c.args.containsKey('xscale') || c.args.containsKey('yscale') || c.args.containsKey('scale'));
+    final hasZoom =
+        action == 'zoom' &&
+        (c.args.containsKey('xscale') ||
+            c.args.containsKey('yscale') ||
+            c.args.containsKey('scale'));
     if (hasZoom) {
       final base = c.number('scale', 1);
       final sx = c.number('xscale', base), sy = c.number('yscale', base);
-      final pivot = _hasPoint(c.value('poszoom')) ? _point(c.value('poszoom')) : const Offset(.5, .5);
-      final artWidth = _characterSize(slot).dx, artHeight = _characterSize(slot).dy;
+      final pivot = _hasPoint(c.value('poszoom'))
+          ? _point(c.value('poszoom'))
+          : const Offset(.5, .5);
+      final artWidth = _characterSize(slot).dx,
+          artHeight = _characterSize(slot).dy;
       final fromScaleX = target.scaleX, fromScaleY = target.scaleY;
       final fromShiftX = target.zoomShiftX, fromShiftY = target.zoomShiftY;
-      final toShiftX = (.5 - pivot.dx) * sx * artWidth - (sx - 1) * artWidth / 2;
-      final toShiftY = (.5 - pivot.dy) * sy * artHeight + (sy - 1) * artHeight / 2;
-      unawaited(animate('characterZoom:$slot', seconds, (t) {
-        target.scaleX = _lerp(fromScaleX, sx, t);
-        target.scaleY = _lerp(fromScaleY, sy, t);
-        target.zoomShiftX = _lerp(fromShiftX, toShiftX, t);
-        target.zoomShiftY = _lerp(fromShiftY, toShiftY, t);
-      }));
+      final toShiftX =
+          (.5 - pivot.dx) * sx * artWidth - (sx - 1) * artWidth / 2;
+      final toShiftY =
+          (.5 - pivot.dy) * sy * artHeight + (sy - 1) * artHeight / 2;
+      unawaited(
+        animate('characterZoom:$slot', seconds, (t) {
+          target.scaleX = _lerp(fromScaleX, sx, t);
+          target.scaleY = _lerp(fromScaleY, sy, t);
+          target.zoomShiftX = _lerp(fromShiftX, toShiftX, t);
+          target.zoomShiftY = _lerp(fromShiftY, toShiftY, t);
+        }),
+      );
     }
   }
 
@@ -1665,16 +1963,26 @@ class StoryEngine extends ChangeNotifier {
     final seconds = scaled(c.number('fadetime', .15));
     if (first.isEmpty && second.isEmpty) {
       await _characterSlot(
-        StoryCommand('charslot', {'duration': seconds.toString()}, '', c.line, c.raw),
+        StoryCommand(
+          'charslot',
+          {'duration': seconds.toString()},
+          '',
+          c.line,
+          c.raw,
+        ),
       );
       return;
     }
     final focus = c.number('focus').toInt();
     final transtype = c.number('transtype').toInt();
     final enter = c.value('enter'), enter2 = c.value('enter2');
-    final blackStart = c.number('blackstart', -1), blackEnd = c.number('blackend', -1);
-    final blackStart2 = c.number('blackstart2', -1), blackEnd2 = c.number('blackend2', -1);
-    state.characters.removeWhere((n) => second.isEmpty ? n.slot != 'm' : n.slot == 'm');
+    final blackStart = c.number('blackstart', -1),
+        blackEnd = c.number('blackend', -1);
+    final blackStart2 = c.number('blackstart2', -1),
+        blackEnd2 = c.number('blackend2', -1);
+    state.characters.removeWhere(
+      (n) => second.isEmpty ? n.slot != 'm' : n.slot == 'm',
+    );
     final entries = [
       (second.isEmpty ? 'm' : 'l', first, enter, blackStart, blackEnd, '1'),
       ('r', second, enter2, blackStart2, blackEnd2, '2'),
@@ -1688,40 +1996,62 @@ class StoryEngine extends ChangeNotifier {
       final node = StageCharacter(slot, name)
         ..blackStart = bStart
         ..blackEnd = bEnd
-        ..brightness = slot == 'r' ? !(focus == 0 || focus == 2) ? .5 : 1 : (focus > 1 ? .5 : 1);
+        ..brightness = slot == 'r'
+            ? !(focus == 0 || focus == 2)
+                  ? .5
+                  : 1
+            : (focus > 1 ? .5 : 1);
       // 入场方向：先摆到屏幕外，再滑入。
-      if (enterDir == 'left' || enterDir == 'right' || enterDir == 'up' || enterDir == 'down') {
-        final base = slot == 'l' ? 200.0 : slot == 'r' ? -200.0 : 0.0;
+      if (enterDir == 'left' ||
+          enterDir == 'right' ||
+          enterDir == 'up' ||
+          enterDir == 'down') {
+        final base = slot == 'l'
+            ? 200.0
+            : slot == 'r'
+            ? -200.0
+            : 0.0;
         node.actionX = switch (enterDir) {
           'left' => base - 1152,
           'right' => base + 1152,
           _ => 0,
         };
-        node.actionY = enterDir == 'up' ? 1072 : enterDir == 'down' ? -1072 : 0;
-        if (c.args.containsKey('xpos$index') && c.args.containsKey('ypos$index')) {
+        node.actionY = enterDir == 'up'
+            ? 1072
+            : enterDir == 'down'
+            ? -1072
+            : 0;
+        if (c.args.containsKey('xpos$index') &&
+            c.args.containsKey('ypos$index')) {
           node.actionX = c.number('xpos$index').truncateToDouble();
           node.actionY = c.number('ypos$index').truncateToDouble();
         }
       }
       state.characters.add(node);
       final next = node;
-      final hasEnter = enterDir == 'left' || enterDir == 'right' || enterDir == 'up' || enterDir == 'down';
+      final hasEnter =
+          enterDir == 'left' ||
+          enterDir == 'right' ||
+          enterDir == 'up' ||
+          enterDir == 'down';
       final startAlpha = hasEnter && transtype == 0 ? 0.0 : 1.0;
       final startX = node.actionX, startY = node.actionY;
       final epoch = _epoch;
-      unawaited(animate('character:$slot', seconds, (t) {
-        next.contentAlpha = startAlpha > 0 ? 1 : t;
-        for (final previous in old) {
-          previous.alpha = 1 - t;
-        }
-        if (hasEnter) {
-          final e = _easeOutCubic(t);
-          next.actionX = _lerp(startX, 0, e);
-          next.actionY = _lerp(startY, 0, e);
-        }
-      }).then((_) {
-        if (epoch == _epoch) state.characters.removeWhere(old.contains);
-      }));
+      unawaited(
+        animate('character:$slot', seconds, (t) {
+          next.contentAlpha = startAlpha > 0 ? 1 : t;
+          for (final previous in old) {
+            previous.alpha = 1 - t;
+          }
+          if (hasEnter) {
+            final e = _easeOutCubic(t);
+            next.actionX = _lerp(startX, 0, e);
+            next.actionY = _lerp(startY, 0, e);
+          }
+        }).then((_) {
+          if (epoch == _epoch) state.characters.removeWhere(old.contains);
+        }),
+      );
     }
     _changed();
   }
@@ -1747,7 +2077,9 @@ class StoryEngine extends ChangeNotifier {
     var action = type;
     final defaultDuration = type == 'exit' || type == 'zoom' ? 1.0 : .5;
     var seconds = scaled(c.number('fadetime', defaultDuration));
-    if ((action == 'jump' || action == 'shake') && seconds <= 0) action = 'move';
+    if ((action == 'jump' || action == 'shake') && seconds <= 0) {
+      action = 'move';
+    }
     final hasX = c.args.containsKey('xpos'), hasY = c.args.containsKey('ypos');
     final xOffset = action == 'zoom' ? 0.0 : c.number('xpos', 0);
     final yOffset = action == 'zoom' ? 0.0 : c.number('ypos', 0);
@@ -1761,11 +2093,20 @@ class StoryEngine extends ChangeNotifier {
           node.actionY = _lerp(fromY, fromY + yOffset, e);
         });
       case 'jump':
-        _startJump(slot, c.number('power', 10), c.number('times', 3), seconds * 1000);
+        _startJump(
+          slot,
+          c.number('power', 10),
+          c.number('times', 3),
+          seconds * 1000,
+        );
         final fromX = node.actionX, fromY = node.actionY;
         final move = animate('characterMotion:$slot', seconds, (t) {
           node.actionX = _lerp(fromX, fromX + xOffset, _easeOutCubic(t));
-          node.actionY = _lerp(fromY, fromY + yOffset, _easeOutQuad(_easeOutCubic(t)));
+          node.actionY = _lerp(
+            fromY,
+            fromY + yOffset,
+            _easeOutQuad(_easeOutCubic(t)),
+          );
         });
         if (block && seconds > 0) await move;
       case 'shake':
@@ -1778,7 +2119,9 @@ class StoryEngine extends ChangeNotifier {
           stop: c.flag('stop'),
         );
         if (block && !c.flag('stop')) {
-          await Future<void>.delayed(Duration(milliseconds: (seconds * 1000).toInt()));
+          await Future<void>.delayed(
+            Duration(milliseconds: (seconds * 1000).toInt()),
+          );
         }
       case 'zoom':
         final pivotX = c.number('xpos', .5), pivotY = c.number('ypos', .5);
@@ -1788,11 +2131,14 @@ class StoryEngine extends ChangeNotifier {
         }
         final base = c.number('scale', 1);
         final sx = c.number('xscale', base), sy = c.number('yscale', base);
-        final artWidth = _characterSize(slot).dx, artHeight = _characterSize(slot).dy;
+        final artWidth = _characterSize(slot).dx,
+            artHeight = _characterSize(slot).dy;
         final fromScaleX = node.scaleX, fromScaleY = node.scaleY;
         final fromShiftX = node.zoomShiftX, fromShiftY = node.zoomShiftY;
-        final toShiftX = (.5 - pivotX) * sx * artWidth - (sx - 1) * artWidth / 2;
-        final toShiftY = (.5 - pivotY) * sy * artHeight + (sy - 1) * artHeight / 2;
+        final toShiftX =
+            (.5 - pivotX) * sx * artWidth - (sx - 1) * artWidth / 2;
+        final toShiftY =
+            (.5 - pivotY) * sy * artHeight + (sy - 1) * artHeight / 2;
         await animate('characterZoom:$slot', seconds, (t) {
           node.scaleX = _lerp(fromScaleX, sx, t);
           node.scaleY = _lerp(fromScaleY, sy, t);
@@ -1804,7 +2150,9 @@ class StoryEngine extends ChangeNotifier {
         if (hasX && hasY) {
           target = Offset(c.number('xpos'), c.number('ypos'));
         } else {
-          final dir = c.value('direction').isEmpty ? 'left' : c.value('direction');
+          final dir = c.value('direction').isEmpty
+              ? 'left'
+              : c.value('direction');
           target = switch ((slot, dir)) {
             ('l', 'left') => const Offset(-952, 0),
             ('l', 'right') => const Offset(1352, 0),
@@ -1830,8 +2178,12 @@ class StoryEngine extends ChangeNotifier {
 
   Future<void> _gridScene(StoryCommand c) async {
     final isImage = c.tag == 'largeimg';
-    final group = c.value('imagegroup').isNotEmpty ? c.value('imagegroup') : c.value('cggroup');
-    final cgKind = c.value('cggroup').isNotEmpty || (isImage && c.value('imagegroup').isEmpty);
+    final group = c.value('imagegroup').isNotEmpty
+        ? c.value('imagegroup')
+        : c.value('cggroup');
+    final cgKind =
+        c.value('cggroup').isNotEmpty ||
+        (isImage && c.value('imagegroup').isEmpty);
     final seconds = c.tag == 'largeimg'
         ? math.max(0.0, c.number('fadetime', .15))
         : math.max(0.0, c.number('fadetime'));
@@ -1843,16 +2195,17 @@ class StoryEngine extends ChangeNotifier {
     if (group.isEmpty) {
       final old = layers.toList();
       final epoch = _epoch;
-      final future = animate(c.tag, seconds, (t) {
-        for (final scene in old) {
-          scene.alpha = 1 - t;
-        }
-      }).then((_) {
-        if (epoch == _epoch) {
-          layers.removeWhere(old.contains);
-          _changed();
-        }
-      });
+      final future =
+          animate(c.tag, seconds, (t) {
+            for (final scene in old) {
+              scene.alpha = 1 - t;
+            }
+          }).then((_) {
+            if (epoch == _epoch) {
+              layers.removeWhere(old.contains);
+              _changed();
+            }
+          });
       if (block) await future;
       return;
     }
@@ -1862,14 +2215,21 @@ class StoryEngine extends ChangeNotifier {
     String layout;
     if (c.tag == 'gridbg') {
       layout = 'grid';
-      if (keys.length != 4 || solidWidths.length != 2 || solidHeights.length != 2) {
+      if (keys.length != 4 ||
+          solidWidths.length != 2 ||
+          solidHeights.length != 2) {
         warn('第 ${c.line} 行：gridbg 需要 4 图与 2×2 尺寸，实际 ${keys.length} 图');
         return;
       }
     } else if (c.tag == 'verticalbg') {
       layout = 'vertical';
-      if (keys.isEmpty || keys.length > 4 || solidWidths.length != 1 || solidHeights.length != keys.length) {
-        warn('第 ${c.line} 行：verticalbg 需要 width_count*height_count===image_count');
+      if (keys.isEmpty ||
+          keys.length > 4 ||
+          solidWidths.length != 1 ||
+          solidHeights.length != keys.length) {
+        warn(
+          '第 ${c.line} 行：verticalbg 需要 width_count*height_count===image_count',
+        );
         return;
       }
     } else {
@@ -1879,15 +2239,20 @@ class StoryEngine extends ChangeNotifier {
         return;
       }
     }
-    final scene = LargeScene(
-      tiles: [for (final key in keys) StageImage(key, cg: cgKind)],
-      solidWidths: List<double>.from(solidWidths),
-      solidHeights: List<double>.from(layout == 'large' ? [c.number('solidheight', 0)] : solidHeights),
-      layout: layout,
-      initPositionMode: c.value('initposmode', 'default'),
-    )..x = c.number('x')..y = c.number('y')
-      ..scaleX = c.number('xscale', 1)
-      ..scaleY = c.number('yscale', 1);
+    final scene =
+        LargeScene(
+            tiles: [for (final key in keys) StageImage(key, cg: cgKind)],
+            solidWidths: List<double>.from(solidWidths),
+            solidHeights: List<double>.from(
+              layout == 'large' ? [c.number('solidheight', 0)] : solidHeights,
+            ),
+            layout: layout,
+            initPositionMode: c.value('initposmode', 'default'),
+          )
+          ..x = c.number('x')
+          ..y = c.number('y')
+          ..scaleX = c.number('xscale', 1)
+          ..scaleY = c.number('yscale', 1);
     layers.clear();
     scene.alpha = seconds > 0 ? 0 : 1;
     layers.add(scene);
@@ -1896,26 +2261,46 @@ class StoryEngine extends ChangeNotifier {
   }
 
   Future<void> _largeTween(StoryCommand c) async {
-    final layers = c.tag == 'largeimgtween' ? state.largeImages : state.largeScenes;
+    final layers = c.tag == 'largeimgtween'
+        ? state.largeImages
+        : state.largeScenes;
     if (layers.isEmpty) return;
     final scene = layers.last;
-    final fromX = c.args.containsKey('xfrom') ? c.number('xfrom') : (c.args.containsKey('x') ? c.number('x') : scene.x);
-    final fromY = c.args.containsKey('yfrom') ? c.number('yfrom') : (c.args.containsKey('y') ? c.number('y') : scene.y);
+    final fromX = c.args.containsKey('xfrom')
+        ? c.number('xfrom')
+        : (c.args.containsKey('x') ? c.number('x') : scene.x);
+    final fromY = c.args.containsKey('yfrom')
+        ? c.number('yfrom')
+        : (c.args.containsKey('y') ? c.number('y') : scene.y);
     final toX = c.args.containsKey('xto') ? c.number('xto') : fromX;
     final toY = c.args.containsKey('yto') ? c.number('yto') : fromY;
-    final fromScaleX = c.args.containsKey('xscalefrom') ? c.number('xscalefrom') : (c.args.containsKey('xscale') ? c.number('xscale') : scene.scaleX);
-    final fromScaleY = c.args.containsKey('yscalefrom') ? c.number('yscalefrom') : (c.args.containsKey('yscale') ? c.number('yscale') : scene.scaleY);
-    final toScaleX = c.args.containsKey('xscaleto') ? c.number('xscaleto') : fromScaleX;
-    final toScaleY = c.args.containsKey('yscaleto') ? c.number('yscaleto') : fromScaleY;
+    final fromScaleX = c.args.containsKey('xscalefrom')
+        ? c.number('xscalefrom')
+        : (c.args.containsKey('xscale') ? c.number('xscale') : scene.scaleX);
+    final fromScaleY = c.args.containsKey('yscalefrom')
+        ? c.number('yscalefrom')
+        : (c.args.containsKey('yscale') ? c.number('yscale') : scene.scaleY);
+    final toScaleX = c.args.containsKey('xscaleto')
+        ? c.number('xscaleto')
+        : fromScaleX;
+    final toScaleY = c.args.containsKey('yscaleto')
+        ? c.number('yscaleto')
+        : fromScaleY;
     final loop = c.flag('loop');
     final seconds = c.number('duration');
     final ease = c.value('ease');
-    final future = animate(c.tag, seconds, (t) {
-      scene.x = _lerp(fromX, toX, t);
-      scene.y = _lerp(fromY, toY, t);
-      scene.scaleX = _lerp(fromScaleX, toScaleX, t);
-      scene.scaleY = _lerp(fromScaleY, toScaleY, t);
-    }, ease: ease, loop: loop);
+    final future = animate(
+      c.tag,
+      seconds,
+      (t) {
+        scene.x = _lerp(fromX, toX, t);
+        scene.y = _lerp(fromY, toY, t);
+        scene.scaleX = _lerp(fromScaleX, toScaleX, t);
+        scene.scaleY = _lerp(fromScaleY, toScaleY, t);
+      },
+      ease: ease,
+      loop: loop,
+    );
     if (loop && c.flag('block')) {
       warn('第 ${c.line} 行：${c.tag} 的 loop 与 block 同时为真，忽略 block');
     }
@@ -1963,10 +2348,18 @@ class StoryEngine extends ChangeNotifier {
       if (d > 0) {
         item.x = from.dx;
         item.y = from.dy;
-        futures.add(animate('cgitem:$key:pos', d, (t) {
-          item.x = _lerp(from.dx, to.dx, t);
-          item.y = _lerp(from.dy, to.dy, t);
-        }, ease: ease, delay: dur('pdelay')));
+        futures.add(
+          animate(
+            'cgitem:$key:pos',
+            d,
+            (t) {
+              item.x = _lerp(from.dx, to.dx, t);
+              item.y = _lerp(from.dy, to.dy, t);
+            },
+            ease: ease,
+            delay: dur('pdelay'),
+          ),
+        );
       } else {
         item.x = to.dx;
         item.y = to.dy;
@@ -1977,9 +2370,17 @@ class StoryEngine extends ChangeNotifier {
       final d = dur('sduration');
       if (d > 0) {
         item.scale = scaleFrom;
-        futures.add(animate('cgitem:$key:scale', d, (t) {
-          item.scale = _lerp(scaleFrom, scaleTo, t);
-        }, ease: ease, delay: dur('sdelay')));
+        futures.add(
+          animate(
+            'cgitem:$key:scale',
+            d,
+            (t) {
+              item.scale = _lerp(scaleFrom, scaleTo, t);
+            },
+            ease: ease,
+            delay: dur('sdelay'),
+          ),
+        );
       } else {
         item.scale = scaleTo;
       }
@@ -1991,15 +2392,23 @@ class StoryEngine extends ChangeNotifier {
       if (d > 0) {
         item.tint = Color.from(alpha: 1, red: fr, green: fg, blue: fb);
         item.tintAlpha = fa;
-        futures.add(animate('cgitem:$key:color', d, (t) {
-          item.tint = Color.from(
-            alpha: 1,
-            red: _lerp(fr, tr, t),
-            green: _lerp(fg, tg, t),
-            blue: _lerp(fb, tb, t),
-          );
-          item.tintAlpha = _lerp(fa, ta, t);
-        }, ease: ease, delay: dur('adelay')));
+        futures.add(
+          animate(
+            'cgitem:$key:color',
+            d,
+            (t) {
+              item.tint = Color.from(
+                alpha: 1,
+                red: _lerp(fr, tr, t),
+                green: _lerp(fg, tg, t),
+                blue: _lerp(fb, tb, t),
+              );
+              item.tintAlpha = _lerp(fa, ta, t);
+            },
+            ease: ease,
+            delay: dur('adelay'),
+          ),
+        );
       } else {
         item.tint = Color.from(alpha: 1, red: tr, green: tg, blue: tb);
         item.tintAlpha = ta;
@@ -2008,9 +2417,17 @@ class StoryEngine extends ChangeNotifier {
       final d = dur('aduration');
       if (d > 0) {
         item.alpha = alphaFrom;
-        futures.add(animate('cgitem:$key:alpha', d, (t) {
-          item.alpha = _lerp(alphaFrom, alphaTo, t);
-        }, ease: ease, delay: dur('adelay')));
+        futures.add(
+          animate(
+            'cgitem:$key:alpha',
+            d,
+            (t) {
+              item.alpha = _lerp(alphaFrom, alphaTo, t);
+            },
+            ease: ease,
+            delay: dur('adelay'),
+          ),
+        );
       } else {
         item.alpha = alphaTo;
       }
@@ -2018,9 +2435,11 @@ class StoryEngine extends ChangeNotifier {
     if (rfrom <= 0) {
       final d = dur('rduration');
       if (d > 0) {
-        futures.add(animate('cgitem:$key:rot', d, (t) {
-          item.rotation = _lerp(rfrom, rto, t);
-        }, ease: ease));
+        futures.add(
+          animate('cgitem:$key:rot', d, (t) {
+            item.rotation = _lerp(rfrom, rto, t);
+          }, ease: ease),
+        );
       } else {
         item.rotation += rto;
       }
@@ -2049,17 +2468,21 @@ class StoryEngine extends ChangeNotifier {
       // 参考端 hide：淡出期间保持可见（root 仍在图层），结束后才销毁。
       final session = ++item.hideEpoch;
       final from = item.alpha;
-      final fade = animate('cgitemHide:${item.key}', math.max(0.0, seconds), (t) {
+      final fade = animate('cgitemHide:${item.key}', math.max(0.0, seconds), (
+        t,
+      ) {
         item.alpha = _lerp(from, 0, t);
       }, ease: ease);
-      futures.add(fade.then((_) {
-        if (epoch == _epoch &&
-            item.hideEpoch == session &&
-            state.cgItems[item.key] == item) {
-          state.cgItems.remove(item.key);
-          _changed();
-        }
-      }));
+      futures.add(
+        fade.then((_) {
+          if (epoch == _epoch &&
+              item.hideEpoch == session &&
+              state.cgItems[item.key] == item) {
+            state.cgItems.remove(item.key);
+            _changed();
+          }
+        }),
+      );
     }
     if (c.flag('block')) await Future.wait(futures);
   }
@@ -2067,14 +2490,26 @@ class StoryEngine extends ChangeNotifier {
   // ============ avgdisplay ============
 
   Future<void> _avgDisplay(StoryCommand c) async {
-    const styleMap = {1: 'animetext', 2: 'spine', 3: 'effect', 4: 'bgeffect', 5: 'bg', 6: 'animekv', 7: 'character'};
+    const styleMap = {
+      1: 'animetext',
+      2: 'spine',
+      3: 'effect',
+      4: 'bgeffect',
+      5: 'bg',
+      6: 'animekv',
+      7: 'character',
+    };
     const slotMap = {1: 'bgover', 2: 'charover', 3: 'cgover'};
     var style = c.value('style');
     final numericStyle = int.tryParse(style);
-    if (numericStyle != null && styleMap.containsKey(numericStyle)) style = styleMap[numericStyle]!;
+    if (numericStyle != null && styleMap.containsKey(numericStyle)) {
+      style = styleMap[numericStyle]!;
+    }
     var slot = c.value('slot');
     final numericSlot = int.tryParse(slot);
-    if (numericSlot != null && slotMap.containsKey(numericSlot)) slot = slotMap[numericSlot]!;
+    if (numericSlot != null && slotMap.containsKey(numericSlot)) {
+      slot = slotMap[numericSlot]!;
+    }
     if (!['bgover', 'charover', 'cgover'].contains(slot)) {
       warn('第 ${c.line} 行：avgdisplay 槽位无效：$slot');
       return;
@@ -2091,7 +2526,11 @@ class StoryEngine extends ChangeNotifier {
       warn('第 ${c.line} 行：avgdisplay 样式参考端同样不支持：$style');
       return;
     }
-    final item = AvgDisplayItem(id, ['bgover', 'charover', 'cgover'].contains(slot) ? slot : 'bgover', name);
+    final item = AvgDisplayItem(
+      id,
+      ['bgover', 'charover', 'cgover'].contains(slot) ? slot : 'bgover',
+      name,
+    );
     final from = c.args.containsKey('afrom') ? c.number('afrom') : 1.0;
     final to = c.args.containsKey('ato') ? c.number('ato') : 0.0;
     state.avgDisplays[id] = item;
@@ -2139,7 +2578,9 @@ class StoryEngine extends ChangeNotifier {
     );
     final expand = style == 'cutin' && fadeStyle != 'fade';
     final horiz = fadeStyle.startsWith('horiz');
-    final targetW = item.width.isNaN ? (imageNaturalWidth?.call(image) ?? 100.0) : item.width;
+    final targetW = item.width.isNaN
+        ? (imageNaturalWidth?.call(image) ?? 100.0)
+        : item.width;
     item.maskW = expand ? (horiz ? 0 : targetW) : 1280;
     item.maskH = expand ? (horiz ? 720 : 0) : 720;
     item.alpha = fadeMs > 0 && !expand ? 0 : 1;
@@ -2151,7 +2592,12 @@ class StoryEngine extends ChangeNotifier {
         item.maskH = horiz ? 720 : _lerp(0, 720, t);
       }, ease: 'OutQuad');
     } else if (item.alpha < 1) {
-      await animate('showItem', fadeMs / 1000, (t) => item.alpha = t, ease: 'OutQuad');
+      await animate(
+        'showItem',
+        fadeMs / 1000,
+        (t) => item.alpha = t,
+        ease: 'OutQuad',
+      );
     }
   }
 
@@ -2194,9 +2640,11 @@ class StoryEngine extends ChangeNotifier {
           item.alpha = from * (1 - t);
         }, ease: 'OutQuad');
       }
-      futures.add(fade.then((_) {
-        if (epoch == _epoch && state.showItems.remove(item)) _changed();
-      }));
+      futures.add(
+        fade.then((_) {
+          if (epoch == _epoch && state.showItems.remove(item)) _changed();
+        }),
+      );
     }
     await Future.wait(futures);
   }
@@ -2243,12 +2691,15 @@ class StoryEngine extends ChangeNotifier {
           existing.maskH = horiz ? fromH : fromH * (1 - t);
         });
       }
-      unawaited(fade.then((_) {
-        if (existing.hideEpoch == session && state.cutins[widgetId] == existing) {
-          state.cutins.remove(widgetId);
-          _changed();
-        }
-      }));
+      unawaited(
+        fade.then((_) {
+          if (existing.hideEpoch == session &&
+              state.cutins[widgetId] == existing) {
+            state.cutins.remove(widgetId);
+            _changed();
+          }
+        }),
+      );
       if (block) await fade;
       return;
     }
@@ -2263,43 +2714,60 @@ class StoryEngine extends ChangeNotifier {
       final fromContentX = existing.contentX, fromContentY = existing.contentY;
       final fromZoom = existing.zoom, fromAlpha = existing.alpha;
       final fromMaskW = existing.maskW, fromMaskH = existing.maskH;
-      final toX = c.args.containsKey('offsetx') ? 640 + c.number('offsetx') : fromX;
-      final toY = c.args.containsKey('offsety') ? 360 - c.number('offsety') : fromY;
-      final toContentX = c.args.containsKey('povx') ? -c.number('povx') : fromContentX;
-      final toContentY = c.args.containsKey('povy') ? c.number('povy') : fromContentY;
+      final toX = c.args.containsKey('offsetx')
+          ? 640 + c.number('offsetx')
+          : fromX;
+      final toY = c.args.containsKey('offsety')
+          ? 360 - c.number('offsety')
+          : fromY;
+      final toContentX = c.args.containsKey('povx')
+          ? -c.number('povx')
+          : fromContentX;
+      final toContentY = c.args.containsKey('povy')
+          ? c.number('povy')
+          : fromContentY;
       final toZoom = c.number('zoom', fromZoom);
       final toWidth = c.number('width', fromMaskW);
-      final sameCharacter = showCharacter && existing.characters.isNotEmpty && existing.characters.last.name == name;
-      final oldCharacters = sameCharacter ? <CutinCharacter>[] : existing.characters.toList();
-      final next = !sameCharacter && showCharacter ? CutinCharacter(name, 0) : null;
+      final sameCharacter =
+          showCharacter &&
+          existing.characters.isNotEmpty &&
+          existing.characters.last.name == name;
+      final oldCharacters = sameCharacter
+          ? <CutinCharacter>[]
+          : existing.characters.toList();
+      final next = !sameCharacter && showCharacter
+          ? CutinCharacter(name, 0)
+          : null;
       if (next != null) existing.characters.add(next);
       existing.fadeStyle = fadeStyle;
       existing.targetW = toWidth;
-      final fade = animate('cutin:$widgetId', fadeMs / 1000, (t) {
-        existing.alpha = _lerp(fromAlpha, 1, t);
-        existing.rootX = _lerp(fromX, toX, t);
-        existing.rootY = _lerp(fromY, toY, t);
-        existing.contentX = _lerp(fromContentX, toContentX, t);
-        existing.contentY = _lerp(fromContentY, toContentY, t);
-        existing.zoom = _lerp(fromZoom, toZoom, t);
-        existing.maskW = _lerp(fromMaskW, toWidth, t);
-        existing.maskH = _lerp(fromMaskH, 720, t);
-        for (final character in oldCharacters) {
-          character.alpha = 1 - t;
-        }
-        if (next != null) next.alpha = t;
-      }).then((_) {
-        if (existing.hideEpoch == session && state.cutins[widgetId] == existing) {
-          existing.characters.removeWhere(oldCharacters.contains);
-          _changed();
-        }
-      });
+      final fade =
+          animate('cutin:$widgetId', fadeMs / 1000, (t) {
+            existing.alpha = _lerp(fromAlpha, 1, t);
+            existing.rootX = _lerp(fromX, toX, t);
+            existing.rootY = _lerp(fromY, toY, t);
+            existing.contentX = _lerp(fromContentX, toContentX, t);
+            existing.contentY = _lerp(fromContentY, toContentY, t);
+            existing.zoom = _lerp(fromZoom, toZoom, t);
+            existing.maskW = _lerp(fromMaskW, toWidth, t);
+            existing.maskH = _lerp(fromMaskH, 720, t);
+            for (final character in oldCharacters) {
+              character.alpha = 1 - t;
+            }
+            if (next != null) next.alpha = t;
+          }).then((_) {
+            if (existing.hideEpoch == session &&
+                state.cutins[widgetId] == existing) {
+              existing.characters.removeWhere(oldCharacters.contains);
+              _changed();
+            }
+          });
       if (block) await fade;
       return;
     }
     final window = CutinWindow(widgetId)
       ..fadeStyle = fadeStyle
-      ..characters.addAll(showCharacter ? [CutinCharacter(name, 1)] : [] )
+      ..characters.addAll(showCharacter ? [CutinCharacter(name, 1)] : [])
       ..charOffsetX = c.number('charoffsetx')
       ..charOffsetY = c.number('charoffsety')
       ..rootX = 640 + c.number('offsetx')
@@ -2310,7 +2778,9 @@ class StoryEngine extends ChangeNotifier {
       ..targetW = c.number('width', 200)
       ..targetH = 720;
     final horiz = fadeStyle.startsWith('horiz');
-    window.maskW = fadeStyle == 'fade' ? window.targetW : (horiz ? 0 : window.targetW);
+    window.maskW = fadeStyle == 'fade'
+        ? window.targetW
+        : (horiz ? 0 : window.targetW);
     window.maskH = fadeStyle == 'fade' ? 720 : (horiz ? 720 : 0);
     window.alpha = fadeStyle == 'fade' ? 0 : 1;
     state.cutins[widgetId] = window;
@@ -2344,14 +2814,21 @@ class StoryEngine extends ChangeNotifier {
     if (c.flag('hidelog') || text.isEmpty) return;
     _flushMultiline();
     _resetMultiline();
-    if (c.flag('multi') && _overlayLogSource == c.tag && state.history.isNotEmpty) {
+    if (c.flag('multi') &&
+        _overlayLogSource == c.tag &&
+        state.history.isNotEmpty) {
       final previous = state.history.last;
-      state.history[state.history.length - 1] = DialogueLine('', previous.text + text, c.line);
+      state.history[state.history.length - 1] = DialogueLine(
+        '',
+        previous.text + text,
+        c.line,
+      );
     } else {
       state.history.add(DialogueLine('', text, c.line));
     }
     _overlayLogSource = c.flag('multi') ? c.tag : null;
   }
+
   Future<void> _subtitle(StoryCommand c) async {
     final text = translate(c.value('text'));
     if (text.isEmpty) {
@@ -2362,20 +2839,21 @@ class StoryEngine extends ChangeNotifier {
     final x = c.number('x'), y = c.number('y');
     if (x < 0 || x > 1280 || y < 0 || y > 720) return;
     final width = math.min(c.number('width', 1280), 1280 - x);
-    final overlay = OverlayText(
-      'subtitle',
-      x: x,
-      y: y,
-      width: width,
-      size: c.number('size', 24),
-      alignment: _alignment(c.value('alignment')),
-    )
-      ..text = text
-      ..alpha = 1
-      ..visible = true
-      ..typingMs = currentSpeed.typingMs
-      ..typingTime = 0
-      ..revealed = 0;
+    final overlay =
+        OverlayText(
+            'subtitle',
+            x: x,
+            y: y,
+            width: width,
+            size: c.number('size', 24),
+            alignment: _alignment(c.value('alignment')),
+          )
+          ..text = text
+          ..alpha = 1
+          ..visible = true
+          ..typingMs = currentSpeed.typingMs
+          ..typingTime = 0
+          ..revealed = 0;
     state.subtitle = overlay;
     _changed();
     _waitingInput = true;
@@ -2398,14 +2876,16 @@ class StoryEngine extends ChangeNotifier {
       state.stickers['#fading:$id'] = existing;
       final epoch = _epoch;
       final from = existing.alpha;
-      unawaited(animate('stickerFade:$id', fadeMs / 1000, (t) {
-        existing.alpha = from * (1 - t);
-      }).then((_) {
-        if (epoch == _epoch && state.stickers['#fading:$id'] == existing) {
-          state.stickers.remove('#fading:$id');
-          _changed();
-        }
-      }));
+      unawaited(
+        animate('stickerFade:$id', fadeMs / 1000, (t) {
+          existing.alpha = from * (1 - t);
+        }).then((_) {
+          if (epoch == _epoch && state.stickers['#fading:$id'] == existing) {
+            state.stickers.remove('#fading:$id');
+            _changed();
+          }
+        }),
+      );
       _changed();
       if (block) _waitingInput = true;
       return;
@@ -2424,22 +2904,27 @@ class StoryEngine extends ChangeNotifier {
       warn('第 ${c.line} 行：sticker 数量达到上限 20');
     }
     final delay = double.tryParse(c.value('delay'));
-    final overlay = OverlayText(
-      id,
-      x: x,
-      y: y,
-      width: math.min(c.number('width', 1280), 1280 - x),
-      size: c.number('size', 24),
-      alignment: _alignment(c.value('alignment')),
-    )
-      ..text = text
-      ..alpha = 0
-      ..visible = true
-      ..typingMs = (delay == null ? 1 : delay / (baseTypingMs / 1000)) * currentSpeed.typingMs
-      ..typingTime = 0
-      ..revealed = 0;
+    final overlay =
+        OverlayText(
+            id,
+            x: x,
+            y: y,
+            width: math.min(c.number('width', 1280), 1280 - x),
+            size: c.number('size', 24),
+            alignment: _alignment(c.value('alignment')),
+          )
+          ..text = text
+          ..alpha = 0
+          ..visible = true
+          ..typingMs =
+              (delay == null ? 1 : delay / (baseTypingMs / 1000)) *
+              currentSpeed.typingMs
+          ..typingTime = 0
+          ..revealed = 0;
     state.stickers[id] = overlay;
-    unawaited(animate('stickerIn:$id', fadeMs / 1000, (t) => overlay.alpha = t));
+    unawaited(
+      animate('stickerIn:$id', fadeMs / 1000, (t) => overlay.alpha = t),
+    );
     _changed();
     if (block) _waitingInput = true;
   }
@@ -2451,18 +2936,46 @@ class StoryEngine extends ChangeNotifier {
     final isend = c.flag('isend');
     final queue = _stickerTweens.putIfAbsent(id, () => []);
     final hasPos = _hasPoint(c.value('pto'));
-    final posFrom = _hasPoint(c.value('pfrom')) ? _point(c.value('pfrom')) : Offset(sticker.x, sticker.y);
+    final posFrom = _hasPoint(c.value('pfrom'))
+        ? _point(c.value('pfrom'))
+        : Offset(sticker.x, sticker.y);
     final posTo = hasPos ? _point(c.value('pto')) : posFrom;
     if (hasPos) {
-      queue.add(_StickerStep('position', math.max(0.0, c.number('pduration')) * 1000, c.flag('join'), posFrom, posTo));
+      queue.add(
+        _StickerStep(
+          'position',
+          math.max(0.0, c.number('pduration')) * 1000,
+          c.flag('join'),
+          posFrom,
+          posTo,
+        ),
+      );
     }
     if (c.args.containsKey('rto')) {
-      queue.add(_StickerStep('rotation', math.max(0.0, c.number('rduration')) * 1000, c.flag('join'), null, null,
-          from: c.number('rfrom', 0), to: c.number('rto', 0)));
+      queue.add(
+        _StickerStep(
+          'rotation',
+          math.max(0.0, c.number('rduration')) * 1000,
+          c.flag('join'),
+          null,
+          null,
+          from: c.number('rfrom', 0),
+          to: c.number('rto', 0),
+        ),
+      );
     }
     if (c.args.containsKey('ato')) {
-      queue.add(_StickerStep('alpha', math.max(0.0, c.number('aduration')) * 1000, c.flag('join'), null, null,
-          from: c.number('afrom', 0), to: c.number('ato', 0)));
+      queue.add(
+        _StickerStep(
+          'alpha',
+          math.max(0.0, c.number('aduration')) * 1000,
+          c.flag('join'),
+          null,
+          null,
+          from: c.number('afrom', 0),
+          to: c.number('ato', 0),
+        ),
+      );
     }
     if (!isend) return;
     _stickerTweens.remove(id);
@@ -2478,51 +2991,60 @@ class StoryEngine extends ChangeNotifier {
       steps.add((start, step));
       prevEnd = math.max(prevEnd, start + step.durationMs);
     }
-    final totalMs = steps.fold<double>(0, (a, s) => math.max(a, s.$1 + s.$2.durationMs));
+    final totalMs = steps.fold<double>(
+      0,
+      (a, s) => math.max(a, s.$1 + s.$2.durationMs),
+    );
     final epoch = _epoch;
-    final future = animate('stickerTween:$id', math.max(totalMs, 1) / 1000, (t) {
-      final now = t * totalMs;
-      for (final (startAt, step) in steps) {
-        if (now < startAt) continue;
-        final local = step.durationMs <= 0 ? 1.0 : ((now - startAt) / step.durationMs).clamp(0.0, 1.0);
-        switch (step.kind) {
-          case 'position':
-            sticker.x = _lerp(step.fromPos!.dx, step.toPos!.dx, local);
-            sticker.y = _lerp(step.fromPos!.dy, step.toPos!.dy, local);
-          case 'rotation':
-            sticker.rotation = _lerp(step.from, step.to, local);
-          case 'alpha':
-            sticker.alpha = _lerp(step.from, step.to, local);
-        }
-      }
-    }).then((_) {
-      if (epoch == _epoch) _changed();
-    });
+    final future =
+        animate('stickerTween:$id', math.max(totalMs, 1) / 1000, (t) {
+          final now = t * totalMs;
+          for (final (startAt, step) in steps) {
+            if (now < startAt) continue;
+            final local = step.durationMs <= 0
+                ? 1.0
+                : ((now - startAt) / step.durationMs).clamp(0.0, 1.0);
+            switch (step.kind) {
+              case 'position':
+                sticker.x = _lerp(step.fromPos!.dx, step.toPos!.dx, local);
+                sticker.y = _lerp(step.fromPos!.dy, step.toPos!.dy, local);
+              case 'rotation':
+                sticker.rotation = _lerp(step.from, step.to, local);
+              case 'alpha':
+                sticker.alpha = _lerp(step.from, step.to, local);
+            }
+          }
+        }).then((_) {
+          if (epoch == _epoch) _changed();
+        });
     if (c.flag('block') && isend) await future;
   }
 
   Future<void> _timerSticker(StoryCommand c) async {
     final limit = c.args.containsKey('time') ? c.number('time').round() : -1;
-    final overlay = TimerSticker(
-      x: c.number('x'),
-      y: c.number('y'),
-      width: c.number('width', 1280),
-      size: c.number('size', 24),
-    )
-      ..limitSeconds = limit
-      ..alpha = c.number('afrom', 0)
-      ..visible = true
-      ..elapsedSeconds = 0;
+    final overlay =
+        TimerSticker(
+            x: c.number('x'),
+            y: c.number('y'),
+            width: c.number('width', 1280),
+            size: c.number('size', 24),
+          )
+          ..limitSeconds = limit
+          ..alpha = c.number('afrom', 0)
+          ..visible = true
+          ..elapsedSeconds = 0;
     if (limit > 0) overlay.startMicros = _nowUs();
     state.timer = overlay;
     final durationMs = math.max(0.0, c.number('duration', 1)) * 1000;
     final to = c.number('ato', 1);
     final from = overlay.alpha;
-    unawaited(animate(
-      'timer',
-      (durationMs <= 0 ? 130.0 : durationMs) / 1000,
-      (t) => overlay.alpha = _lerp(from, to, t),
-    ));
+    unawaited(
+      animate(
+        'timer',
+        (durationMs <= 0 ? 130.0 : durationMs) / 1000,
+        (t) => overlay.alpha = _lerp(from, to, t),
+      ),
+    );
     _changed();
   }
 
@@ -2532,12 +3054,17 @@ class StoryEngine extends ChangeNotifier {
     final durationMs = math.max(0.0, c.number('duration', .13)) * 1000;
     final from = timer.alpha;
     final epoch = _epoch;
-    final future = animate('timerOut', durationMs / 1000, (t) => timer.alpha = from * (1 - t)).then((_) {
-      if (epoch == _epoch) {
-        if (state.timer == timer) state.timer = null;
-        _changed();
-      }
-    });
+    final future =
+        animate(
+          'timerOut',
+          durationMs / 1000,
+          (t) => timer.alpha = from * (1 - t),
+        ).then((_) {
+          if (epoch == _epoch) {
+            if (state.timer == timer) state.timer = null;
+            _changed();
+          }
+        });
     unawaited(future);
   }
 
@@ -2556,14 +3083,16 @@ class StoryEngine extends ChangeNotifier {
       final fadeKey = '#fading:${sticker.id}';
       state.stickers[fadeKey] = sticker;
       final from = sticker.alpha;
-      futures.add(animate('stickerFade:${sticker.id}', .15, (t) {
-        sticker.alpha = from * (1 - t);
-      }).then((_) {
-        if (epoch == _epoch && state.stickers[fadeKey] == sticker) {
-          state.stickers.remove(fadeKey);
-          _changed();
-        }
-      }));
+      futures.add(
+        animate('stickerFade:${sticker.id}', .15, (t) {
+          sticker.alpha = from * (1 - t);
+        }).then((_) {
+          if (epoch == _epoch && state.stickers[fadeKey] == sticker) {
+            state.stickers.remove(fadeKey);
+            _changed();
+          }
+        }),
+      );
     }
     _changed();
     if (c.flag('block')) await Future.wait(futures);
@@ -2591,7 +3120,11 @@ class StoryEngine extends ChangeNotifier {
       return;
     }
     final pos = _point(c.value('pos'));
-    final stamp = LocationStamp(Offset(pos.dx, -pos.dy), _stampSegments(c.text), c.value('style'));
+    final stamp = LocationStamp(
+      Offset(pos.dx, -pos.dy),
+      _stampSegments(c.text),
+      c.value('style'),
+    );
     state.stamps.add(stamp);
     _changed();
     if (c.flag('block')) {
@@ -2646,33 +3179,48 @@ class StoryEngine extends ChangeNotifier {
       for (final frame in targets) {
         final session = ++frame.hideEpoch;
         final isDialog =
-            frame.maskId == 'interlude_dialog_left' || frame.maskId == 'interlude_dialog_right';
+            frame.maskId == 'interlude_dialog_left' ||
+            frame.maskId == 'interlude_dialog_right';
         Future<void> fade;
         if (isDialog) {
           final double alphaTo = c.number('ato', -1) >= 0 ? c.number('ato') : 0;
           final scaled = c.number('aduration') * currentSpeed.animateRatio;
           final seconds = scaled > 0 ? scaled : .5;
           final from = frame.alpha;
-          fade = animate('interludeClear:${frame.channel}', math.max(0.0, seconds), (t) {
-            if (frame.hideEpoch == session) frame.alpha = _lerp(from, alphaTo, t);
-          });
+          fade = animate(
+            'interludeClear:${frame.channel}',
+            math.max(0.0, seconds),
+            (t) {
+              if (frame.hideEpoch == session) {
+                frame.alpha = _lerp(from, alphaTo, t);
+              }
+            },
+          );
         } else {
-          final to = _hasPoint(c.value('tsto')) ? _point(c.value('tsto')) : Offset.zero;
+          final to = _hasPoint(c.value('tsto'))
+              ? _point(c.value('tsto'))
+              : Offset.zero;
           final from = frame.templateScale;
           final scaled = c.number('tsduration') * currentSpeed.animateRatio;
-          fade = animate('interludeClear:${frame.channel}', math.max(0.0, scaled), (t) {
-            if (frame.hideEpoch != session) return;
-            frame.templateScale = Offset.lerp(from, to, t)!;
-          });
+          fade = animate(
+            'interludeClear:${frame.channel}',
+            math.max(0.0, scaled),
+            (t) {
+              if (frame.hideEpoch != session) return;
+              frame.templateScale = Offset.lerp(from, to, t)!;
+            },
+          );
         }
-        futures.add(fade.then((_) {
-          if (epoch == _epoch &&
-              frame.hideEpoch == session &&
-              state.interludes[frame.channel] == frame) {
-            state.interludes.remove(frame.channel);
-            _changed();
-          }
-        }));
+        futures.add(
+          fade.then((_) {
+            if (epoch == _epoch &&
+                frame.hideEpoch == session &&
+                state.interludes[frame.channel] == frame) {
+              state.interludes.remove(frame.channel);
+              _changed();
+            }
+          }),
+        );
       }
       if (c.flag('block')) await Future.wait(futures);
       return;
@@ -2714,12 +3262,18 @@ class StoryEngine extends ChangeNotifier {
       if (frame.type == 3) frame.avatar = name;
     }
     if (c.args.containsKey('switch')) frame.visible = c.flag('switch');
-    if (c.args.containsKey('icharpos')) frame.dialogCharOffset = _point(c.value('icharpos'));
-    if (c.args.containsKey('icharscale')) frame.dialogCharScale = _point(c.value('icharscale'));
+    if (c.args.containsKey('icharpos')) {
+      frame.dialogCharOffset = _point(c.value('icharpos'));
+    }
+    if (c.args.containsKey('icharscale')) {
+      frame.dialogCharScale = _point(c.value('icharscale'));
+    }
     // 模板尺寸：size 为 0 时用模板默认值。
     if (frame.size == Offset.zero) {
       final preset = _interludeSizes[frame.maskId];
-      frame.size = preset == null ? const Offset(300, 300) : Offset(preset.$1, preset.$2);
+      frame.size = preset == null
+          ? const Offset(300, 300)
+          : Offset(preset.$1, preset.$2);
     }
     // 元素：type=1 切入图 / type=2 背景图 / type=3 头像立绘。
     if (frame.type >= 1 && frame.type <= 3 && frame.name.isNotEmpty) {
@@ -2728,41 +3282,62 @@ class StoryEngine extends ChangeNotifier {
       element.visible = frame.type != 3 || frame.avatar.isNotEmpty;
       final double alphaFrom = math.max(0.0, c.number('afrom', -1));
       final double alphaTo = c.number('ato', -1) >= 0 ? c.number('ato') : 1.0;
-      final alphaDuration = math.max(0.0, c.number('aduration')) * currentSpeed.animateRatio;
+      final alphaDuration =
+          math.max(0.0, c.number('aduration')) * currentSpeed.animateRatio;
       final hasPos = _hasPoint(c.value('pfrom')) && _hasPoint(c.value('pto'));
       final hasScale = _hasPoint(c.value('sfrom')) && _hasPoint(c.value('sto'));
-      final duration = math.max(0.0, c.number('duration')) * currentSpeed.animateRatio;
+      final duration =
+          math.max(0.0, c.number('duration')) * currentSpeed.animateRatio;
       final futures = <Future<void>>[];
       if (alphaDuration > 0) {
-        futures.add(animate('interlude:$channel:a', alphaDuration, (t) {
-          element.alpha = _lerp(alphaFrom, alphaTo, t);
-        }));
+        futures.add(
+          animate('interlude:$channel:a', alphaDuration, (t) {
+            element.alpha = _lerp(alphaFrom, alphaTo, t);
+          }),
+        );
       } else {
         element.alpha = alphaTo;
       }
       if (hasPos) {
         final from = _point(c.value('pfrom')), to = _point(c.value('pto'));
-        futures.add(animate('interlude:$channel:p', duration, (t) {
-          element.offset = Offset(_lerp(from.dx, to.dx, t), -_lerp(from.dy, to.dy, t));
-        }));
+        futures.add(
+          animate('interlude:$channel:p', duration, (t) {
+            element.offset = Offset(
+              _lerp(from.dx, to.dx, t),
+              -_lerp(from.dy, to.dy, t),
+            );
+          }),
+        );
       }
       if (hasScale) {
         final from = _point(c.value('sfrom')), to = _point(c.value('sto'));
-        futures.add(animate('interlude:$channel:s', math.max(0.0, c.number('sduration')) * currentSpeed.animateRatio, (t) {
-          element.scale = Offset.lerp(from, to, t)!;
-        }));
+        futures.add(
+          animate(
+            'interlude:$channel:s',
+            math.max(0.0, c.number('sduration')) * currentSpeed.animateRatio,
+            (t) {
+              element.scale = Offset.lerp(from, to, t)!;
+            },
+          ),
+        );
       }
       if (c.flag('block') && futures.isNotEmpty) await Future.wait(futures);
     }
     // 模板比例动画（参考端 startScaleEntry）：style 0/2 且 tsto 有效时从 tsfrom（缺省 0）展开。
     final tsto = _hasPoint(c.value('tsto')) ? _point(c.value('tsto')) : null;
     if ((frame.style.isEmpty || frame.style == '0' || frame.style == '2') &&
-        tsto != null && (tsto.dx > 0 || tsto.dy > 0)) {
-      final from = _hasPoint(c.value('tsfrom')) ? _point(c.value('tsfrom')) : Offset.zero;
-      final duration = math.max(0.0, c.number('tsduration')) * currentSpeed.animateRatio;
-      unawaited(animate('interlude:$channel:ts', duration, (t) {
-        frame.templateScale = Offset.lerp(from, tsto, t)!;
-      }));
+        tsto != null &&
+        (tsto.dx > 0 || tsto.dy > 0)) {
+      final from = _hasPoint(c.value('tsfrom'))
+          ? _point(c.value('tsfrom'))
+          : Offset.zero;
+      final duration =
+          math.max(0.0, c.number('tsduration')) * currentSpeed.animateRatio;
+      unawaited(
+        animate('interlude:$channel:ts', duration, (t) {
+          frame.templateScale = Offset.lerp(from, tsto, t)!;
+        }),
+      );
     }
     _changed();
   }
