@@ -181,6 +181,21 @@ ThemeData buildAppTheme() {
       backgroundColor: AppColors.raised,
       shape: shape,
     ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: AppColors.raised,
+      surfaceTintColor: Colors.transparent,
+      elevation: 3,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(2)),
+        side: BorderSide(color: AppColors.border),
+      ),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.disabled)
+            ? controlText.copyWith(color: AppColors.muted)
+            : controlText.copyWith(color: AppColors.text),
+      ),
+      mouseCursor: WidgetStateMouseCursor.clickable,
+    ),
     snackBarTheme: const SnackBarThemeData(
       backgroundColor: AppColors.surface,
       contentTextStyle: TextStyle(

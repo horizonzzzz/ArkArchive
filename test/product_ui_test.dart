@@ -747,6 +747,19 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('下拉菜单在按钮下方弹出', (tester) async {
+    await _mount(tester);
+    await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
+    await tester.pumpAndSettle();
+    final button = find.byTooltip('${_main.title}的更多操作');
+    final buttonRect = tester.getRect(button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    // 菜单在触发按钮下方展开，不遮挡按钮本身。
+    final item = find.bySubtype<PopupMenuItem<String>>();
+    expect(tester.getRect(item).top, greaterThan(buttonRect.bottom));
+  });
+
   testWidgets('设置滑块更新后切换页面保持设置值', (tester) async {
     final repo = await _mount(tester);
     await tester.tap(find.text('系统设置').last);

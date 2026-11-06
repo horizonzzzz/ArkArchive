@@ -1416,6 +1416,11 @@ class _StoryLauncherState extends State<StoryLauncher> {
               ),
               PopupMenuButton<String>(
                 tooltip: '${entry.title}的更多操作',
+                position: PopupMenuPosition.under,
+                offset: const Offset(0, 4),
+                // 置零消除 under 模式对 IconButton 默认 padding 的 8px 补偿，
+                // 使菜单恰好落在按钮下方而不与按钮重叠。
+                padding: EdgeInsets.zero,
                 onSelected: (_) => _cacheEntry(entry),
                 itemBuilder: (context) => [
                   PopupMenuItem(
@@ -1426,12 +1431,23 @@ class _StoryLauncherState extends State<StoryLauncher> {
                         !_busy &&
                         !_deletingCache &&
                         !_movingDirectory,
-                    child: Text(
-                      _cached.contains(entry.path)
-                          ? '已缓存'
-                          : activeJob
-                          ? '缓存中'
-                          : '缓存',
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.download_outlined,
+                          size: 20,
+                          color: AppColors.secondary,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          _cached.contains(entry.path)
+                              ? '已缓存'
+                              : activeJob
+                              ? '缓存中'
+                              : '缓存',
+                        ),
+                      ],
                     ),
                   ),
                 ],
