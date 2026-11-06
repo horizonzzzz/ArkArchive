@@ -43,8 +43,33 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
+      - name: Configure Android Signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_PASSWORD ANDROID_KEY_ALIAS; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::缺少 repository secret: $name"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ]
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storeFile=upload-keystore.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+
       - name: Build APKs (Per ABI)
-        run: flutter build apk --release --split-per-abi
+        # 分包与通用包共用同一个 versionCode：否则先装分包再装通用包会被判为降级。
+        run: flutter build apk --release --split-per-abi -P force-version-code-ignoring-abi=true
 
       - name: Stage APKs
         run: |
@@ -59,6 +84,30 @@ jobs:
           version=$(sed -n 's/^version: \([^+]*\).*/\1/p' pubspec.yaml)
           flutter build apk --release
           cp build/app/outputs/flutter-apk/app-release.apk "dist/arknights_story_player-v${version}-android-universal.apk"
+
+      - name: Verify APK Signatures
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          apksigner=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -1)
+          [ -x "$apksigner" ] || { echo "::error::未找到 apksigner"; exit 1; }
+          expected=$(keytool -list -v -keystore android/app/upload-keystore.jks \
+            -alias "$ANDROID_KEY_ALIAS" -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            | sed -n 's/^.*SHA256: //p' | head -1 | tr -d ':' | tr 'A-Z' 'a-z')
+          [ -n "$expected" ] || { echo "::error::无法从密钥库读取证书 SHA-256"; exit 1; }
+          for apk in dist/*.apk; do
+            mapfile -t actual < <("$apksigner" verify --print-certs "$apk" \
+              | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr 'A-Z' 'a-z')
+            if [ "${#actual[@]}" -ne 1 ] || [ "${actual[0]}" != "$expected" ]; then
+              echo "::error::$apk 的签名与上传密钥库不一致（可能是 debug 签名）"
+              echo "expected: $expected"
+              printf 'actual: %s\n' "${actual[@]:-<空>}"
+              exit 1
+            fi
+            echo "签名校验通过: $apk -> ${actual[0]}"
+          done
       - name: Upload Android Artifacts
         uses: actions/upload-artifact@v4
         with:

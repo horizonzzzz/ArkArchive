@@ -1,8 +1,20 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// 发布签名配置：key.properties 与密钥库都不入库，CI 在构建前从 secrets 生成。
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+val releaseStoreFile = (keystoreProperties["storeFile"] as String?)?.let { file(it) }
+val hasReleaseKeystore = releaseStoreFile?.exists() == true
 
 android {
     namespace = "com.example.arknights_story_player"
@@ -29,12 +41,38 @@ android {
         versionName = flutter.versionName
     }
 
+    // 发布签名从 android/key.properties 读取；密钥库与口令都不入库。
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                // storeFile 相对于 android/app 解析。
+                storeFile = releaseStoreFile
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // 绝不回退到 debug 签名：每个 debug 密钥都不同，产出的包无法覆盖安装旧版本。
+            // 缺配置时保持为空，由文件末尾的 taskGraph 检查直接报错。
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
+    }
+}
+
+// Release 构建缺少上传密钥时立即失败，避免静默产出一个无法覆盖安装的包。
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.name.contains("Release") } && !hasReleaseKeystore) {
+        throw GradleException(
+            "缺少发布签名配置：android/key.properties 不存在，" +
+                "或其中 storeFile 指向的密钥库文件不存在。" +
+                "配置模板见 android/key.properties.example。"
+        )
     }
 }
 

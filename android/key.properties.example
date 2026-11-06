@@ -1,0 +1,7 @@
+# 发布签名配置模板：复制为 android/key.properties 后填入真实值。
+# key.properties 与密钥库都被 android/.gitignore 忽略，不要提交。
+# storeFile 相对于 android/app 解析。
+storeFile=upload-keystore.jks
+storePassword=密钥库口令
+keyAlias=upload
+keyPassword=密钥口令
