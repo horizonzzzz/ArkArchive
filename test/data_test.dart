@@ -795,6 +795,7 @@ void main() {
           return http.Response(
             jsonEncode({
               'chapter': {
+                'id': 'chapter-id',
                 'name': '测试章节',
                 'entryType': 'MAINLINE',
                 'infoUnlockDatas': [
@@ -828,6 +829,7 @@ void main() {
       expect(story.script.commands.single.text, '对白');
       final groups = await repository.loadIndex();
       expect(groups.single.name, '测试章节');
+      expect(groups.single.id, 'chapter-id');
       // storyCanShow=0 的主线与干员密录同样进目录，否则整类剧情会被滤掉。
       expect(groups.single.entries.map((e) => e.path), [
         'obt/test/story',

@@ -152,6 +152,46 @@ Future<_Repository> _mount(
 }
 
 void main() {
+  testWidgets('主线章节使用对应背景，缺少映射时保持原样', (tester) async {
+    await _mount(
+      tester,
+      repository: _Repository(
+        groups: const [
+          StoryGroup('慈悲灯塔', [_main], id: 'main_14', entryType: 'MAINLINE'),
+          StoryGroup('黑暗时代·上', [_main], id: 'main_0', entryType: 'MAINLINE'),
+        ],
+      ),
+    );
+    expect(find.byType(ShaderMask), findsOneWidget);
+    expect(find.byKey(const ValueKey('chapter-慈悲灯塔')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chapter-黑暗时代·上')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('活动背景不影响按钮交互，未匹配的分组保持原样', (tester) async {
+    await _mount(
+      tester,
+      repository: _Repository(
+        groups: const [
+          StoryGroup('骑兵与猎人', [_side], id: '1stact', entryType: 'ACTIVITY'),
+          StoryGroup('没有封面的档案', [_main]),
+        ],
+      ),
+    );
+    expect(find.byType(ShaderMask), findsOneWidget);
+    final image = tester.widget<Image>(
+      find.descendant(
+        of: find.byType(ShaderMask),
+        matching: find.byType(Image),
+      ),
+    );
+    expect(image.fit, BoxFit.fitHeight);
+    expect(image.alignment, Alignment.centerRight);
+    expect(find.byKey(const ValueKey('chapter-没有封面的档案')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(const ValueKey('chapter-骑兵与猎人')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chapter-header')), findsOneWidget);
+  });
   for (final size in [const Size(390, 844), const Size(1280, 800)]) {
     testWidgets('多篇剧情各自在列表行显示继续入口，加载失败保留进度：$size', (tester) async {
       final repo = _Repository();

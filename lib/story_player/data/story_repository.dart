@@ -29,10 +29,16 @@ class StoryEntry {
 }
 
 class StoryGroup {
-  const StoryGroup(this.name, this.entries, {this.entryType = 'NONE'});
+  const StoryGroup(
+    this.name,
+    this.entries, {
+    this.entryType = 'NONE',
+    this.id = '',
+  });
   final String name;
   final List<StoryEntry> entries;
   final String entryType;
+  final String id;
 }
 
 class StoryRepository {
@@ -168,7 +174,10 @@ class StoryRepository {
       final warnings = <String>[];
       final assets = catalog.dependencies(document.script, warnings);
       _activeAssets[entry.path] = {
-        indexUri, storyBase.resolve('${entry.path}.txt'), ...MediaCatalog.tableUris, ...assets,
+        indexUri,
+        storyBase.resolve('${entry.path}.txt'),
+        ...MediaCatalog.tableUris,
+        ...assets,
       };
       final errors = [...warnings];
       errors.addAll(
@@ -189,7 +198,9 @@ class StoryRepository {
         };
         await store.writeCache(
           _manifestUri(entry.path),
-          utf8.encode(jsonEncode(manifest.map((uri) => uri.toString()).toList())),
+          utf8.encode(
+            jsonEncode(manifest.map((uri) => uri.toString()).toList()),
+          ),
         );
         await control?.checkpoint();
         await _changeCachedStories((entries) {
@@ -266,6 +277,7 @@ class StoryRepository {
           StoryGroup(
             group['name']?.toString() ?? '${group['id']}',
             entries,
+            id: group['id']?.toString() ?? '',
             entryType: group['entryType']?.toString() ?? 'NONE',
           ),
         );

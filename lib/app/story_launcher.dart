@@ -6,6 +6,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../story_player/story_player.dart';
+import 'activity_images.dart';
 import 'app_theme.dart';
 import 'archive_motion.dart';
 import 'archive_widgets.dart';
@@ -1175,25 +1176,60 @@ class _StoryLauncherState extends State<StoryLauncher> {
     padding: const EdgeInsets.only(bottom: 10),
     child: ArchivePanel(
       padding: EdgeInsets.zero,
-      child: Material(
-        color: Colors.transparent,
-        child: ListTile(
-          key: ValueKey('chapter-${group.name}'),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 8,
+      child: Stack(
+        children: [
+          if (activityImages[group.id] case final imageUrl?)
+            Positioned.fill(
+              child: LayoutBuilder(
+                builder: (context, constraints) => Align(
+                  alignment: Alignment.centerRight,
+                  child: IgnorePointer(
+                    child: ShaderMask(
+                      blendMode: BlendMode.dstIn,
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          Color(0x33000000),
+                          Color(0xB3000000),
+                        ],
+                        stops: [0.1, 0.55, 1.0],
+                      ).createShader(bounds),
+                      child: Image.network(
+                        imageUrl,
+                        height: constraints.maxHeight,
+                        fit: BoxFit.fitHeight,
+                        alignment: Alignment.centerRight,
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Material(
+            color: Colors.transparent,
+            child: ListTile(
+              key: ValueKey('chapter-${group.name}'),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+              title: Text(
+                group.name,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              subtitle: Text(
+                '${_categories[_categoryOf(group)]} · ${_entries(group).length} 幕',
+                style: const TextStyle(fontSize: 12, color: AppColors.subtext),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => setState(() => _activeGroup = group),
+            ),
           ),
-          title: Text(
-            group.name,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-          ),
-          subtitle: Text(
-            '${_categories[_categoryOf(group)]} · ${_entries(group).length} 幕',
-            style: const TextStyle(fontSize: 12, color: AppColors.subtext),
-          ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => setState(() => _activeGroup = group),
-        ),
+        ],
       ),
     ),
   );
