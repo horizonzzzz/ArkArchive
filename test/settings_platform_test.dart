@@ -89,11 +89,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('网络与节点'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('连接诊断'));
-    await tester.pumpAndSettle();
+    // 进入分类自动执行一次诊断，无需手动点击。
     expect(requests, hasLength(2));
     expect(find.text('连接成功'), findsOneWidget);
     expect(find.text('连接失败'), findsOneWidget);
+    // 手动按钮保留，用于再次检测。
+    await tester.tap(find.text('重新检测'));
+    await tester.pumpAndSettle();
+    expect(requests, hasLength(4));
+    expect(find.text('连接失败'), findsNWidgets(2));
     expect(find.text('强制离线模式'), findsNothing);
   });
 }

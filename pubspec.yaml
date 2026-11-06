@@ -48,6 +48,8 @@ dependencies:
   html: ^0.15.7
   connectivity_plus: ^7.3.2
   file_selector: ^1.1.0
+  package_info_plus: ^10.2.2
+  url_launcher: ^6.3.3
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -77,6 +79,7 @@ flutter:
     - assets/images/slide_mask.png
     - assets/images/logo_rhodes.png
     - assets/images/logo_babel.png
+    - assets/images/app_icon.png
     - assets/images/prts_ui/
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

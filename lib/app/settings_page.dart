@@ -2,11 +2,27 @@ import '../story_player/data/media_catalog.dart';
 import '../story_player/data/playback_settings.dart';
 import '../story_player/data/story_repository.dart';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
+import 'app_update.dart';
 import 'archive_motion.dart';
 import 'archive_widgets.dart';
+
+/// 关于页中更新检查的状态机。
+enum _UpdatePhase { idle, checking, latest, available, failed }
+
+/// 单个更新资产的下载状态。
+class _AssetDownload {
+  bool cancelled = false;
+  int received = 0;
+  int? total;
+  String? savedPath;
+  String? error;
+
+  bool get active => savedPath == null && error == null;
+}
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
@@ -29,6 +45,9 @@ class SettingsPage extends StatefulWidget {
     this.probe,
     this.mobileDataPrompt = true,
     this.onMobileDataPromptChanged,
+    this.appVersion,
+    this.update,
+    this.onOpenLink,
   });
   final bool concurrencyBusy;
   final bool active;
@@ -50,6 +69,15 @@ class SettingsPage extends StatefulWidget {
   /// 移动端非 Wi-Fi 缓存前是否提示确认；关闭后不再弹确认框。
   final bool mobileDataPrompt;
   final ValueChanged<bool>? onMobileDataPromptChanged;
+
+  /// 当前应用版本号，例如 `0.4.0`；由启动页从 package_info 获取后传入。
+  final String? appVersion;
+
+  /// 更新检查服务；为 null 时关于页只展示版本与说明，不提供检查入口。
+  final AppUpdateClient? update;
+
+  /// 打开外部链接（项目主页、发布页与浏览器下载更新包）。
+  final void Function(Uri uri)? onOpenLink;
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
@@ -59,6 +87,19 @@ class _SettingsPageState extends State<SettingsPage> {
   late PlaybackSettings _settings = widget.settings;
   bool _checking = false;
   String _indexStatus = '未检测', _assetStatus = '未检测';
+  _UpdatePhase _updatePhase = _UpdatePhase.idle;
+  AppUpdate? _update;
+  String? _updateError;
+  final Map<String, _AssetDownload> _downloads = {};
+
+  /// 网络与节点分类在 categories 中的下标。
+  static const _networkCategory = 3;
+
+  /// 下钻设置分类；进入网络与节点时自动检测一次，无需手动触发。
+  void _openCategory(int index) {
+    setState(() => _category = index);
+    if (index == _networkCategory) _diagnose();
+  }
 
   void _changeSettings(PlaybackSettings value) {
     setState(() => _settings = value);
@@ -114,6 +155,7 @@ class _SettingsPageState extends State<SettingsPage> {
           (Icons.slow_motion_video, '演出偏好', '自动播放与文字显示速度'),
           (Icons.storage_outlined, '存储与缓存', '缓存占用、下载并发与本地文件'),
           (Icons.public, '网络与节点', '检查剧情与素材连接'),
+          (Icons.info_outline, '关于', '版本、更新与开源信息'),
         ];
         final wide = constraints.maxWidth >= 880;
         final content = switch (_category) {
@@ -121,6 +163,7 @@ class _SettingsPageState extends State<SettingsPage> {
           1 => _playback(),
           2 => _storage(wide),
           3 => _network(),
+          4 => _about(),
           _ => ArchivePanel(
             padding: EdgeInsets.zero,
             child: Column(
@@ -150,7 +193,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                     trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => setState(() => _category = i),
+                    onTap: () => _openCategory(i),
                   ),
                 ],
               ],
@@ -336,9 +379,578 @@ class _SettingsPageState extends State<SettingsPage> {
     OutlinedButton.icon(
       onPressed: _checking || widget.probe == null ? null : _diagnose,
       icon: const Icon(Icons.network_check, size: 18),
-      label: const Text('连接诊断'),
+      label: const Text('重新检测'),
     ),
   ]);
+
+  // ------------------------------------------------------------
+  // 关于：应用信息、检查与下载更新、链接与声明。
+  // ------------------------------------------------------------
+
+  Future<void> _checkUpdate() async {
+    final update = widget.update;
+    if (update == null || _updatePhase == _UpdatePhase.checking) return;
+    setState(() => _updatePhase = _UpdatePhase.checking);
+    try {
+      final result = await update.check();
+      if (!mounted) return;
+      setState(() {
+        _update = result;
+        _updateError = null;
+        _updatePhase =
+            result == null ? _UpdatePhase.latest : _UpdatePhase.available;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _updateError = error is AppUpdateException ? error.message : '$error';
+        _updatePhase = _UpdatePhase.failed;
+      });
+    }
+  }
+
+  void _startAssetDownload(AppUpdateAsset asset) {
+    final update = widget.update;
+    if (update == null) return;
+    final existing = _downloads[asset.name];
+    if (existing != null && existing.active) return;
+    final download = _AssetDownload();
+    setState(() => _downloads[asset.name] = download);
+    update
+        .download(
+          asset,
+          onProgress: (received, total) {
+            if (mounted) {
+              setState(() {
+                download.received = received;
+                download.total = total;
+              });
+            }
+          },
+          isCancelled: () => download.cancelled,
+        )
+        .then((path) {
+          if (!mounted) return;
+          setState(() => download.savedPath = path);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('更新已保存到 $path'),
+              action: SnackBarAction(
+                label: '打开所在文件夹',
+                onPressed: () => _revealUpdateFile(path),
+              ),
+            ),
+          );
+        })
+        .catchError((Object error) {
+          if (mounted) {
+            setState(() {
+              download.error =
+                  error is UpdateDownloadCancelled ? '已取消下载。' : '$error';
+            });
+          }
+        });
+  }
+
+  void _cancelAssetDownload(_AssetDownload download) {
+    setState(() => download.cancelled = true);
+  }
+
+  Future<void> _revealUpdateFile(String path) async {
+    try {
+      await widget.update?.reveal(path);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('无法打开所在文件夹：$error')));
+      }
+    }
+  }
+
+  Widget _about() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      ArchivePanel(
+        child: Row(
+          children: [
+            Image.asset(
+              'assets/images/app_icon.png',
+              width: 46,
+              height: 46,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '方舟档案室',
+                    style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    '明日方舟剧情离线播放器',
+                    style: TextStyle(fontSize: 12, color: AppColors.subtext),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Text(
+                        '版本',
+                        style: TextStyle(fontSize: 12, color: AppColors.muted),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        key: const ValueKey('about-version'),
+                        widget.appVersion == null
+                            ? '无法读取'
+                            : 'v${widget.appVersion}',
+                        style: const TextStyle(
+                          fontFamily: AppTypography.bender,
+                          fontFamilyFallback: [AppTypography.sans],
+                          color: AppColors.terminalWhite,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: .6,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+      _aboutUpdate(),
+      const SizedBox(height: 12),
+      _aboutLinks(),
+      const SizedBox(height: 12),
+      _aboutNotice(),
+    ],
+  );
+
+  Widget _aboutUpdate() => ArchivePanel(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text('应用更新', style: TextStyle(fontSize: 15)),
+            ),
+            OutlinedButton.icon(
+              key: const ValueKey('about-check-update'),
+              onPressed:
+                  _updatePhase == _UpdatePhase.checking || widget.update == null
+                  ? null
+                  : _checkUpdate,
+              icon: _updatePhase == _UpdatePhase.checking
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.update_outlined, size: 18),
+              label: Text(
+                _updatePhase == _UpdatePhase.checking ? '正在检查…' : '检查更新',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        switch (_updatePhase) {
+          _UpdatePhase.idle => Text(
+            widget.update == null
+                ? '此构建未接入更新检查。'
+                : '检查 GitHub 上的最新发布版本，桌面端可在应用内下载安装包。',
+            style: const TextStyle(fontSize: 12, color: AppColors.subtext),
+          ),
+          _UpdatePhase.checking => const Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 10),
+              Text(
+                '正在检查更新…',
+                style: TextStyle(fontSize: 12, color: AppColors.subtext),
+              ),
+            ],
+          ),
+          _UpdatePhase.latest => const Row(
+            children: [
+              Icon(Icons.check_circle_outline, size: 16, color: AppColors.green),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '已是最新版本。',
+                  style: TextStyle(fontSize: 12, color: AppColors.secondary),
+                ),
+              ),
+            ],
+          ),
+          _UpdatePhase.failed => Row(
+            children: [
+              const Icon(Icons.error_outline, size: 16, color: AppColors.danger),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '检查更新失败：$_updateError',
+                  style: const TextStyle(fontSize: 12, color: AppColors.danger),
+                ),
+              ),
+            ],
+          ),
+          _UpdatePhase.available => _updateAvailable(),
+        },
+      ],
+    ),
+  );
+
+  Widget _updateAvailable() {
+    final update = _update!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.new_releases_outlined,
+              size: 16,
+              color: AppColors.yellow,
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              '发现新版本',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.yellow,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              update.version,
+              style: const TextStyle(
+                fontFamily: AppTypography.bender,
+                fontFamilyFallback: [AppTypography.sans],
+                color: AppColors.terminalWhite,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                letterSpacing: .6,
+              ),
+            ),
+          ],
+        ),
+        if (update.notes.trim().isNotEmpty) ...[
+          const SizedBox(height: 10),
+          SelectableText(
+            update.notes.trim(),
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.secondary,
+              height: 1.7,
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        ..._updateAssets(update),
+      ],
+    );
+  }
+
+  /// 资产文件名中的平台标识；Web 返回空串展示全部，无构建产物的平台返回 null。
+  String? _assetPlatformToken() {
+    if (kIsWeb) return '';
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => '-android-',
+      TargetPlatform.windows => '-windows-',
+      TargetPlatform.linux => '-linux-',
+      _ => null,
+    };
+  }
+
+  List<Widget> _updateAssets(AppUpdate update) {
+    Widget openPageButton() => OutlinedButton.icon(
+      key: const ValueKey('about-update-page'),
+      onPressed: widget.onOpenLink == null
+          ? null
+          : () => widget.onOpenLink!(update.pageUri),
+      icon: const Icon(Icons.open_in_new, size: 16),
+      label: const Text('打开发布页面'),
+    );
+    final token = _assetPlatformToken();
+    if (token == null) {
+      return [
+        const Text(
+          '当前平台没有对应的安装包，可在发布页面查看全部文件。',
+          style: TextStyle(fontSize: 12, color: AppColors.subtext),
+        ),
+        const SizedBox(height: 12),
+        openPageButton(),
+      ];
+    }
+    final assets = update.assets
+        .where((asset) => token.isEmpty || asset.name.contains(token))
+        .toList();
+    if (assets.isEmpty) {
+      return [
+        const Text(
+          '本次发布没有当前平台的安装包，可在发布页面查看全部文件。',
+          style: TextStyle(fontSize: 12, color: AppColors.subtext),
+        ),
+        const SizedBox(height: 12),
+        openPageButton(),
+      ];
+    }
+    return [
+      if (token == '-android-')
+        const Padding(
+          padding: EdgeInsets.only(bottom: 10),
+          child: Text(
+            'Android 请选择与设备匹配的架构；不确定时选择 universal。',
+            style: TextStyle(fontSize: 11, color: AppColors.muted),
+          ),
+        ),
+      for (final asset in assets) ...[
+        _updateAssetRow(asset),
+        const SizedBox(height: 8),
+      ],
+    ];
+  }
+
+  Widget _updateAssetRow(AppUpdateAsset asset) {
+    final download = _downloads[asset.name];
+    final active = download != null && download.active;
+    final saved = download?.savedPath;
+    final error = download?.error;
+    // 桌面端支持应用内下载，其他平台交给系统浏览器。
+    final inApp = widget.isDesktop;
+    final total = download?.total;
+    final progress = active && total != null && total > 0
+        ? download.received / total
+        : null;
+    return Container(
+      key: ValueKey('about-asset-${asset.name}'),
+      color: AppColors.surface,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  asset.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+              if (asset.bytes != null) ...[
+                const SizedBox(width: 10),
+                Text(
+                  '${(asset.bytes! / 1048576).toStringAsFixed(1)} MB',
+                  style: const TextStyle(
+                    fontFamily: AppTypography.bender,
+                    fontFamilyFallback: [AppTypography.sans],
+                    fontSize: 11,
+                    color: AppColors.muted,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (saved != null)
+            Row(
+              children: [
+                const Icon(
+                  Icons.check_circle_outline,
+                  size: 15,
+                  color: AppColors.green,
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    '已保存到下载目录',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.secondary,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => _revealUpdateFile(saved),
+                  child: const Text('打开所在文件夹'),
+                ),
+              ],
+            )
+          else if (error != null)
+            Row(
+              children: [
+                const Icon(Icons.error_outline, size: 15, color: AppColors.danger),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    error,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.danger,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: inApp ? () => _startAssetDownload(asset) : null,
+                  child: const Text('重新下载'),
+                ),
+              ],
+            )
+          else if (active)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LinearProgressIndicator(value: progress),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        total == null
+                            ? '${_formatBytes(download.received)} / 未知'
+                            : '${_formatBytes(download.received)} / ${_formatBytes(total)} · ${(download.received * 100 / total).round()}%',
+                        style: const TextStyle(
+                          fontFamily: AppTypography.bender,
+                          fontFamilyFallback: [AppTypography.sans],
+                          fontSize: 11,
+                          color: AppColors.subtext,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => _cancelAssetDownload(download),
+                      child: const Text('取消'),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    inApp ? '保存到系统下载目录' : '通过系统浏览器下载',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  key: ValueKey('about-download-${asset.name}'),
+                  onPressed: inApp
+                      ? () => _startAssetDownload(asset)
+                      : () => widget.onOpenLink?.call(asset.uri),
+                  icon: Icon(
+                    inApp ? Icons.download_outlined : Icons.open_in_new,
+                    size: 16,
+                  ),
+                  label: const Text('下载'),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _formatBytes(int bytes) => bytes >= 1048576
+      ? '${(bytes / 1048576).toStringAsFixed(1)} MB'
+      : '${(bytes / 1024).round()} KB';
+
+  Widget _aboutLinks() => ArchivePanel(
+    padding: EdgeInsets.zero,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _aboutLinkTile(
+          Icons.home_work_outlined,
+          '项目主页',
+          'GitHub 仓库与源码',
+          AppUpdateLinks.project,
+        ),
+        const Divider(height: 1, indent: 16, endIndent: 16),
+        _aboutLinkTile(
+          Icons.bug_report_outlined,
+          '问题反馈',
+          '在 GitHub Issues 提交问题',
+          AppUpdateLinks.issues,
+        ),
+        const Divider(height: 1, indent: 16, endIndent: 16),
+        _aboutLinkTile(
+          Icons.history_outlined,
+          '更新日志',
+          '查看全部发布说明',
+          AppUpdateLinks.releases,
+        ),
+      ],
+    ),
+  );
+
+  Widget _aboutLinkTile(
+    IconData icon,
+    String title,
+    String subtitle,
+    Uri uri,
+  ) => ListTile(
+    key: ValueKey('about-link-$title'),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    leading: Icon(icon, size: 22, color: AppColors.subtext),
+    title: Text(title, style: const TextStyle(fontSize: 15)),
+    subtitle: Text(
+      subtitle,
+      style: const TextStyle(fontSize: 12, color: AppColors.subtext),
+    ),
+    trailing: const Icon(Icons.open_in_new, size: 18, color: AppColors.muted),
+    onTap: widget.onOpenLink == null ? null : () => widget.onOpenLink!(uri),
+  );
+
+  Widget _aboutNotice() => ArchivePanel(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text('数据来源与声明', style: TextStyle(fontSize: 15)),
+        const SizedBox(height: 10),
+        const Text(
+          '剧情脚本、目录索引与多媒体素材来自 PRTS Wiki（torappu.prts.wiki）'
+          '与 Kengxxiao/ArknightsGameData 等社区解包项目，'
+          '相关内容版权归鹰角网络所有。',
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.secondary,
+            height: 1.8,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          '本应用为社区非官方作品，与鹰角网络无关联，仅用于离线浏览剧情演出，'
+          '请勿用于任何商业用途。',
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.secondary,
+            height: 1.8,
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _statusRow(String title, String description, String status) => Row(
     children: [

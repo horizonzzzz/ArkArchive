@@ -4,10 +4,13 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../story_player/story_player.dart';
 import 'activity_images.dart';
 import 'app_theme.dart';
+import 'app_update.dart';
 import 'archive_motion.dart';
 import 'archive_widgets.dart';
 import 'cache_page.dart';
@@ -50,6 +53,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
   bool _networkStopped = false;
   Future<bool>? _networkConfirmation;
   StreamSubscription<List<ConnectivityResult>>? _cacheNetworkSubscription;
+
+  final AppUpdateClient _updateClient = AppUpdateClient();
+  String? _appVersion;
 
   bool _isJobActive(CacheJob job) =>
       job.status == CacheJobStatus.waiting ||
@@ -103,7 +109,35 @@ class _StoryLauncherState extends State<StoryLauncher> {
     _initialize();
   }
 
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      _updateClient.currentVersion = info.version;
+      if (mounted) setState(() => _appVersion = info.version);
+    } catch (_) {
+      if (mounted) setState(() => _appVersion = null);
+    }
+  }
+
+  /// 用系统浏览器打开外部链接（项目主页、发布页与更新包下载）。
+  Future<void> _openExternalLink(Uri uri) async {
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法打开链接，请检查浏览器设置。')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('无法打开链接：$error')));
+      }
+    }
+  }
+
   Future<void> _initialize() async {
+    unawaited(_loadAppVersion());
     await _repository.store.loadSettings();
     unawaited(_refreshCacheInfo());
     try {
@@ -814,6 +848,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                     onOpenDirectory: _openCacheDirectory,
                                     onMoveDirectory: _moveCacheDirectory,
                                     onClearCache: _clearCache,
+                                    appVersion: _appVersion,
+                                    update: _updateClient,
+                                    onOpenLink: _openExternalLink,
                                     directoryBusy:
                                         _movingDirectory ||
                                         _hasActiveJobs ||
@@ -931,7 +968,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
             child: Row(
               children: [
                 Image.asset(
-                  'assets/images/logo_rhodes.png',
+                  'assets/images/app_icon.png',
                   width: 28,
                   height: 28,
                   fit: BoxFit.contain,
@@ -1467,6 +1504,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
     unawaited(_cacheNetworkSubscription?.cancel());
     _categoryPageController.dispose();
     _search.dispose();
+    _updateClient.close();
     _ownedAssets?.close();
     super.dispose();
   }
