@@ -454,10 +454,6 @@ void main() {
       expect(find.byKey(const Key('chapter-header')), findsOneWidget);
       expect(find.byKey(const ValueKey('main/14-1')), findsNothing);
       expect(find.byKey(const ValueKey('main/14-1-end')), findsOneWidget);
-      await tester.tap(find.text('选择'));
-      await tester.pump(const Duration(milliseconds: 40));
-      await tester.tap(find.text('取消'));
-      await tester.pumpAndSettle();
       await tester.tap(find.text('系统设置').last);
       await tester.pumpAndSettle();
       expect(find.byTooltip('返回设置分类'), findsNothing);
@@ -502,7 +498,7 @@ void main() {
   }
 
   for (final scale in [1.0, 1.6]) {
-    testWidgets('移动端滚动固定 header，选择模式可通过返回退出（文字缩放 $scale）', (tester) async {
+    testWidgets('移动端滚动固定 header，返回章节目录（文字缩放 $scale）', (tester) async {
       final entries = List.generate(
         40,
         (i) => StoryEntry(
@@ -535,14 +531,7 @@ void main() {
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
       await tester.pumpAndSettle();
       expect(tester.getRect(chapterHeader), chapterRect);
-      await tester.tap(find.text('选择'));
-      await tester.pumpAndSettle();
-      expect(find.byType(Checkbox), findsWidgets);
-      expect(tester.takeException(), isNull);
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.text('选择'), findsOneWidget);
-      expect(chapterHeader, findsOneWidget);
+      expect(find.text('选择'), findsNothing);
       expect(find.byType(Checkbox), findsNothing);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
@@ -597,80 +586,38 @@ void main() {
     expect(find.text('没有匹配的剧情'), findsOneWidget);
   });
 
-  testWidgets('移动端选择并批量缓存，显示已缓存剧情', (tester) async {
-    final repo = await _mount(tester);
-    await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
-    await tester.pumpAndSettle();
-    expect(find.byType(Checkbox), findsNothing);
-    await tester.tap(find.text('选择'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.bySemanticsLabel('全选本章').first);
-    await tester.pumpAndSettle();
-    expect(find.text('已选 2 幕'), findsOneWidget);
-    await tester.tap(find.text('缓存'));
-    await tester.pumpAndSettle();
-    expect(repo.entryCalls, 2);
-    expect(find.text('缓存完成，共 2 幕。'), findsOneWidget);
-    expect(find.text('已离线'), findsNothing);
-    expect(find.textContaining('待缓存 ('), findsNothing);
-    expect(find.text(_main.title), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('offline-慈悲灯塔')));
-    await tester.pumpAndSettle();
-    expect(find.text(_main.title), findsOneWidget);
-    await tester.tap(find.byTooltip('播放 ${_main.title}'));
-    await tester.pump();
-    expect(repo.entryCalls, 3);
-    repo.pending!.completeError(const FormatException('脚本缺失'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('剧情馆').last);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('mobile-batch-bar')), findsNothing);
-  });
-
-  testWidgets('清空章节选择后仍可重试失败任务，新一轮下载回到缓存总览', (tester) async {
+  testWidgets('剧情菜单只缓存对应剧情，失败后可重试', (tester) async {
     final repo = await _mount(
       tester,
       repository: _Repository()..failCache = true,
     );
     await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('选择'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.bySemanticsLabel('全选本章').first);
+    expect(find.text('选择'), findsNothing);
+    expect(find.byType(Checkbox), findsNothing);
+    await tester.tap(find.byTooltip('${_main.title}的更多操作'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('缓存'));
+    await tester.pumpAndSettle();
+    expect(repo.entryCalls, 1);
+    expect(find.byTooltip('重试失败任务'), findsOneWidget);
+    repo.failCache = false;
+    await tester.tap(find.byTooltip('重试失败任务'));
     await tester.pumpAndSettle();
     expect(repo.entryCalls, 2);
-    expect(find.byTooltip('重试失败任务'), findsNWidgets(2));
-
     await tester.tap(find.text('剧情馆').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('返回剧情馆'));
+    expect(find.text('已缓存'), findsOneWidget);
+    await tester.tap(find.byTooltip('${_main.title}的更多操作'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('chapter-孤星')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('离线与缓存').last);
-    await tester.pumpAndSettle();
-    repo.failCache = false;
-    await tester.tap(find.byTooltip('重试失败任务').first);
-    await tester.pumpAndSettle();
-    expect(repo.entryCalls, 4);
-    expect(find.byTooltip('重试失败任务'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('offline-慈悲灯塔')));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('剧情馆').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('选择'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.bySemanticsLabel('全选本章').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('缓存'));
-    await tester.pumpAndSettle();
-    expect(repo.entryCalls, 5);
-    expect(find.byTooltip('返回离线与缓存'), findsNothing);
-    expect(find.byKey(const ValueKey('offline-慈悲灯塔')), findsOneWidget);
-    expect(find.byKey(const ValueKey('offline-孤星')), findsOneWidget);
+    expect(
+      tester
+          .widget<PopupMenuItem<String>>(
+            find.widgetWithText(PopupMenuItem<String>, '已缓存'),
+          )
+          .enabled,
+      isFalse,
+    );
     expect(tester.takeException(), isNull);
   });
 

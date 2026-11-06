@@ -111,11 +111,8 @@ Future<void> startQueue(WidgetTester tester, QueueRepository repository) async {
   await tester.pump();
   await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('选择'));
+  await tester.tap(find.byTooltip('${repository.entries.first.title}的更多操作'));
   await tester.pumpAndSettle();
-  await tester.ensureVisible(find.text('全选本章'));
-  await tester.tap(find.text('全选本章'));
-  await tester.pump();
   await tester.tap(find.text('缓存'));
   await tester.pump();
 }
@@ -216,71 +213,30 @@ void main() {
     expect(deleted, [first, second]);
   });
 
-  testWidgets('剧情队列按设置启动，完成后更新剧情馆并阻止重复选择', (tester) async {
+  testWidgets('单项缓存完成后显示已缓存并阻止重复缓存', (tester) async {
     final store = DesktopStore()..concurrency = 2;
     addTearDown(store.close);
     final repository = QueueRepository(store);
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildAppTheme(),
-        home: StoryLauncher(repository: repository),
-      ),
-    );
-    await tester.pumpAndSettle();
-    tester
-        .widget<CachePage>(find.byType(CachePage, skipOffstage: false))
-        .onBrowse();
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('选择'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('全选本章'));
-    await tester.tap(find.text('全选本章'));
-    await tester.pump();
-    await tester.tap(find.text('缓存'));
-    await tester.pump();
-    expect(repository.started, hasLength(2));
-    expect(
-      tester
-          .widget<CachePage>(find.byType(CachePage))
-          .jobs
-          .values
-          .where((job) => job.status == CacheJobStatus.waiting),
-      hasLength(4),
-    );
-    final queued = tester.widget<CachePage>(find.byType(CachePage));
-    final paused = queued.jobs[repository.entries[2].path]!;
-    queued.onToggleJob(paused);
-    repository.releases.values.first.complete();
-    await tester.pump();
-    expect(repository.started, hasLength(3));
-    expect(repository.started.last, repository.entries[3].path);
-    queued.onToggleJob(paused);
-    while (repository.started.length < 6 ||
-        repository.releases.values.any((release) => !release.isCompleted)) {
-      for (final release in repository.releases.values.toList()) {
-        if (!release.isCompleted) release.complete();
-      }
-      await tester.pump();
-    }
-    await tester.pumpAndSettle();
+    await startQueue(tester, repository);
+    expect(repository.started, [repository.entries.first.path]);
+    await finishQueue(tester, repository);
     final cache = tester.widget<CachePage>(find.byType(CachePage));
-    expect(
-      cache.jobs.values.every((job) => job.status == CacheJobStatus.completed),
-      isTrue,
-    );
-    expect(cache.cached, hasLength(6));
+    expect(cache.cached, hasLength(1));
     cache.onBrowse();
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
     await tester.pumpAndSettle();
-    expect(find.text('已缓存'), findsWidgets);
-    expect(find.byType(Checkbox), findsNothing);
-    final select = tester.widget<TextButton>(
-      find.widgetWithText(TextButton, '选择'),
+    expect(find.text('已缓存'), findsOneWidget);
+    await tester.tap(find.byTooltip('${repository.entries.first.title}的更多操作'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<PopupMenuItem<String>>(
+            find.widgetWithText(PopupMenuItem<String>, '已缓存'),
+          )
+          .enabled,
+      isFalse,
     );
-    expect(select.onPressed, isNull);
   });
 
   testWidgets('移动网络开始缓存先确认，拒绝不创建失败任务', (tester) async {
@@ -300,11 +256,8 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('选择'));
+    await tester.tap(find.byTooltip('${repository.entries.first.title}的更多操作'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('全选本章'));
-    await tester.tap(find.text('全选本章'));
-    await tester.pump();
     await tester.tap(find.text('缓存'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
@@ -323,36 +276,20 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('运行中降低并发暂停超额任务，调高不恢复手动暂停', (tester) async {
+  testWidgets('单项下载任务可以暂停并取消', (tester) async {
     final store = DesktopStore()..concurrency = 3;
     addTearDown(store.close);
     final repository = QueueRepository(store);
     await startQueue(tester, repository);
-    var cache = tester.widget<CachePage>(find.byType(CachePage));
-    expect(repository.started, hasLength(3));
-    final settings = tester.widget<SettingsPage>(
-      find.byType(SettingsPage, skipOffstage: false),
-    );
-    settings.onConcurrencyChanged(2);
+    final cache = tester.widget<CachePage>(find.byType(CachePage));
+    final job = cache.jobs[repository.entries.first.path]!;
+    cache.onToggleJob(job);
     await tester.pump();
-    expect(cache.jobs['test/2']!.control.blocked, isTrue);
-    expect(cache.jobs['test/2']!.control.paused, isFalse);
-    expect(cache.jobs['test/2']!.status, CacheJobStatus.waiting);
-    cache.onToggleJob(cache.jobs['test/0']!);
-    await tester.pump();
-    expect(cache.jobs['test/0']!.control.paused, isTrue);
-    expect(cache.jobs['test/2']!.control.blocked, isFalse);
-    settings.onConcurrencyChanged(3);
-    await tester.pump();
-    expect(cache.jobs['test/0']!.control.blocked, isTrue);
-    expect(repository.started, hasLength(4));
-    cache.onRemoveJob(cache.jobs['test/0']!);
+    expect(job.control.paused, isTrue);
+    cache.onRemoveJob(job);
     await tester.pump();
     await finishQueue(tester, repository);
-    cache = tester.widget<CachePage>(find.byType(CachePage));
-    expect(cache.caching, isFalse);
-    expect(repository.offline, isNot(contains('test/0')));
-    expect(cache.cached, hasLength(5));
+    expect(repository.offline, isEmpty);
   });
 
   testWidgets('Wi-Fi 转移动网络暂停全部任务，只弹一次，确认后继续', (tester) async {
@@ -363,7 +300,7 @@ void main() {
     final repository = QueueRepository(store);
     await startQueue(tester, repository);
     final cache = tester.widget<CachePage>(find.byType(CachePage));
-    expect(repository.started, hasLength(2));
+    expect(repository.started, hasLength(1));
     store.changes.add([ConnectivityResult.mobile]);
     store.changes.add([ConnectivityResult.mobile]);
     await tester.pumpAndSettle();
@@ -373,13 +310,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       cache.jobs.values.where((job) => !job.control.blocked),
-      hasLength(2),
+      hasLength(1),
     );
     store.changes.add([ConnectivityResult.mobile]);
     await tester.pump();
     expect(find.text('使用移动数据缓存？'), findsNothing);
     await finishQueue(tester, repository);
-    expect(repository.offline, hasLength(6));
+    expect(repository.offline, hasLength(1));
   });
 
   testWidgets('移动网络确认继续后启动并完成任务', (tester) async {
@@ -391,9 +328,9 @@ void main() {
     expect(repository.started, isEmpty);
     await tester.tap(find.text('继续缓存'));
     await tester.pumpAndSettle();
-    expect(repository.started, hasLength(4));
+    expect(repository.started, hasLength(1));
     await finishQueue(tester, repository);
-    expect(repository.offline, hasLength(6));
+    expect(repository.offline, hasLength(1));
   });
 
   testWidgets('下载中仍可批量删除已离线剧情', (tester) async {

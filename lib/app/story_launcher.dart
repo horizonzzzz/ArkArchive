@@ -31,10 +31,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
       widget.repository ?? StoryRepository(_ownedAssets!);
   final _search = TextEditingController();
   final _categoryPageController = PageController();
-  final _selected = <String>{};
   List<StoryGroup>? _groups;
   StoryGroup? _activeGroup;
-  bool _selecting = false;
   String? _indexError;
   String? _playError;
   StoryEntry? _opening;
@@ -262,25 +260,18 @@ class _StoryLauncherState extends State<StoryLauncher> {
   }
 
   Future<void> _retryFailedCacheJobs() async {
-    if (_caching || _busy || _deletingCache || _movingDirectory) return;
-    setState(() {
-      _selected
-        ..clear()
-        ..addAll(
-          _cacheJobs.values
-              .where((job) => job.status == CacheJobStatus.failed)
-              .map((job) => job.entry.path),
-        );
-    });
-    await _cacheSelected();
+    final failed = _cacheJobs.values.where(
+      (job) => job.status == CacheJobStatus.failed,
+    );
+    if (failed.isNotEmpty) await _cacheEntry(failed.first.entry);
   }
 
-  Future<void> _cacheSelected() async {
+  Future<void> _cacheEntry(StoryEntry entry) async {
     if (_busy ||
         _caching ||
         _deletingCache ||
         _movingDirectory ||
-        _selectedEntries.isEmpty) {
+        _cached.contains(entry.path)) {
       return;
     }
     setState(() {
@@ -302,10 +293,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
             );
       }
       if (!await _checkCacheNetwork() || _networkStopped || !mounted) return;
-      jobs.addAll(
-        {for (final entry in _selectedEntries) entry.path: CacheJob(entry)}
-            .values,
-      );
+      jobs.add(CacheJob(entry));
       setState(() {
         _cacheJobs
           ..clear()
@@ -315,7 +303,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
         _cacheBatchId++;
         _cacheMessage = null;
         _page = 1;
-        _selecting = false;
         _syncCacheJobs();
       });
       Future<void> worker(CacheJob job) async {
@@ -337,7 +324,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
           if (errors.isEmpty) {
             job.status = CacheJobStatus.completed;
             _cached.add(job.entry.path);
-            _selected.remove(job.entry.path);
           } else {
             job.status = CacheJobStatus.failed;
             job.error = errors.join('；');
@@ -408,7 +394,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
       job.control.cancel();
       job.status = CacheJobStatus.cancelled;
       _cacheJobs.remove(job.entry.path);
-      _selected.remove(job.entry.path);
       _syncCacheJobs();
     });
   }
@@ -683,31 +668,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
           )
           .toList();
 
-  List<StoryEntry> get _selectedEntries => [
-    for (final group in _groups ?? const <StoryGroup>[])
-      ...group.entries.where(
-        (entry) =>
-            _selected.contains(entry.path) && !_cached.contains(entry.path),
-      ),
-  ];
-
-  void _toggle(StoryEntry entry, bool selected) => setState(() {
-    if (selected && !_cached.contains(entry.path)) {
-      _selected.add(entry.path);
-    } else {
-      _selected.remove(entry.path);
-    }
-  });
-
-  void _selectAll(List<StoryEntry> entries) => setState(() {
-    final available = entries.where((entry) => !_cached.contains(entry.path));
-    if (available.every((entry) => _selected.contains(entry.path))) {
-      _selected.removeAll(available.map((entry) => entry.path));
-    } else {
-      _selected.addAll(available.map((entry) => entry.path));
-    }
-  });
-
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
@@ -737,11 +697,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
         canPop: !_busy && !(_page == 0 && _activeGroup != null),
         onPopInvokedWithResult: (didPop, result) {
           if (!didPop && !_busy && _page == 0 && _activeGroup != null) {
-            if (_selecting) {
-              _exitSelection();
-            } else {
-              _leaveActivity();
-            }
+            _leaveActivity();
           }
         },
         child: Scaffold(
@@ -980,16 +936,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
     ),
   );
 
-  void _exitSelection() => setState(() {
-    _selecting = false;
-    _selected.clear();
-  });
-  void _leaveActivity() => setState(() {
-    _activeGroup = null;
-    _selected.clear();
-    _selecting = false;
-  });
-
+  void _leaveActivity() => setState(() => _activeGroup = null);
   Widget _library(bool desktop) {
     final active = _activeGroup;
     final catalog = Column(
@@ -1245,11 +1192,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
             style: const TextStyle(fontSize: 12, color: AppColors.subtext),
           ),
           trailing: const Icon(Icons.chevron_right),
-          onTap: () => setState(() {
-            _selected.clear();
-            _activeGroup = group;
-            _selecting = false;
-          }),
+          onTap: () => setState(() => _activeGroup = group),
         ),
       ),
     ),
@@ -1267,38 +1210,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
             onPressed: _leaveActivity,
             icon: const Icon(Icons.arrow_back, size: 22),
           ),
-          trailing: TextButton(
-            onPressed: _selecting
-                ? _exitSelection
-                : entries.any((entry) => !_cached.contains(entry.path))
-                ? () => setState(() => _selecting = true)
-                : null,
-            child: Text(_selecting ? '取消' : '选择'),
-          ),
-          bottom: _selecting
-              ? Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _selectAllControl(entries),
-                    Text(
-                      '已选 ${_selected.length} 幕',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.subtext,
-                      ),
-                    ),
-                    FilledButton.icon(
-                      onPressed: _selected.isEmpty || _caching
-                          ? null
-                          : _cacheSelected,
-                      icon: const Icon(Icons.download_outlined, size: 18),
-                      label: const Text('缓存'),
-                    ),
-                  ],
-                )
-              : null,
         ),
         Expanded(
           child: CustomScrollView(
@@ -1344,62 +1255,15 @@ class _StoryLauncherState extends State<StoryLauncher> {
     );
   }
 
-  Widget _selectAllControl(List<StoryEntry> entries) {
-    entries = entries.where((entry) => !_cached.contains(entry.path)).toList();
-    final count = entries
-        .where((entry) => _selected.contains(entry.path))
-        .length;
-    return MergeSemantics(
-      child: InkWell(
-        onTap: entries.isEmpty ? null : () => _selectAll(entries),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Checkbox(
-              value: count == 0
-                  ? false
-                  : count == entries.length
-                  ? true
-                  : null,
-              tristate: true,
-              onChanged: entries.isEmpty ? null : (_) => _selectAll(entries),
-            ),
-            const Text(
-              '全选本章',
-              style: TextStyle(fontSize: 12, color: AppColors.secondary),
-            ),
-            const SizedBox(width: 8),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _stageRow(StoryEntry entry) => Material(
     key: ValueKey(entry.path),
-    color: _selecting && _selected.contains(entry.path)
-        ? AppColors.surface
-        : Colors.transparent,
+    color: Colors.transparent,
     child: InkWell(
-      onTap: _selecting
-          ? _cached.contains(entry.path)
-                ? null
-                : () => _toggle(entry, !_selected.contains(entry.path))
-          : () => _open(entry),
+      onTap: () => _open(entry),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
         child: Row(
           children: [
-            if (_selecting) ...[
-              Checkbox(
-                value: _selected.contains(entry.path),
-                semanticLabel: '选择 ${entry.title}',
-                onChanged: _cached.contains(entry.path)
-                    ? null
-                    : (value) => _toggle(entry, value ?? false),
-              ),
-              const SizedBox(width: 8),
-            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1439,21 +1303,35 @@ class _StoryLauncherState extends State<StoryLauncher> {
                 ],
               ),
             ),
-            if (!_selecting) ...[
-              const SizedBox(width: 8),
-              if (_repository.store.getPlaybackProgress(entry.path) != null)
-                TextButton.icon(
-                  key: ValueKey('continue-${entry.path}'),
-                  onPressed: _busy ? null : () => _open(entry, resume: true),
-                  icon: const Icon(Icons.history, size: 18),
-                  label: const Text('继续观看'),
-                ),
-              IconButton(
-                tooltip: '播放 ${entry.title}',
-                onPressed: () => _open(entry),
-                icon: const Icon(Icons.play_arrow, size: 22),
+            const SizedBox(width: 8),
+            if (_repository.store.getPlaybackProgress(entry.path) != null)
+              TextButton.icon(
+                key: ValueKey('continue-${entry.path}'),
+                onPressed: _busy ? null : () => _open(entry, resume: true),
+                icon: const Icon(Icons.history, size: 18),
+                label: const Text('继续观看'),
               ),
-            ],
+            IconButton(
+              tooltip: '播放 ${entry.title}',
+              onPressed: () => _open(entry),
+              icon: const Icon(Icons.play_arrow, size: 22),
+            ),
+            PopupMenuButton<String>(
+              tooltip: '${entry.title}的更多操作',
+              onSelected: (_) => _cacheEntry(entry),
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'cache',
+                  enabled:
+                      !_cached.contains(entry.path) &&
+                      !_caching &&
+                      !_busy &&
+                      !_deletingCache &&
+                      !_movingDirectory,
+                  child: Text(_cached.contains(entry.path) ? '已缓存' : '缓存'),
+                ),
+              ],
+            ),
           ],
         ),
       ),
