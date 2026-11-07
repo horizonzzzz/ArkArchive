@@ -20,6 +20,66 @@ void main() {
     expect(engine.currentSpeed.autoWaitBase, 1);
   });
 
+  testWidgets('通讯窗口波形绑定当前发言角色并随暂停冻结', (tester) async {
+    final initial = tester.binding.clock.now();
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[interlude(maskid="group_interclude_square_common", channel=3, char="伯塔尼")]
+[interlude(channel=3, type=3, name="portrait")]
+[name="伯塔尼"]报告正在推进
+[name="其他角色"]收到
+'''),
+      elapsed: () => tester.binding.clock.now().difference(initial),
+    );
+    try {
+      await engine.start();
+      final frame = engine.state.interludes['3']!;
+      expect(frame.voiceActive, isTrue);
+      await tester.pump(const Duration(milliseconds: 64));
+      expect(frame.voicePhase, greaterThan(0));
+      await engine.setPaused(true);
+      final pausedPhase = frame.voicePhase;
+      await tester.pump(const Duration(milliseconds: 64));
+      expect(frame.voicePhase, pausedPhase);
+      await engine.setPaused(false);
+      await engine.advance();
+      await engine.advance();
+      expect(engine.state.speaker, '其他角色');
+      expect(frame.voiceActive, isFalse);
+    } finally {
+      engine.dispose();
+    }
+  });
+
+  testWidgets('通讯窗口在角色切换时保持可见直到显式关闭', (tester) async {
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[interlude(maskid="group_interclude_square_common", channel=4, char="Raidian")]
+[interlude(channel=4, type=3, name="portrait")]
+[name="Raidian"]保持通讯
+[interlude(channel=4, switch=false)]
+[name="阿洛伊泽"]我还在通话
+[interlude(channel=4, clear=true, tsduration=0)]
+[name="阿洛伊泽"]通讯已关闭
+'''),
+    );
+    try {
+      await engine.start();
+      final frame = engine.state.interludes['4']!;
+      await engine.advance();
+      await engine.advance();
+      expect(engine.state.speaker, '阿洛伊泽');
+      expect(frame.visible, isTrue);
+      expect(engine.state.interludes['4'], same(frame));
+      await engine.advance();
+      await engine.advance();
+      await tester.pump();
+      expect(engine.state.speaker, '阿洛伊泽');
+      expect(engine.state.interludes, isNot(contains('4')));
+    } finally {
+      engine.dispose();
+    }
+  });
   testWidgets('自动播放在逐字完成后等待配置时长', (tester) async {
     final initial = tester.binding.clock.now();
     final engine = StoryEngine(

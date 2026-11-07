@@ -441,11 +441,19 @@ void main() {
       StoryScript.parse(
         r'[charslot(slot="m",name="actor#2$1")]'
         '\n'
+        r'[interlude(maskid="group_interclude_square_common",channel=3)]'
+        '\n'
+        r'[interlude(channel=3,type=3,name="avg_4223_botany_1#1$1")]'
+        '\n'
         r'[Blocker(style="slider",fadetime=0.5)]',
       ),
       warnings,
     );
-    expect(dependencies, hasLength(2));
+    expect(dependencies, hasLength(3));
+    expect(
+      catalog.image(r'avg_4223_botany_1#1$1', kind: 'cutin').toString(),
+      r'https://media.prts.wiki/7/7d/Avg_avg_4223_botany_1-1$1.png',
+    );
     expect(
       dependencies.any((u) => u.path.endsWith('.png') && u.host.isNotEmpty),
       isTrue,

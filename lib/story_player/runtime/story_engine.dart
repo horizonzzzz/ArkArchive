@@ -466,7 +466,8 @@ class StoryEngine extends ChangeNotifier {
     final clockUs =
         (elapsed?.call().inMicroseconds ?? _clock.elapsedMicroseconds) + .0;
     // 所有演出共用逻辑时钟，使运行中的动画和等待也能即时切换倍率。
-    _playbackUs += (clockUs - _lastClockUs) * (_fastForwarding > 0 ? _fastForwarding : 1);
+    _playbackUs +=
+        (clockUs - _lastClockUs) * (_fastForwarding > 0 ? _fastForwarding : 1);
     _lastClockUs = clockUs;
     return _playbackUs;
   }
@@ -591,6 +592,11 @@ class StoryEngine extends ChangeNotifier {
     _lastTick = now;
     if (paused || _disposed || _rebuilding) return;
     var changed = false;
+    for (final frame in state.interludes.values) {
+      if (!frame.voiceActive || !frame.visible) continue;
+      frame.voicePhase = (frame.voicePhase + dt / 1000) % (math.pi * 2);
+      changed = true;
+    }
     for (final entry in _animations.entries.toList()) {
       final a = entry.value;
       a.elapsed += dt;
@@ -942,6 +948,9 @@ class StoryEngine extends ChangeNotifier {
     }
     if (c.tag == 'dialogue' || c.tag == 'dialog' || c.tag == 'aside') {
       if (c.text.isEmpty) {
+        for (final frame in state.interludes.values) {
+          frame.voiceActive = false;
+        }
         state.dialogueVisible = false;
         return false;
       }
@@ -1099,6 +1108,12 @@ class StoryEngine extends ChangeNotifier {
     _overlayLogSource = null;
     state.speaker = translate(speaker);
     state.text = translate(text).replaceAll(r'\n', '\n');
+    for (final frame in state.interludes.values) {
+      frame.voiceActive =
+          frame.visible &&
+          frame.charName.isNotEmpty &&
+          frame.charName == state.speaker;
+    }
     final total = totalCharacters;
     state.revealed = startIndex.clamp(0, total);
     _typingTime = currentSpeed.typingMs <= 0
@@ -3183,6 +3198,7 @@ class StoryEngine extends ChangeNotifier {
       final epoch = _epoch;
       final futures = <Future<void>>[];
       for (final frame in targets) {
+        frame.voiceActive = false;
         final session = ++frame.hideEpoch;
         final isDialog =
             frame.maskId == 'interlude_dialog_left' ||
@@ -3256,7 +3272,7 @@ class StoryEngine extends ChangeNotifier {
     frame.type = c.number('type').toInt();
     frame.style = c.value('style');
     frame.slot = c.value('slot');
-    frame.charName = c.value('char');
+    if (c.args.containsKey('char')) frame.charName = c.value('char');
     if (c.args.containsKey('size')) {
       final size = _point(c.value('size'));
       frame.size = size;
@@ -3267,7 +3283,14 @@ class StoryEngine extends ChangeNotifier {
       frame.name = name;
       if (frame.type == 3) frame.avatar = name;
     }
-    if (c.args.containsKey('switch')) frame.visible = c.flag('switch');
+    // 通话浮层由 clear 关闭；脚本中的 switch=false 只表示发言权切换。
+    if (c.args.containsKey('switch')) {
+      final keepTerminalOpen =
+          frame.maskId == 'group_interclude_square_common' &&
+          frame.charName.isNotEmpty &&
+          !c.flag('switch');
+      if (!keepTerminalOpen) frame.visible = c.flag('switch');
+    }
     if (c.args.containsKey('icharpos')) {
       frame.dialogCharOffset = _point(c.value('icharpos'));
     }
