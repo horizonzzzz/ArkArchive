@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:html/parser.dart' as html;
+import 'package:http/http.dart' as http;
 
 import '../script.dart';
 import 'asset_store.dart';
@@ -73,6 +74,19 @@ class StoryRepository {
   static final storyBase = Uri.parse(
     'https://torappu.prts.wiki/gamedata/latest/story/',
   );
+
+  /// PRTS 静态站漏同步过整个活动的剧情脚本（act13mini「好久不见」、
+  /// act24side「落叶逐火」全部条目 404，上游解包仓库文件存在）；主源
+  /// 取不到脚本时按序回退到同一解包仓库的 CDN 与 GitHub 直连镜像，
+  /// 文件与主源同源。仅覆盖 story 脚本，索引表与素材镜像没有缺失。
+  static final _storyMirrorBases = <Uri>[
+    Uri.parse(
+      'https://cdn.jsdelivr.net/gh/yuanyan3060/ArknightsGameResource@main/gamedata/story/',
+    ),
+    Uri.parse(
+      'https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/gamedata/story/',
+    ),
+  ];
   static final gameplayIndexUri = _wikiApiUri('剧情一览');
   static Uri _wikiApiUri(String page) => Uri.https('prts.wiki', '/api.php', {
     'action': 'parse',
@@ -166,7 +180,7 @@ class StoryRepository {
     try {
       await control?.checkpoint();
       await _changeCachedStories((entries) => entries.remove(entry.path));
-      final document = await loadEntry(entry);
+      final (scriptUri, document) = await _loadEntryDocument(entry);
       if (!document.script.commands.any(
         (c) => c.tag == 'dialogue' || c.text.isNotEmpty,
       )) {
@@ -178,7 +192,7 @@ class StoryRepository {
       // 目录索引与解析表格是全局资源，只保存在共享层；
       // 剧情脚本与媒体素材进入该剧情的独立目录。
       final shared = {indexUri, ...MediaCatalog.tableUris};
-      final owned = {_entryUri(entry), ...assets};
+      final owned = {scriptUri, ...assets};
       final errors = [...warnings];
       errors.addAll(
         await store.preload(
@@ -252,8 +266,41 @@ class StoryRepository {
     return storyBase.resolve('${entry.path}.txt');
   }
 
-  Future<StoryDocument> loadEntry(StoryEntry entry) =>
-      load(_entryUri(entry), title: entry.title);
+  /// PRTS 页面条目没有镜像可回退；story 静态脚本主源缺失时按序回退
+  /// 到同一解包仓库的 CDN 与直连镜像。
+  List<Uri> _entryUriCandidates(StoryEntry entry) {
+    final primary = _entryUri(entry);
+    if (primary.host != storyBase.host ||
+        !primary.path.startsWith(storyBase.path)) {
+      return [primary];
+    }
+    return [
+      primary,
+      for (final base in _storyMirrorBases) base.resolve('${entry.path}.txt'),
+    ];
+  }
+
+  Future<StoryDocument> loadEntry(StoryEntry entry) async {
+    final (_, document) = await _loadEntryDocument(entry);
+    return document;
+  }
+
+  /// 按候选顺序加载脚本，返回命中的地址供离线缓存把脚本与素材归入
+  /// 同一剧情目录；全部源失败时抛出主源异常，保持原有报错语义。
+  /// 解析错误与超时不切换源：它们不是“源上没有这个文件”。
+  Future<(Uri, StoryDocument)> _loadEntryDocument(StoryEntry entry) async {
+    final candidates = _entryUriCandidates(entry);
+    Object? failure;
+    for (final uri in candidates) {
+      try {
+        return (uri, await load(uri, title: entry.title));
+      } on http.ClientException catch (error) {
+        if (error is http.RequestAbortedException) rethrow;
+        failure ??= error;
+      }
+    }
+    throw failure!;
+  }
 
   List<StoryGroup> _parseGameplayIndex(String source) {
     final document = html.parse(source);

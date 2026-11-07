@@ -690,6 +690,102 @@ void main() {
     expect(document.title, '序章');
     expect(document.script.commands.single.text, '对白');
   });
+  test('主源 404 的剧情脚本按序回退到解包仓库镜像加载', () async {
+    final requests = <Uri>[];
+    final store = AssetStore(
+      cache: MemoryCache(),
+      client: MockClient((request) async {
+        requests.add(request.url);
+        if (request.url.host == 'torappu.prts.wiki') {
+          return http.Response('missing', 404);
+        }
+        expect(request.url.host, 'cdn.jsdelivr.net');
+        return http.Response.bytes(utf8.encode('[name="甲"]对白'), 200);
+      }),
+    );
+    addTearDown(store.close);
+    final repository = StoryRepository(store);
+    final document = await repository.loadEntry(
+      const StoryEntry('向左向右', 'activities/act13mini/level_act13mini_st01'),
+    );
+    expect(document.script.commands.single.text, '对白');
+    expect(requests, [
+      Uri.parse(
+        'https://torappu.prts.wiki/gamedata/latest/story/'
+        'activities/act13mini/level_act13mini_st01.txt',
+      ),
+      Uri.parse(
+        'https://cdn.jsdelivr.net/gh/yuanyan3060/ArknightsGameResource@main/'
+        'gamedata/story/activities/act13mini/level_act13mini_st01.txt',
+      ),
+    ]);
+  });
+  test('所有源都缺脚本时保持主源报错并请求全部候选', () async {
+    final requests = <Uri>[];
+    final store = AssetStore(
+      cache: MemoryCache(),
+      client: MockClient((request) async {
+        requests.add(request.url);
+        return http.Response('missing', 404);
+      }),
+    );
+    addTearDown(store.close);
+    final repository = StoryRepository(store);
+    await expectLater(
+      repository.loadEntry(const StoryEntry('缺失', 'test/missing')),
+      throwsA(
+        isA<http.ClientException>().having(
+          (error) => error.uri,
+          'uri',
+          Uri.parse(
+            'https://torappu.prts.wiki/gamedata/latest/story/test/missing.txt',
+          ),
+        ),
+      ),
+    );
+    expect(requests, hasLength(3));
+    expect(requests.first.host, 'torappu.prts.wiki');
+    expect(requests.last.host, 'raw.githubusercontent.com');
+  });
+  test('主源 404 的剧情缓存镜像脚本并支持离线回看', () async {
+    final cache = MemoryCache();
+    const entry = StoryEntry('测试', 'test/mirror');
+    final online = AssetStore(
+      cache: cache,
+      client: MockClient((request) async {
+        if (request.url.host == 'torappu.prts.wiki') {
+          return request.url.path.endsWith('.txt')
+              ? http.Response('missing', 404)
+              : http.Response('{}', 200);
+        }
+        return http.Response.bytes(utf8.encode('[name="甲"]对白'), 200);
+      }),
+    );
+    addTearDown(online.close);
+    final repository = StoryRepository(online);
+    expect(await repository.cacheEntry(entry), isEmpty);
+    expect(await repository.cachedStories(), contains(entry.path));
+    expect(
+      cache
+          .stories[entry.path]!
+          .keys
+          .where((uri) => uri.path.endsWith('.txt')),
+      [
+        Uri.parse(
+          'https://cdn.jsdelivr.net/gh/yuanyan3060/ArknightsGameResource@main/'
+          'gamedata/story/test/mirror.txt',
+        ),
+      ],
+    );
+    final offline = AssetStore(
+      cache: cache,
+      client: MockClient((_) async => throw http.ClientException('离线')),
+    );
+    addTearDown(offline.close);
+    offline.playbackScope = entry.path;
+    final document = await StoryRepository(offline).loadEntry(entry);
+    expect(document.script.commands.single.text, '对白');
+  });
   test('删除单幕整目录回收，其他剧情缓存各留各份不受影响', () async {
     final cache = MemoryCache();
     final store = AssetStore(
