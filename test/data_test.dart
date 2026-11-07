@@ -974,6 +974,60 @@ void main() {
     },
   );
 
+  test('玩法条目页面名先解码再请求 API，避免双重编码', () async {
+    String? requestedPage;
+    final store = AssetStore(
+      cache: MemoryCache(),
+      client: MockClient((r) async {
+        if (r.url.path == '/api.php') {
+          requestedPage = r.url.queryParameters['page'];
+          if (requestedPage == '危机合约/剧情' ||
+              requestedPage == 'RO-BEG/NBT') {
+            return http.Response(
+              jsonEncode({
+                'parse': {
+                  'title': requestedPage,
+                  'text': {'*': '<pre id="datas_txt">[name="甲"]对白</pre>'},
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          }
+          // MediaWiki 对非法标题（如双重编码产生的字面量“%E5%8D%B1…”）
+          // 的真实响应是 HTTP 200 + error JSON，而不是非 2xx 状态码。
+          return http.Response(
+            jsonEncode({
+              'error': {'code': 'invalidtitle', 'info': 'Bad title'},
+            }),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+        fail('不应请求其他地址：${r.url}');
+      }),
+    );
+    addTearDown(store.close);
+    final repository = StoryRepository(store);
+    // entry.path 是 _parseGameplayIndex 从 href 解析出的百分号编码形式。
+    final document = await repository.loadEntry(
+      StoryEntry(
+        '危机合约',
+        'https://prts.wiki/w/%E5%8D%B1%E6%9C%BA%E5%90%88%E7%BA%A6/%E5%89%A7%E6%83%85',
+        name: '危机合约',
+      ),
+    );
+    expect(requestedPage, '危机合约/剧情');
+    expect(document.title, '危机合约');
+    expect(document.script.commands.single.text, '对白');
+    // ASCII 页面名解码后保持原样，既有缓存地址不变。
+    requestedPage = null;
+    await repository.loadEntry(
+      const StoryEntry('序章', 'https://prts.wiki/w/RO-BEG/NBT', name: '序章'),
+    );
+    expect(requestedPage, 'RO-BEG/NBT');
+  });
+
   test('字体与滑动遮罩随应用打包，运行时不下载', () async {
     final font = await rootBundle.load(MediaCatalog.fontAsset);
     expect(font.lengthInBytes, greaterThan(1000000));

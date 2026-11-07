@@ -289,7 +289,10 @@ class StoryRepository {
         uri.scheme == 'https' &&
         uri.host == 'prts.wiki' &&
         uri.path.startsWith('/w/')) {
-      return _wikiApiUri(uri.path.substring(3));
+      // uri.path 保留百分号编码（如 %E5%8D%B1…），直接作为 query 参数
+      // 会被 _wikiApiUri 再次编码成 %25E5…，MediaWiki 把字面量
+      // “%E5%8D%B1…”当标题并返回 invalidtitle，因此先解码出明文页面名。
+      return _wikiApiUri(Uri.decodeComponent(uri.path.substring(3)));
     }
     return storyBase.resolve('${entry.path}.txt');
   }
