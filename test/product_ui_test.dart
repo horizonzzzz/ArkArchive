@@ -299,7 +299,9 @@ void main() {
   testWidgets('窄屏有进度的长标题行不换行撑高行高', (tester) async {
     const entry = StoryEntry('恶徒行于荒野的彼端测试', 'long/entry');
     final repo = _Repository(
-      groups: const [StoryGroup('长标题章', [entry], entryType: 'MAINLINE')],
+      groups: const [
+        StoryGroup('长标题章', [entry], entryType: 'MAINLINE'),
+      ],
     );
     await repo.store.setPlaybackProgress(
       PlaybackProgress(
@@ -362,7 +364,7 @@ void main() {
           matching: find.byType(Scrollable),
         );
         await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('chapter-测试篇章 19')),
+          find.byKey(const ValueKey('chapter-测试篇章 9')),
           300,
           scrollable: scrollable,
         );
@@ -376,14 +378,19 @@ void main() {
                   .maxScrollExtent,
             );
         await tester.pumpAndSettle();
-        final lastChapter = find.byKey(const ValueKey('chapter-测试篇章 19'));
+        final lastChapter = find.byKey(const ValueKey('chapter-测试篇章 9'));
         expect(
           tester.getRect(lastChapter).bottom,
           lessThanOrEqualTo(barRect.top),
         );
+        await Scrollable.ensureVisible(
+          tester.element(lastChapter),
+          alignment: .5,
+        );
+        await tester.pumpAndSettle();
         await tester.tap(lastChapter);
         await tester.pumpAndSettle();
-        final stages = find.byKey(const PageStorageKey('stages-测试篇章 19'));
+        final stages = find.byKey(const PageStorageKey('stages-测试篇章 9'));
         final stageInset = find.descendant(
           of: stages,
           matching: find.byType(SafeArea),
@@ -700,6 +707,83 @@ void main() {
       findsOneWidget,
     );
   });
+  testWidgets('剧情馆分页限制每页十个篇章并在搜索后重置', (tester) async {
+    final groups = List.generate(
+      21,
+      (index) => StoryGroup('篇章$index', [
+        StoryEntry('剧情$index', 'story/$index'),
+      ], entryType: 'MAINLINE'),
+    );
+    await _mount(tester, repository: _Repository(groups: groups));
+    expect(find.text('21 个篇章 · 21 幕'), findsOneWidget);
+    expect(find.byKey(const ValueKey('chapter-篇章10')), findsNothing);
+    await tester.scrollUntilVisible(
+      find.byTooltip('下一页'),
+      500,
+      scrollable: find.descendant(
+        of: find.byKey(const PageStorageKey('chapters-0')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.drag(
+      find.byKey(const PageStorageKey('chapters-0')),
+      const Offset(0, -300),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('1 / 3'), findsOneWidget);
+    await tester.tap(find.byTooltip('下一页'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('chapter-篇章10')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chapter-篇章0')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('chapter-篇章10')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('返回剧情馆'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('chapter-篇章10')), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byTooltip('下一页'),
+      500,
+      scrollable: find.descendant(
+        of: find.byKey(const PageStorageKey('chapters-0')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.drag(
+      find.byKey(const PageStorageKey('chapters-0')),
+      const Offset(0, -300),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('选择页码'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('第 3 页').last);
+    await tester.pumpAndSettle();
+    expect(find.text('3 / 3'), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.ancestor(
+              of: find.byTooltip('下一页'),
+              matching: find.byType(IconButton),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+    await tester.enterText(find.byKey(const Key('story-search')), '篇章1');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('chapter-篇章1')), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byTooltip('下一页'),
+      500,
+      scrollable: find.descendant(
+        of: find.byKey(const PageStorageKey('chapters-0')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(find.text('1 / 2'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('分类和搜索保留真实条目，未知分类不丢失', (tester) async {
     await _mount(tester, size: const Size(1440, 900));
     await tester.tap(find.byKey(const Key('category-2')));

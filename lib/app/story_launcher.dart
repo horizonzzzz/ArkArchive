@@ -43,6 +43,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
   StoryEntry? _opening;
   String _filter = '';
   int _category = 0;
+  static const _catalogPageSize = 10;
+  final Map<int, int> _catalogPages = {};
   int _page = 0;
   bool _busy = false;
   int _done = 0, _total = 0;
@@ -125,14 +127,13 @@ class _StoryLauncherState extends State<StoryLauncher> {
     try {
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!opened && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法打开链接，请检查浏览器设置。')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('无法打开链接，请检查浏览器设置。')));
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('无法打开链接：$error')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('无法打开链接：$error')));
       }
     }
   }
@@ -292,53 +293,52 @@ class _StoryLauncherState extends State<StoryLauncher> {
       _syncCacheJobs();
     });
     var dontAskAgain = false;
-    final confirmation = showDialog<(bool, bool)?>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          title: const Text('使用移动数据缓存？'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                '当前网络可能使用移动数据。剧情图片和音频可能消耗较多流量，是否继续本次缓存？',
+    final confirmation =
+        showDialog<(bool, bool)?>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => StatefulBuilder(
+            builder: (dialogContext, setDialogState) => AlertDialog(
+              title: const Text('使用移动数据缓存？'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('当前网络可能使用移动数据。剧情图片和音频可能消耗较多流量，是否继续本次缓存？'),
+                  CheckboxListTile(
+                    key: const ValueKey('mobile-data-dont-ask'),
+                    value: dontAskAgain,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text('不再提示'),
+                    onChanged: (value) =>
+                        setDialogState(() => dontAskAgain = value ?? false),
+                  ),
+                ],
               ),
-              CheckboxListTile(
-                key: const ValueKey('mobile-data-dont-ask'),
-                value: dontAskAgain,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: const Text('不再提示'),
-                onChanged: (value) =>
-                    setDialogState(() => dontAskAgain = value ?? false),
-              ),
-            ],
+              actions: [
+                TextButton(
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, (false, dontAskAgain)),
+                  child: const Text('停止缓存'),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      Navigator.pop(dialogContext, (true, dontAskAgain)),
+                  child: const Text('继续缓存'),
+                ),
+              ],
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () =>
-                  Navigator.pop(dialogContext, (false, dontAskAgain)),
-              child: const Text('停止缓存'),
-            ),
-            TextButton(
-              onPressed: () =>
-                  Navigator.pop(dialogContext, (true, dontAskAgain)),
-              child: const Text('继续缓存'),
-            ),
-          ],
-        ),
-      ),
-    ).then((result) {
-      // 只有批准继续时才按勾选持久化偏好；拒绝不持久化，下次仍会询问。
-      if (result?.$1 == true && result?.$2 == true) {
-        unawaited(
-          _repository.store.setMobileDataApproved(true).catchError((_) {}),
-        );
-      }
-      return result?.$1 == true;
-    });
+        ).then((result) {
+          // 只有批准继续时才按勾选持久化偏好；拒绝不持久化，下次仍会询问。
+          if (result?.$1 == true && result?.$2 == true) {
+            unawaited(
+              _repository.store.setMobileDataApproved(true).catchError((_) {}),
+            );
+          }
+          return result?.$1 == true;
+        });
     _networkConfirmation = confirmation;
     try {
       final allowed = await confirmation;
@@ -402,17 +402,16 @@ class _StoryLauncherState extends State<StoryLauncher> {
     if (!_repository.store.isMobile || _cacheNetworkSubscription != null) {
       return;
     }
-    _cacheNetworkSubscription = _repository.store.cacheConnectionChanges
-        .listen(
-          (connections) {
-            if (!_hasActiveJobs && _networkConfirmation == null) return;
-            unawaited(_checkCacheNetwork(connections));
-          },
-          onError: (Object _) {
-            if (!_hasActiveJobs && _networkConfirmation == null) return;
-            unawaited(_checkCacheNetwork([]));
-          },
-        );
+    _cacheNetworkSubscription = _repository.store.cacheConnectionChanges.listen(
+      (connections) {
+        if (!_hasActiveJobs && _networkConfirmation == null) return;
+        unawaited(_checkCacheNetwork(connections));
+      },
+      onError: (Object _) {
+        if (!_hasActiveJobs && _networkConfirmation == null) return;
+        unawaited(_checkCacheNetwork([]));
+      },
+    );
   }
 
   Future<void> _runJob(CacheJob job) async {
@@ -819,12 +818,11 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                           in _groups ?? <StoryGroup>[])
                                         for (final entry in group.entries)
                                           if (_cached.contains(entry.path) &&
-                                              _repository
-                                                  .store
-                                                  .getPlaybackProgress(
-                                                    entry.path,
-                                                  ) !=
-                                              null)
+                                              _repository.store
+                                                      .getPlaybackProgress(
+                                                        entry.path,
+                                                      ) !=
+                                                  null)
                                             entry.path,
                                     },
                                     done: _cachedDone,
@@ -1050,7 +1048,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
               TextField(
                 key: const Key('story-search'),
                 controller: _search,
-                onChanged: (value) => setState(() => _filter = value),
+                onChanged: (value) => setState(() {
+                  _filter = value;
+                  _catalogPages.clear();
+                }),
                 style: const TextStyle(fontSize: 14),
                 decoration: InputDecoration(
                   hintText: '搜索篇章、关卡或剧情标题',
@@ -1061,7 +1062,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
                           tooltip: '清除搜索',
                           onPressed: () {
                             _search.clear();
-                            setState(() => _filter = '');
+                            setState(() {
+                              _filter = '';
+                              _catalogPages.clear();
+                            });
                           },
                           icon: const Icon(Icons.close, size: 18),
                         ),
@@ -1131,30 +1135,102 @@ class _StoryLauncherState extends State<StoryLauncher> {
 
   Widget _catalogPage(int category) {
     final groups = _visibleGroups(category);
-    return CustomScrollView(
-      key: PageStorageKey('chapters-$category'),
-      slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            child: Text(
-              _groups == null
-                  ? '正在读取剧情索引'
-                  : '${groups.length} 个篇章 · ${groups.fold<int>(0, (sum, group) => sum + _entries(group).length)} 幕',
-              style: const TextStyle(color: AppColors.subtext, fontSize: 12),
+    final pageCount =
+        (groups.length + _catalogPageSize - 1) ~/ _catalogPageSize;
+    final page = (_catalogPages[category] ?? 0).clamp(
+      0,
+      pageCount == 0 ? 0 : pageCount - 1,
+    );
+    final start = page * _catalogPageSize;
+    final pageGroups = groups.skip(start).take(_catalogPageSize).toList();
+    return KeyedSubtree(
+      key: PageStorageKey('catalog-$category-$page-$_filter'),
+      child: CustomScrollView(
+        key: PageStorageKey('chapters-$category'),
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Text(
+                _groups == null
+                    ? '正在读取剧情索引'
+                    : '${groups.length} 个篇章 · ${groups.fold<int>(0, (sum, group) => sum + _entries(group).length)} 幕',
+                style: const TextStyle(color: AppColors.subtext, fontSize: 12),
+              ),
             ),
           ),
-        ),
-        _catalogBody(groups, category),
-        const SliverToBoxAdapter(
-          child: SafeArea(
-            top: false,
-            left: false,
-            right: false,
-            child: SizedBox.shrink(),
+          _catalogBody(pageGroups, category),
+          if (pageCount > 1)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      tooltip: '上一页',
+                      onPressed: page == 0
+                          ? null
+                          : () => setState(
+                              () => _catalogPages[category] = page - 1,
+                            ),
+                      icon: const Icon(Icons.chevron_left),
+                    ),
+                    PopupMenuButton<int>(
+                      tooltip: '选择页码',
+                      initialValue: page,
+                      onSelected: (value) =>
+                          setState(() => _catalogPages[category] = value),
+                      itemBuilder: (context) => [
+                        for (var index = 0; index < pageCount; index++)
+                          PopupMenuItem(
+                            value: index,
+                            child: Text('第 ${index + 1} 页'),
+                          ),
+                      ],
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 12,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${page + 1} / $pageCount',
+                              style: const TextStyle(color: AppColors.subtext),
+                            ),
+                            const Icon(
+                              Icons.arrow_drop_down,
+                              color: AppColors.subtext,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '下一页',
+                      onPressed: page + 1 == pageCount
+                          ? null
+                          : () => setState(
+                              () => _catalogPages[category] = page + 1,
+                            ),
+                      icon: const Icon(Icons.chevron_right),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          const SliverToBoxAdapter(
+            child: SafeArea(
+              top: false,
+              left: false,
+              right: false,
+              child: SizedBox.shrink(),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1240,7 +1316,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
         action: TextButton(
           onPressed: () {
             _search.clear();
-            setState(() => _filter = '');
+            setState(() {
+              _filter = '';
+              _catalogPages.clear();
+            });
             _selectCategory(0);
           },
           child: const Text('查看全部剧情'),
@@ -1427,10 +1506,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                           if (activeJob)
                             const ArchiveTag('缓存中', color: AppColors.green),
                           if (_cached.contains(entry.path))
-                            const ArchiveTag(
-                              '已缓存',
-                              color: AppColors.indicator,
-                            ),
+                            const ArchiveTag('已缓存', color: AppColors.indicator),
                         ],
                       ),
                       const SizedBox(height: 8),
