@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -13,7 +14,9 @@ import '../runtime/just_audio_output.dart';
 import '../runtime/story_audio.dart';
 import '../runtime/story_engine.dart';
 import '../runtime/playback_checkpoint.dart';
+import '../stage_state.dart';
 import 'story_stage.dart';
+import 'story_text.dart';
 
 /// 可直接由关卡选择页打开；生命周期和资源不依赖应用入口。
 class StoryPlayer extends StatefulWidget {
@@ -45,6 +48,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   ui.Image? slideMask;
   static const fontFamily = 'StoryNotoSans';
   bool ready = false;
+  bool _showingHistory = false;
   int _fastForwarding = 0;
   bool _resumeFailed = false, _progressErrorReported = false;
   int _savedRevision = 0;
@@ -236,49 +240,87 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     final wasPaused = engine.paused;
     await engine.setPaused(true);
     if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .8,
-          child: Column(
-            children: [
-              ListTile(
-                title: Text(diagnostics ? '资源与指令诊断' : '对话记录'),
-                trailing: IconButton(
-                  tooltip: '关闭',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
+    if (diagnostics) {
+      var copyStatus = '复制全部';
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * .8,
+            child: Column(
+              children: [
+                StatefulBuilder(
+                  builder: (context, setCopyState) => ListTile(
+                    title: const Text('资源与指令诊断'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: copyStatus,
+                          onPressed: engine.warnings.isEmpty
+                              ? null
+                              : () async {
+                                  try {
+                                    await Clipboard.setData(
+                                      ClipboardData(
+                                        text: engine.warnings.join('\n'),
+                                      ),
+                                    );
+                                    if (context.mounted) {
+                                      setCopyState(() => copyStatus = '已复制全部');
+                                    }
+                                  } catch (_) {
+                                    if (context.mounted) {
+                                      setCopyState(
+                                        () => copyStatus = '复制失败，请重试',
+                                      );
+                                    }
+                                  }
+                                },
+                          icon: Icon(
+                            copyStatus == '已复制全部' ? Icons.check : Icons.copy,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '关闭',
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: diagnostics
-                      ? [
-                          for (final message in engine.warnings)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: SelectableText(message),
-                            ),
-                        ]
-                      : [
-                          for (final line in engine.state.history)
-                            ListTile(
-                              title: Text(StoryEngine.plainText(line.text)),
-                              subtitle: line.speaker.isEmpty
-                                  ? null
-                                  : Text(line.speaker),
-                            ),
-                        ],
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      for (final message in engine.warnings)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: SelectableText(message),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } else {
+      setState(() => _showingHistory = true);
+      await showGeneralDialog<void>(
+        context: context,
+        barrierColor: const Color(0xc9000000),
+        transitionDuration: const Duration(milliseconds: 150),
+        pageBuilder: (context, _, _) => _DialogueHistory(
+          history: engine.state.history,
+          fontFamily: fontFamily,
+        ),
+      );
+      if (mounted) setState(() => _showingHistory = false);
+    }
     if (mounted && !wasPaused) await engine.setPaused(false);
   }
 
@@ -298,10 +340,9 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   void _fastForwardMove(Offset globalPosition) {
     final origin = _fastForwardOrigin;
     if (origin == null || _fastForwarding == 0) return;
-    final level =
-        ((globalPosition.dy - origin.dy) / _fastForwardSlideStep)
-            .clamp(0.0, 3.0)
-            .toInt();
+    final level = ((globalPosition.dy - origin.dy) / _fastForwardSlideStep)
+        .clamp(0.0, 3.0)
+        .toInt();
     _setFastForward(_fastForwardSpeeds[level]);
   }
 
@@ -343,6 +384,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                 slideMaskShader: slideMaskShader,
                 sprites: sprites,
                 fontFamily: fontFamily,
+                showDialogue: !_showingHistory,
                 onFastForwardStart: _fastForwardStart,
                 onFastForwardMove: _fastForwardMove,
                 onFastForwardEnd: _fastForwardEnd,
@@ -517,6 +559,112 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     super.dispose();
   }
+}
+
+class _DialogueHistory extends StatefulWidget {
+  const _DialogueHistory({required this.history, required this.fontFamily});
+
+  final List<DialogueLine> history;
+  final String fontFamily;
+
+  @override
+  State<_DialogueHistory> createState() => _DialogueHistoryState();
+}
+
+class _DialogueHistoryState extends State<_DialogueHistory> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Material(
+    type: MaterialType.transparency,
+    child: SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final scale = math
+              .min(constraints.maxWidth / 1280, constraints.maxHeight / 720)
+              .clamp(0.65, 2.0);
+          final base = storyDialogueStyle(widget.fontFamily)
+              .copyWith(fontSize: 24 * scale);
+          return Stack(
+            children: [
+              if (widget.history.isEmpty)
+                Center(child: Text('暂无对话记录', style: base))
+              else
+                Scrollbar(
+                  controller: _scrollController,
+                  thumbVisibility: true,
+                  child: ListView.builder(
+                    key: const Key('dialogue-history-list'),
+                    controller: _scrollController,
+                    reverse: true,
+                    padding: EdgeInsets.fromLTRB(
+                      constraints.maxWidth * .08,
+                      60 * scale,
+                      constraints.maxWidth * .08,
+                      70 * scale,
+                    ),
+                    itemCount: widget.history.length,
+                    itemBuilder: (context, index) {
+                      final line =
+                          widget.history[widget.history.length - 1 - index];
+                      return Padding(
+                        padding: EdgeInsets.only(bottom: 22 * scale),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: constraints.maxWidth * .14,
+                              child: Text(
+                                line.speaker,
+                                textAlign: TextAlign.right,
+                                textScaler: TextScaler.noScaling,
+                                style: base.copyWith(
+                                  fontSize: 30 * scale,
+                                  color: const Color(0xff929292),
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 32 * scale),
+                            Expanded(
+                              child: Text.rich(
+                                TextSpan(
+                                  children: storyTextSpans(
+                                    line.text,
+                                    line.text.runes.length,
+                                    base,
+                                  ),
+                                ),
+                                textScaler: TextScaler.noScaling,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              Positioned(
+                top: 4,
+                right: 8,
+                child: IconButton(
+                  tooltip: '关闭对话记录',
+                  onPressed: () => Navigator.pop(context),
+                  color: Colors.white,
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    ),
+  );
 }
 
 /// 长按快进时的倍速面板：竖向列出 2/4/8/16 倍速，样式对齐官方播放器——

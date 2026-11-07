@@ -18,6 +18,7 @@ class StoryStage extends StatelessWidget {
     this.slideMaskShader,
     this.sprites = const {},
     this.fontFamily = 'StoryNotoSans',
+    this.showDialogue = true,
     this.onFastForwardStart,
     this.onFastForwardMove,
     this.onFastForwardEnd,
@@ -27,6 +28,7 @@ class StoryStage extends StatelessWidget {
   final Map<Uri, ui.Image> textures;
   final ui.Image? slideMask;
   final String fontFamily;
+  final bool showDialogue;
   final ui.FragmentShader? slideMaskShader;
   final Map<String, ui.Image> sprites;
 
@@ -41,13 +43,7 @@ class StoryStage extends StatelessWidget {
     animation: engine,
     builder: (context, _) {
       final s = engine.state;
-      final base = TextStyle(
-        fontFamily: fontFamily,
-        fontSize: 24,
-        fontWeight: FontWeight.w500,
-        color: Colors.white,
-        shadows: const [Shadow(color: Color(0xe6404040), blurRadius: 4)],
-      );
+      final base = storyDialogueStyle(fontFamily);
       final spans = storyTextSpans(s.text, s.revealed, base);
       final messageLayout = TextPainter(
         text: TextSpan(children: spans),
@@ -108,7 +104,7 @@ class StoryStage extends StatelessWidget {
                     fontFamily: fontFamily,
                   ),
                 ),
-                if (s.dialogueVisible)
+                if (showDialogue && s.dialogueVisible)
                   IgnorePointer(
                     child: Opacity(
                       opacity: s.dialogueAlpha.clamp(0, 1),

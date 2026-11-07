@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:arknights_story_player/story_player/data/asset_store.dart';
 import 'package:arknights_story_player/story_player/data/media_catalog.dart';
 import 'package:arknights_story_player/story_player/data/story_repository.dart';
 import 'package:arknights_story_player/story_player/runtime/story_audio.dart';
 import 'package:arknights_story_player/story_player/script.dart';
+import 'package:arknights_story_player/story_player/stage_state.dart';
 import 'package:arknights_story_player/story_player/ui/story_player.dart';
 import 'package:arknights_story_player/story_player/ui/story_stage.dart';
 
@@ -80,6 +82,109 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('对话记录覆盖舞台，定位最新记录并可上下滚动', (tester) async {
+    final stage = await openPlayer(tester);
+    stage.engine.state.history
+      ..clear()
+      ..addAll(List.generate(40, (i) => DialogueLine('角色$i', '对白$i', i)))
+      ..add(const DialogueLine('最新角色', '<color=#ff0000>最新对白</color>', 40));
+    await tester.tap(find.byTooltip('对话记录'));
+    await tester.pumpAndSettle();
+
+    expect(stage.engine.paused, isTrue);
+    expect(
+      tester.widget<StoryStage>(find.byType(StoryStage)).showDialogue,
+      isFalse,
+    );
+    expect(find.text('最新角色'), findsOneWidget);
+    expect(find.text('角色0'), findsNothing);
+    final latest = tester.widget<Text>(
+      find.ancestor(
+        of: find.text('最新对白', findRichText: true),
+        matching: find.byType(Text),
+      ),
+    );
+    final span = (latest.textSpan! as TextSpan).children!.single as TextSpan;
+    expect(span.style!.fontFamily, 'StoryNotoSans');
+    expect(span.style!.color, const Color(0xffff0000));
+
+    final list = find.byKey(const Key('dialogue-history-list'));
+    await tester.drag(list, const Offset(0, 500));
+    await tester.pumpAndSettle();
+    expect(find.text('最新角色'), findsNothing);
+    await tester.drag(list, const Offset(0, -1000));
+    await tester.pumpAndSettle();
+    expect(find.text('最新角色'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('关闭对话记录'));
+    await tester.pumpAndSettle();
+    expect(stage.engine.paused, isFalse);
+    expect(
+      tester.widget<StoryStage>(find.byType(StoryStage)).showDialogue,
+      isTrue,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('空记录和诊断面板保留各自行为及原暂停状态', (tester) async {
+    final stage = await openPlayer(tester);
+    stage.engine.state.history.clear();
+    await stage.engine.setPaused(true);
+    await tester.tap(find.byTooltip('对话记录'));
+    await tester.pumpAndSettle();
+    expect(find.text('暂无对话记录'), findsOneWidget);
+    await tester.tap(find.byTooltip('关闭对话记录'));
+    await tester.pumpAndSettle();
+    expect(stage.engine.paused, isTrue);
+
+    stage.engine.warn('诊断测试信息');
+    await tester.tap(find.byTooltip('资源与指令诊断'));
+    await tester.pumpAndSettle();
+    expect(find.text('资源与指令诊断'), findsOneWidget);
+    expect(find.text('诊断测试信息'), findsOneWidget);
+    await tester.tap(find.byTooltip('关闭'));
+    await tester.pumpAndSettle();
+    expect(stage.engine.paused, isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('诊断面板可按顺序复制全部信息', (tester) async {
+    final stage = await openPlayer(tester);
+    stage.engine.warnings.clear();
+    await tester.tap(find.byTooltip('资源与指令诊断'));
+    await tester.pumpAndSettle();
+    final copyButton = find.byWidgetPredicate(
+      (widget) => widget is IconButton && widget.tooltip == '复制全部',
+    );
+    expect(tester.widget<IconButton>(copyButton).onPressed, isNull);
+    await tester.tap(find.byTooltip('关闭'));
+    await tester.pumpAndSettle();
+
+    stage.engine.warnings.addAll(['第一条\n详细信息', '第二条']);
+    await tester.tap(find.byTooltip('资源与指令诊断'));
+    await tester.pumpAndSettle();
+    String? copiedText;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copiedText = (call.arguments as Map)['text'] as String?;
+      }
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+    await tester.tap(find.byTooltip('复制全部'));
+    await tester.pumpAndSettle();
+    expect(copiedText, '第一条\n详细信息\n第二条');
+    expect(find.byTooltip('已复制全部'), findsOneWidget);
+    expect(find.text('第一条\n详细信息'), findsOneWidget);
+    expect(find.text('第二条'), findsOneWidget);
+    await tester.tap(find.byTooltip('关闭'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   testWidgets('手动和自动显示不同图标并可来回切换', (tester) async {
     final stage = await openPlayer(tester, autoable: true);
     expect(find.byIcon(Icons.touch_app), findsOneWidget);
@@ -116,10 +221,11 @@ void main() {
     );
     final panelDecoration =
         tester
-            .widget<DecoratedBox>(
-              find.byKey(const Key('fast-forward-speed-panel')),
-            )
-            .decoration as BoxDecoration;
+                .widget<DecoratedBox>(
+                  find.byKey(const Key('fast-forward-speed-panel')),
+                )
+                .decoration
+            as BoxDecoration;
     expect(panelDecoration.color, const Color(0x38000000));
     expect(panelDecoration.border?.top.color, const Color(0x59ffffff));
     expect((panelDecoration.border as Border).right, BorderSide.none);
@@ -130,16 +236,20 @@ void main() {
     );
     final frameDecoration =
         tester
-            .widget<DecoratedBox>(
-              find.byKey(const Key('fast-forward-speed-selected-frame')),
-            )
-            .decoration as BoxDecoration;
+                .widget<DecoratedBox>(
+                  find.byKey(const Key('fast-forward-speed-selected-frame')),
+                )
+                .decoration
+            as BoxDecoration;
     expect(frameDecoration.color, const Color(0x59000000));
     expect(frameDecoration.border?.top.color, Colors.white);
     expect(frameDecoration.border?.top.width, 2);
-    expect(tester.getSize(
-      find.byKey(const Key('fast-forward-speed-selected-frame')),
-    ), const Size(128, 44));
+    expect(
+      tester.getSize(
+        find.byKey(const Key('fast-forward-speed-selected-frame')),
+      ),
+      const Size(128, 44),
+    );
     expect(frameRect().top, panelRect.top);
     expect(frameRect().right, greaterThan(panelRect.right));
     expect(find.byIcon(Icons.fast_forward), findsOneWidget);
