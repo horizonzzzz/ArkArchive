@@ -16,7 +16,7 @@ String _releaseBody({
   'name': tag,
   'body': body,
   'html_url':
-      'https://github.com/horizonzzzz/arknights-story-player/releases/tag/$tag',
+      'https://github.com/horizonzzzz/ArkArchive/releases/tag/$tag',
   'assets': assets,
 });
 
@@ -86,7 +86,7 @@ void main() {
       expect(update.notes, '更新说明');
       expect(
         update.pageUri.toString(),
-        'https://github.com/horizonzzzz/arknights-story-player/releases/tag/v0.5.0',
+        'https://github.com/horizonzzzz/ArkArchive/releases/tag/v0.5.0',
       );
       expect(update.assets, hasLength(2));
       expect(

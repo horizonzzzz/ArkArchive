@@ -10,7 +10,7 @@ export 'app_update_stub.dart'
     show UpdateFileStore;
 
 /// 更新源仓库；项目主页、Issues 与发布页链接由它派生。
-const String updateRepository = 'horizonzzzz/arknights-story-player';
+const String updateRepository = 'horizonzzzz/ArkArchive';
 
 abstract final class AppUpdateLinks {
   static final Uri project = Uri.parse('https://github.com/$updateRepository');

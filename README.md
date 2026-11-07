@@ -11,10 +11,10 @@
 ![Flutter](https://img.shields.io/badge/Flutter-02569B?logo=flutter&logoColor=white)
 ![Dart](https://img.shields.io/badge/Dart-0175C2?logo=dart&logoColor=white)
 ![平台](https://img.shields.io/badge/平台-Android%20%7C%20Windows%20%7C%20Linux-555555)
-![许可证](https://img.shields.io/github/license/horizonzzzz/arknights-story-player)
-![Release](https://img.shields.io/github/v/release/horizonzzzz/arknights-story-player)
+![许可证](https://img.shields.io/github/license/horizonzzzz/ArkArchive)
+![Release](https://img.shields.io/github/v/release/horizonzzzz/ArkArchive)
 
-[下载应用](https://github.com/horizonzzzz/arknights-story-player/releases) · [反馈问题](https://github.com/horizonzzzz/arknights-story-player/issues)
+[下载应用](https://github.com/horizonzzzz/ArkArchive/releases) · [反馈问题](https://github.com/horizonzzzz/ArkArchive/issues)
 
 </div>
 
@@ -30,7 +30,7 @@
 
 ## 下载与安装
 
-前往 [GitHub Releases](https://github.com/horizonzzzz/arknights-story-player/releases) 下载适合您设备的最新安装包（文件名已包含对应版本号）：
+前往 [GitHub Releases](https://github.com/horizonzzzz/ArkArchive/releases) 下载适合您设备的最新安装包（文件名已包含对应版本号）：
 
 - **Android**：提供通用版及主流架构（ARM64、ARM32、x86_64）的 APK 安装包。
 - **Windows (x64)**：提供快速安装包（Setup）与免安装便携包（Zip）。

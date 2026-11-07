@@ -13,7 +13,7 @@ String _releaseBody({String tag = 'v0.5.0'}) => jsonEncode({
   'name': tag,
   'body': '修复若干问题。',
   'html_url':
-      'https://github.com/horizonzzzz/arknights-story-player/releases/tag/$tag',
+      'https://github.com/horizonzzzz/ArkArchive/releases/tag/$tag',
   'assets': [
     {
       'name': 'arknights_story_player-v0.5.0-windows-x64-setup.exe',
@@ -166,7 +166,7 @@ void main() {
           await tester.tap(find.text('打开发布页面'));
           expect(
             opened.single.toString(),
-            'https://github.com/horizonzzzz/arknights-story-player/releases/tag/v0.5.0',
+            'https://github.com/horizonzzzz/ArkArchive/releases/tag/v0.5.0',
           );
         default:
           fail('未预期的平台：$platform');
