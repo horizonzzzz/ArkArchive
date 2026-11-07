@@ -20,7 +20,7 @@ class AssetStore {
   final http.Client _client;
   final FileCache _cache;
   final Map<Uri, Uint8List> _memory = {};
-  final Map<(Uri, Object?), Future<Uint8List>> _pending = {};
+  final Map<(Uri, Object?, Object?), Future<Uint8List>> _pending = {};
   final Map<Uri, Object> _writeErrors = {};
   Future<void> _settingsWrite = Future.value();
   static final _settingsUri = Uri.parse(
@@ -44,6 +44,17 @@ class AssetStore {
       playbackProgresses[path];
   static final _cacheDownloadZone = Object();
   static final _cacheControlZone = Object();
+  static final _storyScopeZone = Object();
+
+  /// 正在播放的已缓存剧情路径：播放期间动态补下的素材归入它的独立目录；
+  /// 为 null 时新下载素材进入共享层（在线试看、目录与表格等全局资源）。
+  String? playbackScope;
+
+  /// 当前资源请求应归属的剧情：缓存任务 zone 指定的剧情优先，其次播放中的剧情。
+  String? _storyScope() {
+    final zoned = Zone.current[_storyScopeZone] as String?;
+    return zoned ?? playbackScope;
+  }
   bool get isMobile =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
@@ -57,9 +68,14 @@ class AssetStore {
   Future<T> runCacheDownload<T>(
     Future<T> Function() action, {
     CacheControl? control,
+    String? story,
   }) => runZoned(
     action,
-    zoneValues: {_cacheDownloadZone: true, _cacheControlZone: control},
+    zoneValues: {
+      _cacheDownloadZone: true,
+      _cacheControlZone: control,
+      _storyScopeZone: story,
+    },
   );
 
   Future<List<ConnectivityResult>> cacheConnections() =>
@@ -91,6 +107,9 @@ class AssetStore {
   Future<String?> cacheLocation() => _cache.location();
   Future<int> cacheSize() => _cache.size();
   bool _movingCache = false;
+
+  /// 删除单个剧情的整块独立缓存。
+  Future<void> deleteStoryAssets(String story) => _cache.deleteStory(story);
 
   Future<void> moveCacheDirectory(String parentPath) async {
     if (_movingCache || _pending.isNotEmpty) throw StateError('请等待当前资源加载结束');
@@ -319,16 +338,6 @@ class AssetStore {
     return _cache.write(uri, bytes);
   }
 
-  Future<void> deleteCache(Uri uri) async {
-    if (_movingCache) throw StateError('缓存目录迁移中');
-    if (_pending.keys.any((key) => key.$1 == uri)) {
-      throw StateError('资源正在使用：$uri');
-    }
-    await _cache.delete(uri);
-    _memory.remove(uri);
-    _writeErrors.remove(uri);
-  }
-
   void releaseMemory() {
     _memory.clear();
     _writeErrors.clear();
@@ -344,19 +353,27 @@ class AssetStore {
     return response.bodyBytes;
   }
 
-  Future<Uint8List> load(Uri uri) async {
+  Future<Uint8List> load(Uri uri) => _load(uri, shared: false);
+
+  /// 全局资源（剧情索引、解析表格、设置）专用：始终写入共享层。
+  Future<Uint8List> loadShared(Uri uri) => _load(uri, shared: true);
+
+  Future<Uint8List> _load(Uri uri, {required bool shared}) async {
     await (Zone.current[_cacheControlZone] as CacheControl?)?.checkpoint();
     if (_movingCache) throw StateError('缓存目录迁移中');
     if (!['http', 'https'].contains(uri.scheme)) {
       throw FormatException('仅支持 HTTP(S) 资源：$uri');
     }
     if (_memory.containsKey(uri)) return _memory[uri]!;
+    // 不同剧情对同一素材的下载互不合并：各自写入自己的目录；
+    // 写入目标不同的请求共享结果会造成归属丢失。
     final key = (
       uri,
+      shared ? null : _storyScope(),
       Zone.current[_cacheControlZone] ?? Zone.current[_cacheDownloadZone],
     );
     if (_pending.containsKey(key)) return _pending[key]!;
-    final future = _download(uri);
+    final future = _download(uri, shared: shared);
     _pending[key] = future;
     try {
       return await future;
@@ -365,10 +382,12 @@ class AssetStore {
     }
   }
 
-  Future<Uint8List> _download(Uri uri) async {
+  Future<Uint8List> _download(Uri uri, {required bool shared}) async {
+    final story = shared ? null : _storyScope();
     Uint8List? bytes;
     try {
-      bytes = await _cache.read(uri);
+      // 剧情层未命中时由 FileCache 回退到共享层，保留旧版隐性缓存。
+      bytes = await _cache.read(uri, story: story);
       if (bytes != null && bytes.isEmpty) bytes = null;
     } catch (_) {
       // 缓存不可读时继续尝试网络，写入失败会在预加载结果中报告。
@@ -405,7 +424,7 @@ class AssetStore {
         await Future<void>.delayed(const Duration(milliseconds: 300));
       }
       try {
-        await _cache.write(uri, bytes);
+        await _cache.write(uri, bytes, story: story);
         _writeErrors.remove(uri);
       } catch (error) {
         _writeErrors[uri] = error;
@@ -416,7 +435,7 @@ class AssetStore {
 
   Future<Uri> playableUri(Uri uri) async {
     try {
-      return await _cache.playableUri(uri);
+      return await _cache.playableUri(uri, story: _storyScope());
     } catch (_) {
       return uri;
     }
@@ -425,6 +444,7 @@ class AssetStore {
   Future<List<String>> preload(
     Set<Uri> assets, {
     void Function(int done, int total)? onProgress,
+    bool shared = false,
   }) async {
     final pending = assets.toList();
     final errors = <String>[];
@@ -434,9 +454,9 @@ class AssetStore {
       while (next < pending.length) {
         final uri = pending[next++];
         try {
-          final bytes = await load(uri);
+          final bytes = shared ? await loadShared(uri) : await load(uri);
           if (_writeErrors.containsKey(uri)) {
-            await _cache.write(uri, bytes);
+            await _cache.write(uri, bytes, story: shared ? null : _storyScope());
             _writeErrors.remove(uri);
           }
         } on CacheCancelled {

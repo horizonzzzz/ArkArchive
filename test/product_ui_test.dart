@@ -42,21 +42,39 @@ const _groups = [
 
 class _MemoryCache extends FileCache {
   final data = <Uri, Uint8List>{};
+  final stories = <String, Map<Uri, Uint8List>>{};
   @override
-  Future<void> delete(Uri uri) async {
-    data.remove(uri);
+  Future<void> delete(Uri uri, {String? story}) async {
+    if (story == null) {
+      data.remove(uri);
+    } else {
+      stories[story]?.remove(uri);
+    }
   }
 
   @override
-  Future<int> size() async =>
-      data.values.fold<int>(0, (sum, bytes) => sum + bytes.length);
+  Future<void> deleteStory(String story) async {
+    stories.remove(story);
+  }
+
+  @override
+  Future<int> size() async {
+    var bytes = 0;
+    for (final layer in [data, ...stories.values]) {
+      for (final chunk in layer.values) {
+        bytes += chunk.length;
+      }
+    }
+    return bytes;
+  }
   @override
   Future<String?> location() async => null;
   @override
-  Future<Uint8List?> read(Uri uri) async => data[uri];
+  Future<Uint8List?> read(Uri uri, {String? story}) async =>
+      stories[story]?[uri] ?? data[uri];
   @override
-  Future<void> write(Uri uri, Uint8List bytes) async {
-    data[uri] = bytes;
+  Future<void> write(Uri uri, Uint8List bytes, {String? story}) async {
+    (story == null ? data : stories.putIfAbsent(story, () => {}))[uri] = bytes;
   }
 }
 

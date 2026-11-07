@@ -109,7 +109,11 @@ void main() {
     expect(bytes, hasLength(4096));
     expect(bytes.toSet(), hasLength(1));
     expect(bytes.first, inInclusiveRange(0, 7));
-    expect(await Directory((await cache.location())!).list().length, 1);
+    // 同一素材只写入共享层一份。
+    final shared = Directory(
+      '${(await cache.location())!}${Platform.pathSeparator}_shared',
+    );
+    expect(await shared.list().length, 1);
   });
   test('清空真实缓存保留指定资源和非缓存文件，目录仍可写入', () async {
     final root = await Directory.systemTemp.createTemp('story-cache-clear-');
@@ -127,5 +131,30 @@ void main() {
     expect(await notes.readAsString(), 'keep');
     await cache.write(asset, Uint8List.fromList([3]));
     expect(await cache.read(asset), [3]);
+  });
+
+  test('剧情素材存独立目录，删除单幕整目录回收，其他剧情不受影响', () async {
+    final root = await Directory.systemTemp.createTemp('story-cache-scope-');
+    addTearDown(() => root.delete(recursive: true));
+    final cache = FileCache(supportDirectory: () async => root);
+    final asset = Uri.parse('https://example.test/image.png');
+    await cache.write(asset, Uint8List.fromList([1]), story: 'main/0-1');
+    await cache.write(asset, Uint8List.fromList([2]), story: 'main/0-2');
+    // 同一素材在每个剧情目录各存一份，互不共用。
+    expect(await cache.read(asset, story: 'main/0-1'), [1]);
+    expect(await cache.read(asset, story: 'main/0-2'), [2]);
+    // 剧情层未命中时回退共享层。
+    final shared = Uri.parse('https://example.test/shared.png');
+    await cache.write(shared, Uint8List.fromList([9]));
+    expect(await cache.read(shared, story: 'main/0-1'), [9]);
+    expect(await cache.size(), 3);
+    await cache.deleteStory('main/0-1');
+    expect(await cache.read(asset, story: 'main/0-1'), isNull);
+    expect(await cache.read(asset, story: 'main/0-2'), [2]);
+    expect(await cache.read(shared), [9]);
+    // 清空缓存删除所有剧情目录，共享层按 keep 保留。
+    await cache.clear(keep: {shared});
+    expect(await cache.read(asset, story: 'main/0-2'), isNull);
+    expect(await cache.read(shared), [9]);
   });
 }

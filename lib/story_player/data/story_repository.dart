@@ -98,20 +98,10 @@ class StoryRepository {
   );
   Future<void> _indexWrite = Future.value();
   MediaCatalog? _cacheCatalog;
-  final Map<String, Set<Uri>?> _activeAssets = {};
+  final Set<String> _activeDownloads = {};
 
   Future<MediaCatalog> _loadCacheCatalog() async =>
       _cacheCatalog ??= await MediaCatalog.load(store);
-
-  Uri _manifestUri(String path) =>
-      Uri.https('local.invalid', '/story-cache-manifest-v1', {'story': path});
-
-  Future<Set<Uri>?> _readManifest(String path) async {
-    final data = await store.readCache(_manifestUri(path));
-    if (data == null) return null;
-    final values = (jsonDecode(utf8.decode(data)) as List).cast<String>();
-    return values.map(Uri.parse).toSet();
-  }
 
   Future<void> _changeCachedStories(void Function(Set<String>) change) {
     final write = _indexWrite.catchError((_) {}).then((_) async {
@@ -142,50 +132,22 @@ class StoryRepository {
   Future<void> forgetCachedStory(StoryEntry entry) =>
       _changeCachedStories((entries) => entries.remove(entry.path));
 
-  Future<bool> deleteCachedStory(StoryEntry entry) {
+  /// 删除剧情离线记录并整块回收它的独立缓存目录。
+  /// 目录内素材只属于这一幕剧情，无需考虑其他剧情共用。
+  Future<void> deleteCachedStory(StoryEntry entry) {
     final deletion = _indexWrite.catchError((_) {}).then((_) async {
       final entries = await cachedStories();
-      if (!entries.remove(entry.path)) return false;
-      Set<Uri>? owned;
-      var safeToReclaim = true;
-      try {
-        owned = await _readManifest(entry.path);
-        if (owned == null) safeToReclaim = false;
-      } catch (_) {
-        safeToReclaim = false;
-      }
-      final shared = <Uri>{indexUri, ...MediaCatalog.tableUris};
-      // 未完成的剧情尚无离线清单，也必须保护它已经下载的共享素材。
-      for (final assets in _activeAssets.values) {
-        if (assets == null) {
-          safeToReclaim = false;
-        } else {
-          shared.addAll(assets);
-        }
-      }
-      for (final path in entries) {
-        try {
-          final manifest = await _readManifest(path);
-          if (manifest == null) {
-            safeToReclaim = false;
-          } else {
-            shared.addAll(manifest);
-          }
-        } catch (_) {
-          safeToReclaim = false;
-        }
-      }
+      if (!entries.remove(entry.path)) return;
       await store.writeCache(
         _offlineIndexUri,
         utf8.encode(jsonEncode(entries.toList())),
       );
-      if (safeToReclaim && owned != null) {
-        for (final uri in owned.difference(shared)) {
-          await store.deleteCache(uri);
-        }
+      try {
+        await store.deleteStoryAssets(entry.path);
+      } catch (_) {
+        // 目录暂时无法删除（文件被占用等）时保留索引已移除的状态；
+        // 残留目录不再被引用，清空缓存时可整体回收。
       }
-      await store.deleteCache(_manifestUri(entry.path));
-      return safeToReclaim;
     });
     _indexWrite = deletion.then<void>(
       (_) {},
@@ -199,8 +161,8 @@ class StoryRepository {
     CacheControl? control,
     void Function(int, int)? onProgress,
   }) => store.runCacheDownload(() async {
-    if (_activeAssets.containsKey(entry.path)) throw StateError('剧情正在缓存');
-    _activeAssets[entry.path] = null;
+    if (_activeDownloads.contains(entry.path)) throw StateError('剧情正在缓存');
+    _activeDownloads.add(entry.path);
     try {
       await control?.checkpoint();
       await _changeCachedStories((entries) => entries.remove(entry.path));
@@ -213,35 +175,28 @@ class StoryRepository {
       final catalog = await _loadCacheCatalog();
       final warnings = <String>[];
       final assets = catalog.dependencies(document.script, warnings);
-      _activeAssets[entry.path] = {
-        indexUri,
-        _entryUri(entry),
-        ...MediaCatalog.tableUris,
-        ...assets,
-      };
+      // 目录索引与解析表格是全局资源，只保存在共享层；
+      // 剧情脚本与媒体素材进入该剧情的独立目录。
+      final shared = {indexUri, ...MediaCatalog.tableUris};
+      final owned = {_entryUri(entry), ...assets};
       final errors = [...warnings];
       errors.addAll(
-        await store.preload({
-          indexUri,
-          _entryUri(entry),
-          ...MediaCatalog.tableUris,
-          ...assets,
-        }, onProgress: onProgress),
+        await store.preload(
+          shared,
+          shared: true,
+          onProgress: (done, total) =>
+              onProgress?.call(done, total + owned.length),
+        ),
+      );
+      errors.addAll(
+        await store.preload(
+          owned,
+          onProgress: (done, total) =>
+              onProgress?.call(shared.length + done, shared.length + total),
+        ),
       );
       await control?.checkpoint();
       if (errors.isEmpty) {
-        final manifest = {
-          indexUri,
-          _entryUri(entry),
-          ...MediaCatalog.tableUris,
-          ...assets,
-        };
-        await store.writeCache(
-          _manifestUri(entry.path),
-          utf8.encode(
-            jsonEncode(manifest.map((uri) => uri.toString()).toList()),
-          ),
-        );
         await control?.checkpoint();
         await _changeCachedStories((entries) {
           if (control?.cancelled != true) entries.add(entry.path);
@@ -253,9 +208,9 @@ class StoryRepository {
       }
       return errors;
     } finally {
-      _activeAssets.remove(entry.path);
+      _activeDownloads.remove(entry.path);
     }
-  }, control: control);
+  }, control: control, story: entry.path);
   Future<StoryDocument> load(Uri uri, {String? title}) async {
     final text = utf8.decode(await store.load(uri));
     if (uri.host == 'prts.wiki' || uri.host == 'www.prts.wiki') {
@@ -380,7 +335,7 @@ class StoryRepository {
   /// 目录来自 PRTS 的剧情索引表；播放器组件不关心它的来源。
   Future<List<StoryGroup>> loadIndex() async {
     final groups = jsonDecode(
-      utf8.decode(await store.load(indexUri)),
+      utf8.decode(await store.loadShared(indexUri)),
     ) as Map<String, dynamic>;
     final result = <StoryGroup>[];
     for (final group in groups.values) {

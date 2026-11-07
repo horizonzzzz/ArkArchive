@@ -59,7 +59,8 @@ class MediaCatalog {
     final tables = <Map<String, dynamic>>[];
     for (final uri in tableUris) {
       tables.add(
-        jsonDecode(utf8.decode(await store.load(uri))) as Map<String, dynamic>,
+        jsonDecode(utf8.decode(await store.loadShared(uri)))
+            as Map<String, dynamic>,
       );
     }
     return MediaCatalog(

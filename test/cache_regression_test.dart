@@ -75,8 +75,9 @@ class QueueRepository extends StoryRepository {
   }
 
   @override
-  Future<bool> deleteCachedStory(StoryEntry entry) async =>
-      offline.remove(entry.path);
+  Future<void> deleteCachedStory(StoryEntry entry) async {
+    offline.remove(entry.path);
+  }
 }
 
 /// 在队列仓库上额外支持播放准备，用于验证下载中播放已缓存剧情。

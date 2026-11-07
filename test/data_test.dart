@@ -16,31 +16,60 @@ import 'package:arknights_story_player/story_player/runtime/playback_checkpoint.
 import 'package:arknights_story_player/story_player/script.dart';
 
 class MemoryCache extends FileCache {
+  /// 共享层：设置、目录与表格等全局资源（兼容旧版按 URI 平铺存放的语义）。
   final Map<Uri, Uint8List> data = {};
+
+  /// 每个剧情的独立层。
+  final Map<String, Map<Uri, Uint8List>> stories = {};
+
+  /// 供断言读取某剧情目录下的素材。
+  Map<Uri, Uint8List> storyData(String story) => stories[story] ?? const {};
+
   @override
   Future<void> clear({Set<Uri> keep = const {}}) async {
     data.removeWhere((uri, _) => !keep.contains(uri));
+    stories.clear();
   }
 
   @override
-  Future<void> delete(Uri uri) async {
-    data.remove(uri);
+  Future<void> delete(Uri uri, {String? story}) async {
+    if (story == null) {
+      data.remove(uri);
+    } else {
+      stories[story]?.remove(uri);
+    }
   }
 
   @override
-  Future<int> size() async =>
-      data.values.fold<int>(0, (sum, bytes) => sum + bytes.length);
+  Future<void> deleteStory(String story) async {
+    stories.remove(story);
+  }
+
+  @override
+  Future<int> size() async {
+    var bytes = 0;
+    for (final layer in [data, ...stories.values]) {
+      for (final chunk in layer.values) {
+        bytes += chunk.length;
+      }
+    }
+    return bytes;
+  }
+
   @override
   Future<String?> location() async => null;
+
   @override
-  Future<Uint8List?> read(Uri uri) async => data[uri];
+  Future<Uint8List?> read(Uri uri, {String? story}) async =>
+      stories[story]?[uri] ?? data[uri];
+
   @override
-  Future<void> write(Uri uri, Uint8List bytes) async {
-    data[uri] = bytes;
+  Future<void> write(Uri uri, Uint8List bytes, {String? story}) async {
+    (story == null ? data : stories.putIfAbsent(story, () => {}))[uri] = bytes;
   }
 
   @override
-  Future<Uri> playableUri(Uri uri) async => uri;
+  Future<Uri> playableUri(Uri uri, {String? story}) async => uri;
 }
 
 class AbortAwareClient extends http.BaseClient {
@@ -60,7 +89,7 @@ class AbortAwareClient extends http.BaseClient {
 
 class FailingCache extends MemoryCache {
   @override
-  Future<void> write(Uri uri, Uint8List bytes) async =>
+  Future<void> write(Uri uri, Uint8List bytes, {String? story}) async =>
       throw StateError('磁盘已满');
 }
 
@@ -608,6 +637,8 @@ void main() {
     );
     addTearDown(offline.close);
     final offlineRepository = StoryRepository(offline);
+    // 回看已缓存剧情：launcher 打开时会设置播放 scope，新下载素材归入该剧情目录。
+    offline.playbackScope = entry.path;
     expect(
       (await offlineRepository.loadIndex()).every(
         (group) => group.entryType == 'GAMEPLAY',
@@ -653,11 +684,13 @@ void main() {
       client: MockClient((_) async => throw http.ClientException('离线')),
     );
     addTearDown(offline.close);
+    // 回看已缓存剧情：模拟 launcher 设置播放 scope，脚本从该剧情目录读取。
+    offline.playbackScope = entry.path;
     final document = await StoryRepository(offline).loadEntry(entry);
     expect(document.title, '序章');
     expect(document.script.commands.single.text, '对白');
   });
-  test('删除单幕只回收独占素材，保留其他离线剧情共用资源', () async {
+  test('删除单幕整目录回收，其他剧情缓存各留各份不受影响', () async {
     final cache = MemoryCache();
     final store = AssetStore(
       cache: cache,
@@ -698,69 +731,68 @@ void main() {
     final secondOnly = Uri.parse(
       'https://torappu.prts.wiki/assets/avg/background/second.png',
     );
-    expect(await repo.deleteCachedStory(first), isTrue);
-    expect(cache.data[shared], isNotNull);
-    expect(cache.data[firstOnly], isNull);
-    expect(cache.data[secondOnly], isNotNull);
+    // 共用素材不再共用：两个剧情目录各自保存一份。
+    expect(cache.storyData(first.path).keys, containsAll([shared, firstOnly]));
+    expect(cache.storyData(second.path).keys, containsAll([shared, secondOnly]));
+    await repo.deleteCachedStory(first);
+    expect(cache.stories.containsKey(first.path), isFalse);
+    expect(cache.storyData(second.path)[shared], isNotNull);
+    expect(cache.storyData(second.path)[secondOnly], isNotNull);
     expect(await repo.cachedStories(), {second.path});
   });
-  for (final waitingForScript in [false, true]) {
-    test('删除保护活跃剧情素材（依赖尚未解析：$waitingForScript）', () async {
-      final cache = MemoryCache();
-      final started = Completer<void>();
-      final release = Completer<void>();
-      var downloadingSecond = false;
-      final store = AssetStore(
-        cache: cache,
-        client: MockClient((request) async {
-          if (downloadingSecond &&
-              (waitingForScript
-                  ? request.url.path.endsWith('second.txt')
-                  : request.url.path.endsWith('second.png'))) {
-            started.complete();
-            await release.future;
-          }
-          if (request.url.path.endsWith('.txt')) {
-            final unique = request.url.path.contains('first')
-                ? 'first'
-                : 'second';
-            return http.Response.bytes(
-              utf8.encode(
-                '[name="甲"]对白\n[background(image="shared")]\n[background(image="$unique")]',
-              ),
-              200,
-            );
-          }
-          return request.url.path.endsWith('.png')
-              ? http.Response.bytes([1], 200)
-              : http.Response('{}', 200);
-        }),
-      );
-      addTearDown(store.close);
-      final repository = StoryRepository(store);
-      const first = StoryEntry('第一幕', 'test/first');
-      const second = StoryEntry('第二幕', 'test/second');
-      expect(await repository.cacheEntry(first), isEmpty);
-      downloadingSecond = true;
-      final operation = repository.cacheEntry(second, control: CacheControl());
-      await started.future;
-      expect(await repository.deleteCachedStory(first), !waitingForScript);
-      final shared = Uri.parse(
-        'https://torappu.prts.wiki/assets/avg/background/shared.png',
-      );
-      expect(cache.data[shared], isNotNull);
-      expect(await repository.cachedStories(), isEmpty);
-      release.complete();
-      expect(await operation, isEmpty);
-      expect(await repository.cachedStories(), {second.path});
-      store.releaseMemory();
-      final prepared = await repository.prepare(
-        await repository.loadEntry(second),
-      );
-      expect(prepared.warnings, isEmpty);
-      expect(cache.data[shared], isNotNull);
-    });
-  }
+
+  test('删除缓存剧情不影响正在下载的另一剧情', () async {
+    final cache = MemoryCache();
+    final started = Completer<void>();
+    final release = Completer<void>();
+    final store = AssetStore(
+      cache: cache,
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('second.png')) {
+          started.complete();
+          await release.future;
+        }
+        if (request.url.path.endsWith('.txt')) {
+          final unique = request.url.path.contains('first')
+              ? 'first'
+              : 'second';
+          return http.Response.bytes(
+            utf8.encode(
+              '[name="甲"]对白\n[background(image="shared")]\n[background(image="$unique")]',
+            ),
+            200,
+          );
+        }
+        return request.url.path.endsWith('.png')
+            ? http.Response.bytes([1], 200)
+            : http.Response('{}', 200);
+      }),
+    );
+    addTearDown(store.close);
+    final repository = StoryRepository(store);
+    const first = StoryEntry('第一幕', 'test/first');
+    const second = StoryEntry('第二幕', 'test/second');
+    // 与真实链路一致：缓存任务都带控制句柄，完成后释放下载内存，
+    // 第二个剧情才会把共用素材下载进自己的独立目录。
+    expect(await repository.cacheEntry(first, control: CacheControl()), isEmpty);
+    final operation = repository.cacheEntry(second, control: CacheControl());
+    await started.future;
+    // 各剧情目录独立，删除不再需要等待或保护其他任务。
+    await repository.deleteCachedStory(first);
+    expect(await repository.cachedStories(), isEmpty);
+    release.complete();
+    expect(await operation, isEmpty);
+    expect(await repository.cachedStories(), {second.path});
+    final shared = Uri.parse(
+      'https://torappu.prts.wiki/assets/avg/background/shared.png',
+    );
+    expect(cache.storyData(second.path)[shared], isNotNull);
+    store.playbackScope = second.path;
+    final prepared = await repository.prepare(
+      await repository.loadEntry(second),
+    );
+    expect(prepared.warnings, isEmpty);
+  });
 
   test('取消缓存后不会提交离线记录', () async {
     final cache = MemoryCache();
@@ -792,7 +824,7 @@ void main() {
     expect(await repository.cachedStories(), isEmpty);
   });
 
-  test('旧版离线记录缺少素材清单时不删除任何素材', () async {
+  test('删除索引外条目不触碰任何缓存，删除后可重新缓存', () async {
     final cache = MemoryCache();
     final store = AssetStore(
       cache: cache,
@@ -817,12 +849,16 @@ void main() {
     cache.data[index] = Uint8List.fromList(
       utf8.encode(jsonEncode([entry.path, 'test/old'])),
     );
+    const orphan = StoryEntry('索引外', 'test/orphan');
+    await repository.deleteCachedStory(orphan);
+    expect(await repository.cachedStories(), {entry.path, 'test/old'});
     final shared = Uri.parse(
       'https://torappu.prts.wiki/assets/avg/background/shared.png',
     );
-    expect(await repository.deleteCachedStory(entry), isFalse);
-    expect(cache.data[shared], isNotNull);
+    expect(cache.storyData(entry.path)[shared], isNotNull);
+    await repository.deleteCachedStory(entry);
     expect(await repository.cachedStories(), {'test/old'});
+    expect(cache.stories.containsKey(entry.path), isFalse);
   });
   test('玩法目录在线更新并在断网时使用上次成功结果', () async {
     final cache = MemoryCache();

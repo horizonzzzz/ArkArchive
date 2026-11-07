@@ -6,9 +6,9 @@ import 'package:arknights_story_player/story_player/story_player.dart';
 
 class _NoDiskCache extends FileCache {
   @override
-  Future<Uint8List?> read(Uri uri) async => null;
+  Future<Uint8List?> read(Uri uri, {String? story}) async => null;
   @override
-  Future<void> write(Uri uri, Uint8List bytes) async {}
+  Future<void> write(Uri uri, Uint8List bytes, {String? story}) async {}
 }
 
 void main() {

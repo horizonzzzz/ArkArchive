@@ -512,7 +512,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除离线剧情？'),
-        content: Text('删除选中的 ${entries.length} 幕剧情的离线记录和独占素材，共用素材将保留。'),
+        content: Text('删除选中的 ${entries.length} 幕剧情的离线记录和全部缓存素材。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -534,9 +534,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
     }
     setState(() => _deletingCache = true);
     try {
-      var reclaimed = true;
       for (final entry in entries) {
-        if (!await _repository.deleteCachedStory(entry)) reclaimed = false;
+        await _repository.deleteCachedStory(entry);
         _cacheJobs.remove(entry.path);
       }
       final cached = await _repository.cachedStories();
@@ -545,11 +544,6 @@ class _StoryLauncherState extends State<StoryLauncher> {
         _cached.removeAll(entries.map((entry) => entry.path));
         _cached.addAll(cached);
       });
-      if (!reclaimed) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('离线记录已删除；素材正在使用或缺少清单，相关文件已保留。')),
-        );
-      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -660,6 +654,11 @@ class _StoryLauncherState extends State<StoryLauncher> {
       _done = 0;
       _total = 0;
     });
+    // 已缓存剧情播放期间的动态补下素材归入它的独立目录；
+    // 在线试看则进共享层，不产生无法管理的临时目录。
+    _repository.store.playbackScope = _cached.contains(entry.path)
+        ? entry.path
+        : null;
     try {
       final document = await _repository.loadEntry(entry);
       if (!document.script.commands.any(
@@ -716,6 +715,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
         }
       }
     } finally {
+      _repository.store.playbackScope = null;
       if (mounted) setState(() => _busy = false);
       unawaited(_refreshCacheInfo());
     }
