@@ -801,7 +801,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                               child: IndexedStack(
                                 index: _page,
                                 children: [
-                                  _library(desktop),
+                                  _library(),
                                   CachePage(
                                     groups: _groups ?? const [],
                                     active: _page == 1,
@@ -1036,7 +1036,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   );
 
   void _leaveActivity() => setState(() => _activeGroup = null);
-  Widget _library(bool desktop) {
+  Widget _library() {
     final active = _activeGroup;
     final catalog = Column(
       children: [
@@ -1075,16 +1075,15 @@ class _StoryLauncherState extends State<StoryLauncher> {
             ],
           ),
         ),
+        // 分类切换统一为横向滑动分页，与移动端交互一致。
         Expanded(
-          child: _repository.store.isMobile
-              ? PageView.builder(
-                  key: const PageStorageKey('category-pages'),
-                  controller: _categoryPageController,
-                  itemCount: _categories.length,
-                  onPageChanged: (value) => setState(() => _category = value),
-                  itemBuilder: (context, index) => _catalogPage(index, desktop),
-                )
-              : _catalogPage(_category, desktop),
+          child: PageView.builder(
+            key: const PageStorageKey('category-pages'),
+            controller: _categoryPageController,
+            itemCount: _categories.length,
+            onPageChanged: (value) => setState(() => _category = value),
+            itemBuilder: (context, index) => _catalogPage(index),
+          ),
         ),
       ],
     );
@@ -1121,11 +1120,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
           ),
         Expanded(
           child: ArchivePageTransition(
-            transitionKey: (
-              active?.name,
-              active?.entryType,
-              _repository.store.isMobile ? null : _category,
-            ),
+            transitionKey: (active?.name, active?.entryType),
             depth: active == null ? 0 : 1,
             child: active == null ? catalog : _chapterDetail(active),
           ),
@@ -1134,16 +1129,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
     );
   }
 
-  Widget _catalogPage(int category, bool desktop) {
+  Widget _catalogPage(int category) {
     final groups = _visibleGroups(category);
     return CustomScrollView(
-      key: PageStorageKey(
-        _repository.store.isMobile && category != 0
-            ? 'mobile-chapters-$category'
-            : desktop
-            ? 'desktop-chapters'
-            : 'mobile-chapters',
-      ),
+      key: PageStorageKey('chapters-$category'),
       slivers: [
         SliverToBoxAdapter(
           child: Padding(
@@ -1170,7 +1159,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   }
 
   void _selectCategory(int category) {
-    if (_repository.store.isMobile && _categoryPageController.hasClients) {
+    if (_categoryPageController.hasClients) {
       if (MediaQuery.disableAnimationsOf(context)) {
         _categoryPageController.jumpToPage(category);
       } else {
