@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:file_selector/file_selector.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -185,12 +186,26 @@ class _StoryLauncherState extends State<StoryLauncher> {
     }
   }
 
+  /// Windows 上缓存路径含非 ASCII 字符时 just_audio_windows 打不开本地音频，
+  /// 所以切换目录前先把这类路径拦下来。
+  bool _pathBreaksAudio(String path) =>
+      defaultTargetPlatform == TargetPlatform.windows &&
+      path.runes.any((rune) => rune > 0x7f);
+
   Future<void> _moveCacheDirectory() async {
     if (_busy || _hasActiveJobs || _deletingCache || _movingDirectory) return;
     setState(() => _movingDirectory = true);
     try {
       final path = await getDirectoryPath(confirmButtonText: '选择缓存目录');
       if (path == null || !mounted) return;
+      if (_pathBreaksAudio(path)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('所选路径包含中文，Windows 上会导致音频无法播放，请改用纯英文路径。'),
+          ),
+        );
+        return;
+      }
       await _repository.store.moveCacheDirectory(path);
       await _refreshCacheInfo();
       if (mounted) {

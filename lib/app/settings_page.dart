@@ -348,6 +348,13 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ],
       ),
+      if (defaultTargetPlatform == TargetPlatform.windows) ...[
+        const SizedBox(height: 6),
+        const Text(
+          '路径不能包含中文：Windows 上中文路径会导致音频无法播放。',
+          style: TextStyle(fontSize: 12, color: AppColors.yellow),
+        ),
+      ],
     ],
     const SizedBox(height: 8),
     _slider(

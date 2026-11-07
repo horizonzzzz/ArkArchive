@@ -95,7 +95,9 @@ BEGIN
             VALUE "InternalName", "arknights_story_player" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
             VALUE "OriginalFilename", "arknights_story_player.exe" "\0"
-            VALUE "ProductName", "方舟档案室" "\0"
+            // path_provider 把 ProductName 当作数据目录名，非 ASCII 会让
+            // just_audio_windows 打不开缓存里的音频，因此产品名保持 ASCII。
+            VALUE "ProductName", "ArkArchive" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
