@@ -151,17 +151,13 @@ class StoryRepository {
   Future<void> deleteCachedStory(StoryEntry entry) {
     final deletion = _indexWrite.catchError((_) {}).then((_) async {
       final entries = await cachedStories();
-      if (!entries.remove(entry.path)) return;
-      await store.writeCache(
-        _offlineIndexUri,
-        utf8.encode(jsonEncode(entries.toList())),
-      );
-      try {
-        await store.deleteStoryAssets(entry.path);
-      } catch (_) {
-        // 目录暂时无法删除（文件被占用等）时保留索引已移除的状态；
-        // 残留目录不再被引用，清空缓存时可整体回收。
+      if (entries.remove(entry.path)) {
+        await store.writeCache(
+          _offlineIndexUri,
+          utf8.encode(jsonEncode(entries.toList())),
+        );
       }
+      await store.deleteStoryAssets(entry.path);
     });
     _indexWrite = deletion.then<void>(
       (_) {},
@@ -174,57 +170,67 @@ class StoryRepository {
     StoryEntry entry, {
     CacheControl? control,
     void Function(int, int)? onProgress,
-  }) => store.runCacheDownload(() async {
-    if (_activeDownloads.contains(entry.path)) throw StateError('剧情正在缓存');
-    _activeDownloads.add(entry.path);
-    try {
-      await control?.checkpoint();
-      await _changeCachedStories((entries) => entries.remove(entry.path));
-      final (scriptUri, document) = await _loadEntryDocument(entry);
-      if (!document.script.commands.any(
-        (c) => c.tag == 'dialogue' || c.text.isNotEmpty,
-      )) {
-        throw const FormatException('脚本中没有可播放内容');
-      }
-      final catalog = await _loadCacheCatalog();
-      final warnings = <String>[];
-      final assets = catalog.dependencies(document.script, warnings);
-      // 目录索引与解析表格是全局资源，只保存在共享层；
-      // 剧情脚本与媒体素材进入该剧情的独立目录。
-      final shared = {indexUri, ...MediaCatalog.tableUris};
-      final owned = {scriptUri, ...assets};
-      final errors = [...warnings];
-      errors.addAll(
-        await store.preload(
-          shared,
-          shared: true,
-          onProgress: (done, total) =>
-              onProgress?.call(done, total + owned.length),
-        ),
-      );
-      errors.addAll(
-        await store.preload(
-          owned,
-          onProgress: (done, total) =>
-              onProgress?.call(shared.length + done, shared.length + total),
-        ),
-      );
-      await control?.checkpoint();
-      if (errors.isEmpty) {
+  }) => store.runCacheDownload(
+    () async {
+      if (_activeDownloads.contains(entry.path)) throw StateError('剧情正在缓存');
+      _activeDownloads.add(entry.path);
+      var completed = false;
+      try {
         await control?.checkpoint();
-        await _changeCachedStories((entries) {
-          if (control?.cancelled != true) entries.add(entry.path);
-        });
-        if (control?.cancelled == true) {
-          await _changeCachedStories((entries) => entries.remove(entry.path));
-          throw const CacheCancelled();
+        await _changeCachedStories((entries) => entries.remove(entry.path));
+        final (scriptUri, document) = await _loadEntryDocument(entry);
+        if (!document.script.commands.any(
+          (c) => c.tag == 'dialogue' || c.text.isNotEmpty,
+        )) {
+          throw const FormatException('脚本中没有可播放内容');
+        }
+        final catalog = await _loadCacheCatalog();
+        final warnings = <String>[];
+        final assets = catalog.dependencies(document.script, warnings);
+        // 目录索引与解析表格是全局资源，只保存在共享层；
+        // 剧情脚本与媒体素材进入该剧情的独立目录。
+        final shared = {indexUri, ...MediaCatalog.tableUris};
+        final owned = {scriptUri, ...assets};
+        final errors = [...warnings];
+        errors.addAll(
+          await store.preload(
+            shared,
+            shared: true,
+            onProgress: (done, total) =>
+                onProgress?.call(done, total + owned.length),
+          ),
+        );
+        errors.addAll(
+          await store.preload(
+            owned,
+            onProgress: (done, total) =>
+                onProgress?.call(shared.length + done, shared.length + total),
+          ),
+        );
+        await control?.checkpoint();
+        if (errors.isEmpty) {
+          await control?.checkpoint();
+          await _changeCachedStories((entries) {
+            if (control?.cancelled != true) entries.add(entry.path);
+          });
+          if (control?.cancelled == true) {
+            await _changeCachedStories((entries) => entries.remove(entry.path));
+            throw const CacheCancelled();
+          }
+          completed = true;
+        }
+        return errors;
+      } finally {
+        try {
+          if (!completed) await store.deleteStoryAssets(entry.path);
+        } finally {
+          _activeDownloads.remove(entry.path);
         }
       }
-      return errors;
-    } finally {
-      _activeDownloads.remove(entry.path);
-    }
-  }, control: control, story: entry.path);
+    },
+    control: control,
+    story: entry.path,
+  );
   Future<StoryDocument> load(Uri uri, {String? title}) async {
     final text = utf8.decode(await store.load(uri));
     if (uri.host == 'prts.wiki' || uri.host == 'www.prts.wiki') {

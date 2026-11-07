@@ -60,8 +60,12 @@ class MemoryCache extends FileCache {
   Future<String?> location() async => null;
 
   @override
-  Future<Uint8List?> read(Uri uri, {String? story}) async =>
-      stories[story]?[uri] ?? data[uri];
+  Future<Uint8List?> read(
+    Uri uri, {
+    String? story,
+    bool allowShared = true,
+  }) async =>
+      stories[story]?[uri] ?? (story == null || allowShared ? data[uri] : null);
 
   @override
   Future<void> write(Uri uri, Uint8List bytes, {String? story}) async {
@@ -91,6 +95,16 @@ class FailingCache extends MemoryCache {
   @override
   Future<void> write(Uri uri, Uint8List bytes, {String? story}) async =>
       throw StateError('磁盘已满');
+}
+
+class FailingDeleteCache extends MemoryCache {
+  bool failDeletion = true;
+
+  @override
+  Future<void> deleteStory(String story) async {
+    if (failDeletion) throw StateError('删除失败');
+    await super.deleteStory(story);
+  }
 }
 
 void main() {
@@ -766,10 +780,7 @@ void main() {
     expect(await repository.cacheEntry(entry), isEmpty);
     expect(await repository.cachedStories(), contains(entry.path));
     expect(
-      cache
-          .stories[entry.path]!
-          .keys
-          .where((uri) => uri.path.endsWith('.txt')),
+      cache.stories[entry.path]!.keys.where((uri) => uri.path.endsWith('.txt')),
       [
         Uri.parse(
           'https://cdn.jsdelivr.net/gh/yuanyan3060/ArknightsGameResource@main/'
@@ -786,6 +797,56 @@ void main() {
     final document = await StoryRepository(offline).loadEntry(entry);
     expect(document.script.commands.single.text, '对白');
   });
+  test('剧情下载不复用在线共享缓存或其他剧情的内存', () async {
+    final cache = MemoryCache();
+    final uri = Uri.parse('https://example.test/asset.png');
+    var requests = 0;
+    final store = AssetStore(
+      cache: cache,
+      client: MockClient((_) async => http.Response.bytes([++requests], 200)),
+    );
+    addTearDown(store.close);
+
+    expect(await store.load(uri), [1]);
+    for (final story in ['first', 'second']) {
+      await store.runCacheDownload(() async {
+        expect(await store.preload({uri}), isEmpty);
+      }, story: story);
+    }
+    expect(requests, 3);
+    expect(cache.data[uri], [1]);
+    expect(cache.storyData('first')[uri], [2]);
+    expect(cache.storyData('second')[uri], [3]);
+
+    store.releaseMemory();
+    await store.runCacheDownload(() async {
+      expect(await store.preload({uri}), isEmpty);
+    }, story: 'first');
+    expect(requests, 3);
+  });
+
+  test('删除失败会报告错误，索引外目录可以重试删除', () async {
+    final cache = FailingDeleteCache();
+    final store = AssetStore(cache: cache);
+    addTearDown(store.close);
+    final repository = StoryRepository(store);
+    const entry = StoryEntry('剧情', 'test/delete');
+    final index = Uri.parse('https://local.invalid/offline-stories-v1');
+    final asset = Uri.parse('https://example.test/asset.png');
+    await cache.write(
+      index,
+      Uint8List.fromList(utf8.encode(jsonEncode([entry.path]))),
+    );
+    await cache.write(asset, Uint8List.fromList([1]), story: entry.path);
+
+    await expectLater(repository.deleteCachedStory(entry), throwsStateError);
+    expect(await repository.cachedStories(), isEmpty);
+    expect(cache.storyData(entry.path), contains(asset));
+    cache.failDeletion = false;
+    await repository.deleteCachedStory(entry);
+    expect(cache.stories.containsKey(entry.path), isFalse);
+  });
+
   test('删除单幕整目录回收，其他剧情缓存各留各份不受影响', () async {
     final cache = MemoryCache();
     final store = AssetStore(
@@ -829,7 +890,10 @@ void main() {
     );
     // 共用素材不再共用：两个剧情目录各自保存一份。
     expect(cache.storyData(first.path).keys, containsAll([shared, firstOnly]));
-    expect(cache.storyData(second.path).keys, containsAll([shared, secondOnly]));
+    expect(
+      cache.storyData(second.path).keys,
+      containsAll([shared, secondOnly]),
+    );
     await repo.deleteCachedStory(first);
     expect(cache.stories.containsKey(first.path), isFalse);
     expect(cache.storyData(second.path)[shared], isNotNull);
@@ -870,7 +934,10 @@ void main() {
     const second = StoryEntry('第二幕', 'test/second');
     // 与真实链路一致：缓存任务都带控制句柄，完成后释放下载内存，
     // 第二个剧情才会把共用素材下载进自己的独立目录。
-    expect(await repository.cacheEntry(first, control: CacheControl()), isEmpty);
+    expect(
+      await repository.cacheEntry(first, control: CacheControl()),
+      isEmpty,
+    );
     final operation = repository.cacheEntry(second, control: CacheControl());
     await started.future;
     // 各剧情目录独立，删除不再需要等待或保护其他任务。
@@ -918,6 +985,7 @@ void main() {
       throwsA(isA<CacheCancelled>()),
     );
     expect(await repository.cachedStories(), isEmpty);
+    expect(cache.stories.containsKey(entry.path), isFalse);
   });
 
   test('删除索引外条目不触碰任何缓存，删除后可重新缓存', () async {
@@ -1113,8 +1181,7 @@ void main() {
       client: MockClient((r) async {
         if (r.url.path == '/api.php') {
           requestedPage = r.url.queryParameters['page'];
-          if (requestedPage == '危机合约/剧情' ||
-              requestedPage == 'RO-BEG/NBT') {
+          if (requestedPage == '危机合约/剧情' || requestedPage == 'RO-BEG/NBT') {
             return http.Response(
               jsonEncode({
                 'parse': {

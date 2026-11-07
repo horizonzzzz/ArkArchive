@@ -82,9 +82,8 @@ class FileCache {
     return folder;
   }
 
-  Future<Directory> _sharedFolder() async => Directory(
-    '${(await _folder()).path}${Platform.pathSeparator}_shared',
-  );
+  Future<Directory> _sharedFolder() async =>
+      Directory('${(await _folder()).path}${Platform.pathSeparator}_shared');
 
   Future<Directory> _storyFolder(String story) async => Directory(
     '${(await _folder()).path}'
@@ -153,7 +152,10 @@ class FileCache {
       if (entity is File) {
         await entity.copy('${target.path}${Platform.pathSeparator}$name');
       } else if (entity is Directory) {
-        await _copyTree(entity, Directory('${target.path}${Platform.pathSeparator}$name'));
+        await _copyTree(
+          entity,
+          Directory('${target.path}${Platform.pathSeparator}$name'),
+        );
       }
     }
   }
@@ -208,9 +210,7 @@ class FileCache {
   Future<void> clear({Set<Uri> keep = const {}}) async {
     final retained = {for (final uri in keep) fileName(uri)};
     final folder = await _folder();
-    final stories = Directory(
-      '${folder.path}${Platform.pathSeparator}stories',
-    );
+    final stories = Directory('${folder.path}${Platform.pathSeparator}stories');
     if (await stories.exists()) await stories.delete(recursive: true);
     await for (final entity in folder.list(followLinks: false)) {
       final name = _entryName(entity);
@@ -243,11 +243,15 @@ class FileCache {
     if (await folder.exists()) await folder.delete(recursive: true);
   }
 
-  Future<Uint8List?> read(Uri uri, {String? story}) async {
+  Future<Uint8List?> read(
+    Uri uri, {
+    String? story,
+    bool allowShared = true,
+  }) async {
     final file = await _file(uri, story);
     if (await file.exists()) return file.readAsBytes();
     // 剧情层未命中时回退共享层，保留历史隐性缓存。
-    if (story != null) {
+    if (story != null && allowShared) {
       final shared = await _file(uri, null);
       if (await shared.exists()) return shared.readAsBytes();
     }
@@ -258,7 +262,9 @@ class FileCache {
     // Windows 不允许同时替换同一个文件，同一 (URI, 目录) 必须依次写入。
     final key = (uri, story);
     final previous = _writes[key] ?? Future<void>.value();
-    final write = previous.catchError((_) {}).then((_) => _write(uri, bytes, story));
+    final write = previous
+        .catchError((_) {})
+        .then((_) => _write(uri, bytes, story));
     _writes[key] = write;
     try {
       await write;

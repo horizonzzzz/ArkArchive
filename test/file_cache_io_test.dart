@@ -147,6 +147,7 @@ void main() {
     final shared = Uri.parse('https://example.test/shared.png');
     await cache.write(shared, Uint8List.fromList([9]));
     expect(await cache.read(shared, story: 'main/0-1'), [9]);
+    expect(await cache.read(shared, story: 'main/0-1', allowShared: false), isNull);
     expect(await cache.size(), 3);
     await cache.deleteStory('main/0-1');
     expect(await cache.read(asset, story: 'main/0-1'), isNull);

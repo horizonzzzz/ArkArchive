@@ -21,7 +21,7 @@ class AssetStore {
   final FileCache _cache;
   final Map<Uri, Uint8List> _memory = {};
   final Map<(Uri, Object?, Object?), Future<Uint8List>> _pending = {};
-  final Map<Uri, Object> _writeErrors = {};
+  final Map<(Uri, String?), Object> _writeErrors = {};
   Future<void> _settingsWrite = Future.value();
   static final _settingsUri = Uri.parse(
     'https://local.invalid/story-cache-settings',
@@ -55,6 +55,7 @@ class AssetStore {
     final zoned = Zone.current[_storyScopeZone] as String?;
     return zoned ?? playbackScope;
   }
+
   bool get isMobile =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
@@ -252,12 +253,14 @@ class AssetStore {
   Future<void> setMobileDataApproved(bool value) async {
     if (_movingCache) throw StateError('缓存目录迁移中');
     mobileDataApproved = value;
-    final write = _settingsWrite.catchError((_) {}).then(
-      (_) => _cache.write(
-        _mobileDataApprovedUri,
-        Uint8List.fromList(utf8.encode(value ? '1' : '0')),
-      ),
-    );
+    final write = _settingsWrite
+        .catchError((_) {})
+        .then(
+          (_) => _cache.write(
+            _mobileDataApprovedUri,
+            Uint8List.fromList(utf8.encode(value ? '1' : '0')),
+          ),
+        );
     _settingsWrite = write;
     await write;
   }
@@ -364,7 +367,11 @@ class AssetStore {
     if (!['http', 'https'].contains(uri.scheme)) {
       throw FormatException('仅支持 HTTP(S) 资源：$uri');
     }
-    if (_memory.containsKey(uri)) return _memory[uri]!;
+    final isolatedDownload =
+        !shared &&
+        _storyScope() != null &&
+        Zone.current[_cacheDownloadZone] == true;
+    if (!isolatedDownload && _memory.containsKey(uri)) return _memory[uri]!;
     // 不同剧情对同一素材的下载互不合并：各自写入自己的目录；
     // 写入目标不同的请求共享结果会造成归属丢失。
     final key = (
@@ -386,8 +393,11 @@ class AssetStore {
     final story = shared ? null : _storyScope();
     Uint8List? bytes;
     try {
-      // 剧情层未命中时由 FileCache 回退到共享层，保留旧版隐性缓存。
-      bytes = await _cache.read(uri, story: story);
+      bytes = await _cache.read(
+        uri,
+        story: story,
+        allowShared: story == null || Zone.current[_cacheDownloadZone] != true,
+      );
       if (bytes != null && bytes.isEmpty) bytes = null;
     } catch (_) {
       // 缓存不可读时继续尝试网络，写入失败会在预加载结果中报告。
@@ -425,9 +435,9 @@ class AssetStore {
       }
       try {
         await _cache.write(uri, bytes, story: story);
-        _writeErrors.remove(uri);
+        _writeErrors.remove((uri, story));
       } catch (error) {
-        _writeErrors[uri] = error;
+        _writeErrors[(uri, story)] = error;
       }
     }
     return _memory[uri] = bytes;
@@ -455,9 +465,10 @@ class AssetStore {
         final uri = pending[next++];
         try {
           final bytes = shared ? await loadShared(uri) : await load(uri);
-          if (_writeErrors.containsKey(uri)) {
-            await _cache.write(uri, bytes, story: shared ? null : _storyScope());
-            _writeErrors.remove(uri);
+          final key = (uri, shared ? null : _storyScope());
+          if (_writeErrors.containsKey(key)) {
+            await _cache.write(uri, bytes, story: key.$2);
+            _writeErrors.remove(key);
           }
         } on CacheCancelled {
           rethrow;

@@ -546,8 +546,15 @@ class _StoryLauncherState extends State<StoryLauncher> {
       });
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('删除未完全完成：$error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('删除未完全完成：$error'),
+            action: SnackBarAction(
+              label: '重试',
+              onPressed: () => _deleteCached(entries),
+            ),
+          ),
+        );
       }
       try {
         final cached = await _repository.cachedStories();

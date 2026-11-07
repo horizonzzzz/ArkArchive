@@ -67,11 +67,16 @@ class _MemoryCache extends FileCache {
     }
     return bytes;
   }
+
   @override
   Future<String?> location() async => null;
   @override
-  Future<Uint8List?> read(Uri uri, {String? story}) async =>
-      stories[story]?[uri] ?? data[uri];
+  Future<Uint8List?> read(
+    Uri uri, {
+    String? story,
+    bool allowShared = true,
+  }) async =>
+      stories[story]?[uri] ?? (story == null || allowShared ? data[uri] : null);
   @override
   Future<void> write(Uri uri, Uint8List bytes, {String? story}) async {
     (story == null ? data : stories.putIfAbsent(story, () => {}))[uri] = bytes;

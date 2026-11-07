@@ -71,13 +71,19 @@ class FileCache {
     await web.window.caches.delete(_storyCacheName(story)).toDart;
   }
 
-  Future<Uint8List?> read(Uri uri, {String? story}) async {
+  Future<Uint8List?> read(
+    Uri uri, {
+    String? story,
+    bool allowShared = true,
+  }) async {
     final key = uri.toString().toJS;
     web.Response? response;
     if (story != null) {
       response = await (await _story(story)).match(key).toDart;
     }
-    response ??= await (await _shared).match(key).toDart;
+    if (story == null || allowShared) {
+      response ??= await (await _shared).match(key).toDart;
+    }
     if (response == null) return null;
     return (await response.arrayBuffer().toDart).toDart.asUint8List();
   }
