@@ -216,4 +216,56 @@ void main() {
       engine.dispose();
     }
   });
+  test('停顿点可索引，并在 seek 时重建默认分支状态', () async {
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[name="甲"]第一句
+[Decision(options="左;&禁用;右",values="1;2;3")]
+[Predicate(references="1")]
+[name="乙"]左分支
+[Predicate(references="3")]
+[name="丙"]右分支
+[Predicate]
+[name="丁"]结尾
+'''),
+      typingInterval: Duration.zero,
+    );
+    addTearDown(engine.dispose);
+
+    expect(engine.stopPoints.map((point) => point.kind), [
+      'dialogue',
+      'choice',
+      'dialogue',
+      'dialogue',
+      'dialogue',
+    ]);
+    expect(engine.progress, 0);
+
+    final reached = await engine.seekToStop(engine.stopPoints.last);
+
+    expect(reached, isTrue);
+    expect(engine.state.text, '结尾');
+    expect(engine.state.history.map((line) => line.text), ['第一句', '左分支', '结尾']);
+    expect(engine.state.choices, isEmpty);
+    expect(engine.progress, closeTo(1, 1 / 8));
+  });
+  test('停顿点预扫描会随剧情推进更新背景与立绘', () {
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[Background(image="room_a")]
+[Character(name="char_a")]
+[name="甲"]第一句
+[Background(image="room_b")]
+[Character(name="char_b")]
+[name="乙"]第二句
+'''),
+      typingInterval: Duration.zero,
+    );
+    addTearDown(engine.dispose);
+
+    final points = engine.stopPoints;
+    expect(points.map((point) => point.background), ['room_a', 'room_b']);
+    expect(points.first.characters.single.name, 'char_a');
+    expect(points.last.characters.single.name, 'char_b');
+  });
 }

@@ -11,6 +11,36 @@ import 'playback_checkpoint.dart';
 
 typedef CommandHandler = Future<void> Function(StoryCommand command);
 
+/// 停顿点缩影里仅保留基础背景与立绘槽位，不模拟复杂演出层。
+class StoryPreviewCharacter {
+  const StoryPreviewCharacter(this.slot, this.name);
+
+  final String slot, name;
+}
+
+/// 可供进度条吸附的剧情停顿点。commandIndex 是脚本命令索引，而不是行号。
+class StoryStopPoint {
+  const StoryStopPoint({
+    required this.commandIndex,
+    required this.line,
+    required this.speaker,
+    required this.text,
+    required this.kind,
+    this.background = '',
+    this.characters = const [],
+  });
+
+  final int commandIndex;
+  final int line;
+  final String speaker;
+  final String text;
+  final String kind;
+  final String background;
+  final List<StoryPreviewCharacter> characters;
+
+  bool get isChoice => kind == 'choice';
+}
+
 /// 播放速度档位；数值与参考端 button_auto / quick_play 的档位逐项一致。
 class PlaySpeed {
   const PlaySpeed({
@@ -404,7 +434,9 @@ class StoryEngine extends ChangeNotifier {
   String? _overlayLogSource;
   String _multilineName = '', _multilineText = '';
   bool _multilineEnd = false, _multilineLogged = false;
-  int _multilineShownChars = 0;
+  int _multilineShownChars = 0,
+      _multilineStopCommandIndex = -1,
+      _multilineLine = 0;
 
   // 跳过节点。
   final List<({int index, String mode})> _skipNodes = [];
@@ -855,6 +887,200 @@ class StoryEngine extends ChangeNotifier {
     if (c.flag(blockKey)) await future;
   }
 
+  /// 扫描可暂停的对白、多行对白和分支选项。
+  /// 这里仅建立脚本层索引，实际状态仍由 seekToStop 重放生成。
+  List<StoryStopPoint>? _cachedStopPoints;
+
+  List<StoryStopPoint> get stopPoints =>
+      _cachedStopPoints ??= _buildStopPoints();
+
+  List<StoryStopPoint> _buildStopPoints() {
+    final points = <StoryStopPoint>[];
+    final characters = <String, String>{};
+    var background = '';
+    for (var i = 0; i < script.commands.length; i++) {
+      final command = script.commands[i];
+      switch (command.tag) {
+        case 'background':
+        case 'backgroundtween':
+          background = command.value('image');
+          break;
+        case 'charslot':
+          final rawSlot = command.value('slot').trim();
+          if (rawSlot.isEmpty) {
+            characters.clear();
+          } else {
+            final slot = _slot(rawSlot);
+            final name = command.value('name');
+            if (name == 'char_empty') {
+              characters.remove(slot);
+            } else if (slot.isNotEmpty && name.isNotEmpty) {
+              characters[slot] = name;
+            }
+          }
+          break;
+        case 'character':
+          final first = command.value('name');
+          final second = command.value('name2');
+          if (first.isEmpty && second.isEmpty) {
+            characters.clear();
+          } else if (second.isEmpty) {
+            characters
+              ..removeWhere((slot, _) => slot != 'm')
+              ..remove('r');
+            if (first.isNotEmpty) characters['m'] = first;
+          } else {
+            characters
+              ..remove('m')
+              ..removeWhere((slot, _) => slot == 'l' || slot == 'r');
+            if (first.isNotEmpty) characters['l'] = first;
+            if (second.isNotEmpty) characters['r'] = second;
+          }
+          break;
+      }
+      final point = _stopPointFor(i, command);
+      if (point != null) {
+        points.add(
+          StoryStopPoint(
+            commandIndex: point.commandIndex,
+            line: point.line,
+            speaker: point.speaker,
+            text: point.text,
+            kind: point.kind,
+            background: background,
+            characters: List.unmodifiable([
+              for (final entry in characters.entries)
+                StoryPreviewCharacter(entry.key, entry.value),
+            ]),
+          ),
+        );
+      }
+    }
+    return List.unmodifiable(points);
+  }
+
+  StoryStopPoint? _stopPointFor(int index, StoryCommand command) {
+    final tag = command.tag;
+    if (tag == 'decision' && command.value('options').isNotEmpty) {
+      return StoryStopPoint(
+        commandIndex: index,
+        line: command.line,
+        speaker: '',
+        text: command.value('options').split(';').join(' / '),
+        kind: 'choice',
+      );
+    }
+    if ((tag == 'dialogue' ||
+            tag == 'dialog' ||
+            tag == 'aside' ||
+            tag == 'multiline' ||
+            tag == 'endtip') &&
+        command.text.isNotEmpty) {
+      return StoryStopPoint(
+        commandIndex: index,
+        line: command.line,
+        speaker: tag == 'aside' ? '' : command.value('name'),
+        text: command.text,
+        kind: tag == 'multiline' ? 'multiline' : 'dialogue',
+      );
+    }
+    return null;
+  }
+
+  double get progress => script.commands.isEmpty
+      ? 0
+      : (cursor / script.commands.length).clamp(0.0, 1.0);
+
+  /// 从头重放到指定停顿点，确保分支、舞台状态、历史和音轨保持一致。
+  /// 未记录的 decision 使用第一个未禁用选项，符合进度条跳转规则。
+  Future<bool> seekToStop(StoryStopPoint point) =>
+      seekToCommand(point.commandIndex);
+
+  Future<bool> seekToCommand(int commandIndex) async {
+    if (_disposed ||
+        state.metadata.isVideoOnly ||
+        commandIndex < 0 ||
+        commandIndex >= script.commands.length ||
+        _stopPointFor(commandIndex, script.commands[commandIndex]) == null) {
+      return false;
+    }
+
+    final wasPaused = paused;
+    _epoch++;
+    _cancelAnimations();
+    _cancelShake();
+    _resetMotions();
+    clearOverlays();
+    final metadata = state.metadata;
+    state = StageState()..metadata = metadata;
+    cursor = 0;
+    _playbackTrace.clear();
+    _resumeTracks.clear();
+    _skipNodeIndex = 0;
+    _currentSkipMode = 'skip';
+    _selectedValue = 0;
+    _predicates = null;
+    _decisionValues = const [];
+    _itemSlotInUse = false;
+    _resetMultiline();
+    finished = false;
+    _waitingInput = false;
+    _autoClickAt = -1;
+    _rebuilding = true;
+    running = true;
+    await audio.stop();
+
+    var reached = false;
+    try {
+      while (!_disposed &&
+          cursor <= commandIndex &&
+          cursor < script.commands.length) {
+        final index = cursor;
+        final command = script.commands[cursor++];
+        if (command.tag != 'predicate' && !_predicateActive()) continue;
+        if (command.tag != 'predicate' &&
+            command.tag == 'endtip' &&
+            autoMode == 'default') {
+          continue;
+        }
+
+        _waitingInput = false;
+        _playbackTrace.add(index);
+        await _executeCommand(command);
+
+        if (state.choices.isNotEmpty) {
+          if (index == commandIndex) {
+            reached = true;
+            break;
+          }
+          final choice = state.choices.firstWhere(
+            (candidate) => !candidate.disabled,
+            orElse: () => const Choice('', '', disabled: true),
+          );
+          if (choice.disabled || !_applyChoice(choice.value)) return false;
+        }
+        if (index == commandIndex) {
+          reached = _waitingInput;
+          break;
+        }
+      }
+
+      if (!reached || _disposed) return false;
+      for (final command in _resumeTracks.values) {
+        await audio.execute(command);
+      }
+      if (wasPaused) await audio.pause();
+      return true;
+    } finally {
+      _resumeTracks.clear();
+      _rebuilding = false;
+      running = false;
+      paused = wasPaused;
+      _lastTick = _nowUs();
+      _changed();
+    }
+  }
+
   Future<void> start() async {
     if (state.metadata.isVideoOnly) {
       finished = true;
@@ -1103,6 +1329,7 @@ class StoryEngine extends ChangeNotifier {
     String text, {
     int line = 0,
     int startIndex = 0,
+    int? stopCommandIndex,
     bool log = true,
   }) {
     _overlayLogSource = null;
@@ -1120,7 +1347,16 @@ class StoryEngine extends ChangeNotifier {
         ? 0
         : state.revealed * _typingScale * currentSpeed.typingMs;
     state.dialogueVisible = true;
-    if (log) state.history.add(DialogueLine(state.speaker, state.text, line));
+    if (log) {
+      state.history.add(
+        DialogueLine(
+          state.speaker,
+          state.text,
+          line,
+          stopCommandIndex: stopCommandIndex ?? cursor - 1,
+        ),
+      );
+    }
     _waitingInput = true;
     _changed();
   }
@@ -1131,7 +1367,11 @@ class StoryEngine extends ChangeNotifier {
       state.dialogueVisible = false;
       return;
     }
-    if (_multilineText.isEmpty) _multilineName = c.value('name');
+    if (_multilineText.isEmpty) {
+      _multilineName = c.value('name');
+      _multilineStopCommandIndex = cursor - 1;
+      _multilineLine = c.line;
+    }
     _multilineText += text;
     _multilineEnd = c.flag('end');
     final delayArg = double.tryParse(c.value('delay'));
@@ -1146,7 +1386,12 @@ class StoryEngine extends ChangeNotifier {
     _multilineShownChars = totalCharacters;
     if (_multilineEnd) {
       state.history.add(
-        DialogueLine(translate(_multilineName), _multilineText, c.line),
+        DialogueLine(
+          translate(_multilineName),
+          _multilineText,
+          c.line,
+          stopCommandIndex: _multilineStopCommandIndex,
+        ),
       );
       _resetMultiline();
     }
@@ -1156,7 +1401,12 @@ class StoryEngine extends ChangeNotifier {
     if (_multilineText.isEmpty || _multilineLogged) return;
     _multilineLogged = true;
     state.history.add(
-      DialogueLine(translate(_multilineName), _multilineText, cursor),
+      DialogueLine(
+        translate(_multilineName),
+        _multilineText,
+        _multilineLine,
+        stopCommandIndex: _multilineStopCommandIndex,
+      ),
     );
   }
 
@@ -1165,6 +1415,8 @@ class StoryEngine extends ChangeNotifier {
     _multilineText = '';
     _multilineEnd = false;
     _multilineShownChars = 0;
+    _multilineStopCommandIndex = -1;
+    _multilineLine = 0;
     _multilineLogged = false;
     _typingScale = 1;
   }

@@ -51,9 +51,17 @@ class StageCharacter {
 }
 
 class DialogueLine {
-  const DialogueLine(this.speaker, this.text, this.line);
+  const DialogueLine(
+    this.speaker,
+    this.text,
+    this.line, {
+    this.stopCommandIndex,
+  });
   final String speaker, text;
   final int line;
+
+  /// 与引擎停顿点对应的命令索引；旧版/非对白日志可为空。
+  final int? stopCommandIndex;
 }
 
 class Choice {

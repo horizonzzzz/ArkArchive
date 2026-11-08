@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -16,6 +17,7 @@ import '../runtime/story_engine.dart';
 import '../runtime/playback_checkpoint.dart';
 import '../stage_state.dart';
 import 'story_stage.dart';
+import 'stage_painter.dart';
 import 'story_text.dart';
 
 /// 可直接由关卡选择页打开；生命周期和资源不依赖应用入口。
@@ -52,6 +54,20 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   int _fastForwarding = 0;
   bool _resumeFailed = false, _progressErrorReported = false;
   int _savedRevision = 0;
+  bool _scrubbing = false;
+  double? _scrubPosition;
+  bool _scrubWasPaused = false;
+  bool _fineScrubbing = false;
+
+  bool _progressHovered = false, _previewVisible = false;
+  StoryStopPoint? _displayedPreviewStop;
+  Timer? _previewDebounce, _previewShowTimer, _previewDismissTimer;
+  Timer? _thumbSnapTimer;
+  bool _thumbSnapping = false;
+  StoryStopPoint? _previewStop;
+  double? _scrubDragOriginY;
+  double _scrubStartPosition = 0;
+  double _finePull = 0;
 
   /// 长按快进档位与换挡步长：每下滑一步（64 逻辑像素）提升一档。
   static const _fastForwardSpeeds = [2, 4, 8, 16];
@@ -202,6 +218,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _fastForwardEnd();
+    _cancelScrub();
     if (state != AppLifecycleState.resumed) {
       unawaited(_saveProgress(force: true));
     }
@@ -209,6 +226,479 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   }
 
   void _progressChanged() => unawaited(_saveProgress());
+  bool get _progressDisabled =>
+      !ready ||
+      engine.cursor == 0 ||
+      engine.finished ||
+      engine.state.metadata.isVideoOnly ||
+      engine.state.choices.isNotEmpty;
+
+  StoryStopPoint? _nearestStop(double position) {
+    final points = engine.stopPoints;
+    if (points.isEmpty) return null;
+    final target = position * engine.script.commands.length;
+    var low = 0, high = points.length;
+    while (low < high) {
+      final middle = (low + high) >> 1;
+      if (points[middle].commandIndex < target) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    if (low == 0) return points.first;
+    if (low == points.length) return points.last;
+    final before = points[low - 1], after = points[low];
+    return target - before.commandIndex <= after.commandIndex - target
+        ? before
+        : after;
+  }
+
+  void _startScrub(DragStartDetails details, double width) {
+    if (_progressDisabled) return;
+    _thumbSnapTimer?.cancel();
+    _thumbSnapping = false;
+    _previewDebounce?.cancel();
+    _previewShowTimer?.cancel();
+    _previewDismissTimer?.cancel();
+    _scrubbing = true;
+    _fineScrubbing = false;
+    _finePull = 0;
+    _scrubDragOriginY = details.localPosition.dy;
+    _scrubStartPosition = engine.progress;
+    _previewStop = null;
+    _displayedPreviewStop = null;
+    _previewVisible = false;
+    _scrubWasPaused = engine.paused;
+    if (!_scrubWasPaused) unawaited(engine.setPaused(true));
+    _previewShowTimer = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted || !_scrubbing) return;
+      setState(() => _previewVisible = true);
+    });
+    _updateScrub(details.localPosition.dx, width);
+  }
+
+  void _updateFineScrub(DragUpdateDetails details, double width) {
+    if (width <= 0 || _scrubPosition == null) return;
+    final pull = _finePull + details.delta.dy;
+    if (details.delta.dy < -4) {
+      _finePull = 0;
+      _fineScrubbing = false;
+      _setScrubPosition(
+        (_scrubPosition! + details.delta.dx / width).clamp(0.0, 1.0),
+      );
+      return;
+    }
+    _finePull = pull.clamp(0.0, 110.0);
+    final depth = (_finePull / 110).clamp(0.0, 1.0);
+    final eased = 1 - math.pow(1 - depth, 3).toDouble();
+    final sensitivity = 1 - .82 * eased;
+    _setScrubPosition(
+      (_scrubPosition! + details.delta.dx / width * sensitivity).clamp(
+        0.0,
+        1.0,
+      ),
+    );
+  }
+
+  void _setScrubPosition(double position) {
+    final stop = _nearestStop(position);
+    final changedStop = stop?.commandIndex != _previewStop?.commandIndex;
+    setState(() {
+      _scrubPosition = position;
+      _previewStop = stop;
+    });
+    if (!changedStop) return;
+    _previewDebounce?.cancel();
+    if (stop == null) {
+      setState(() => _displayedPreviewStop = null);
+      return;
+    }
+    _previewDebounce = Timer(const Duration(milliseconds: 80), () {
+      if (!mounted ||
+          !_scrubbing ||
+          _previewStop?.commandIndex != stop.commandIndex) {
+        return;
+      }
+      setState(() => _displayedPreviewStop = stop);
+    });
+  }
+
+  void _updateScrub(double dx, double width) {
+    if (_progressDisabled || width <= 0) return;
+    _setScrubPosition((dx / width).clamp(0.0, 1.0));
+  }
+
+  void _startFineScrub() {
+    if (!_scrubbing || _fineScrubbing) return;
+    _fineScrubbing = true;
+    _finePull = 0;
+  }
+
+  void _dismissPreview() {
+    _previewDebounce?.cancel();
+    _previewShowTimer?.cancel();
+    _previewDismissTimer?.cancel();
+    _previewVisible = false;
+    _previewDismissTimer = Timer(const Duration(milliseconds: 220), () {
+      if (!mounted || _scrubbing) return;
+      setState(() {
+        _previewStop = null;
+        _displayedPreviewStop = null;
+      });
+    });
+  }
+
+  void _finishScrub({bool allowSmallSeek = false}) {
+    if (!_scrubbing) return;
+    final position = _scrubPosition ?? engine.progress;
+    final moved = (position - _scrubStartPosition).abs();
+    final shouldSeek = allowSmallSeek || moved >= .015;
+    final target = shouldSeek ? _nearestStop(position) : null;
+    final wasPaused = _scrubWasPaused;
+    final snapPosition = target == null
+        ? _scrubStartPosition
+        : ((target.commandIndex + 1) / engine.script.commands.length).clamp(
+            0.0,
+            1.0,
+          );
+    setState(() {
+      _scrubbing = false;
+      _fineScrubbing = false;
+      _finePull = 0;
+      _scrubDragOriginY = null;
+      _scrubPosition = snapPosition;
+      _thumbSnapping = true;
+    });
+    _dismissPreview();
+    _thumbSnapTimer?.cancel();
+    _thumbSnapTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        if (target == null) _scrubPosition = null;
+        _thumbSnapping = false;
+      });
+    });
+    if (target == null) {
+      if (!wasPaused) unawaited(engine.setPaused(false));
+      return;
+    }
+    unawaited(() async {
+      await engine.seekToStop(target);
+      if (!mounted) return;
+      setState(() => _scrubPosition = null);
+      if (!wasPaused) await engine.setPaused(false);
+    }());
+  }
+
+  void _cancelScrub() {
+    if (!_scrubbing) return;
+    final wasPaused = _scrubWasPaused;
+    setState(() {
+      _scrubbing = false;
+      _fineScrubbing = false;
+      _finePull = 0;
+      _scrubDragOriginY = null;
+      _scrubPosition = null;
+    });
+    _dismissPreview();
+    if (!wasPaused) unawaited(engine.setPaused(false));
+  }
+
+  StageState _previewStageState(StoryStopPoint point) {
+    final state = StageState();
+    if (point.background.isNotEmpty) {
+      state.backgrounds.add(StageImage(point.background));
+    }
+    state.characters.addAll([
+      for (final character in point.characters)
+        StageCharacter(character.slot, character.name),
+    ]);
+    return state;
+  }
+
+  Widget _buildProgressBar() => AnimatedBuilder(
+    animation: engine,
+    builder: (context, _) {
+      final disabled = _progressDisabled;
+      final position = _scrubPosition ?? engine.progress;
+      final previewStop = _displayedPreviewStop;
+      final previewState = previewStop == null
+          ? null
+          : _previewStageState(previewStop);
+      final targetThickness = _fineScrubbing
+          ? 22.0
+          : _scrubbing
+          ? 10.0
+          : _progressHovered
+          ? 6.0
+          : 4.0;
+      return MouseRegion(
+        onEnter: (_) {
+          if (!_progressHovered) setState(() => _progressHovered = true);
+        },
+        onExit: (_) {
+          if (_progressHovered) setState(() => _progressHovered = false);
+        },
+        child: AnimatedOpacity(
+          opacity: engine.theaterMode ? 0 : (disabled ? .35 : 1),
+          duration: const Duration(milliseconds: 200),
+          child: IgnorePointer(
+            ignoring: engine.theaterMode,
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: MediaQuery.sizeOf(context).width * .025,
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) => GestureDetector(
+                  key: const Key('story-progress-hit-area'),
+                  behavior: HitTestBehavior.opaque,
+                  dragStartBehavior: DragStartBehavior.down,
+                  onTapUp: disabled
+                      ? null
+                      : (details) {
+                          _startScrub(
+                            DragStartDetails(
+                              localPosition: details.localPosition,
+                            ),
+                            constraints.maxWidth,
+                          );
+                          _finishScrub(allowSmallSeek: true);
+                        },
+                  onPanStart: disabled
+                      ? null
+                      : (details) => _startScrub(
+                          DragStartDetails(
+                            localPosition: details.localPosition,
+                          ),
+                          constraints.maxWidth,
+                        ),
+                  onPanUpdate: disabled
+                      ? null
+                      : (details) {
+                          final originY = _scrubDragOriginY;
+                          if (!_fineScrubbing &&
+                              originY != null &&
+                              details.localPosition.dy - originY > 24) {
+                            _startFineScrub();
+                          }
+                          if (_fineScrubbing) {
+                            _updateFineScrub(details, constraints.maxWidth);
+                          } else {
+                            _updateScrub(
+                              details.localPosition.dx,
+                              constraints.maxWidth,
+                            );
+                          }
+                        },
+                  onPanEnd: disabled ? null : (_) => _finishScrub(),
+                  onPanCancel: _cancelScrub,
+                  child: SizedBox(
+                    height: _scrubbing ? 200 : 28,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Align(
+                          alignment: Alignment.topCenter,
+                          child: SizedBox(
+                            key: const Key('story-progress-track'),
+                            width: double.infinity,
+                            height: 28,
+                            child: TweenAnimationBuilder<double>(
+                              tween: Tween<double>(
+                                begin: 4,
+                                end: targetThickness,
+                              ),
+                              duration: Duration(
+                                milliseconds: _fineScrubbing ? 160 : 120,
+                              ),
+                              curve: Curves.easeOutCubic,
+                              builder: (context, thickness, _) {
+                                final thumbRadius = thickness <= 10
+                                    ? 4 + (thickness - 4) * 2 / 3
+                                    : 8 + (thickness - 10) / 6;
+                                return TweenAnimationBuilder<double>(
+                                  tween: Tween<double>(end: position),
+                                  duration: Duration(
+                                    milliseconds: _thumbSnapping ? 300 : 0,
+                                  ),
+                                  curve: _thumbSnapping
+                                      ? Curves.easeOutBack
+                                      : Curves.linear,
+                                  builder: (context, animatedPosition, _) =>
+                                      CustomPaint(
+                                        painter: _ProgressTrackPainter(
+                                          value: animatedPosition,
+                                          disabled: disabled,
+                                          thickness: thickness,
+                                          thumbRadius: thumbRadius,
+                                        ),
+                                      ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        if (_fineScrubbing)
+                          const Positioned(
+                            left: 0,
+                            top: 30,
+                            child: IgnorePointer(
+                              child: Text(
+                                '精细定位 · 灵敏度降低',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                  backgroundColor: Color(0x66000000),
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (previewStop != null)
+                          AnimatedPositioned(
+                            duration: const Duration(milliseconds: 120),
+                            curve: Curves.easeOutCubic,
+                            left:
+                                ((constraints.maxWidth * position) -
+                                        constraints.maxWidth *
+                                            (_fineScrubbing ? .16 : .11))
+                                    .clamp(
+                                      0.0,
+                                      constraints.maxWidth *
+                                          (_fineScrubbing ? .68 : .78),
+                                    ),
+                            top: _fineScrubbing ? 68 : 36,
+                            child: IgnorePointer(
+                              child: AnimatedOpacity(
+                                opacity: _previewVisible && _scrubbing ? 1 : 0,
+                                duration: Duration(
+                                  milliseconds: _scrubbing ? 200 : 220,
+                                ),
+                                curve: Curves.easeOut,
+                                child: AnimatedScale(
+                                  scale: _previewVisible && _scrubbing
+                                      ? 1
+                                      : .97,
+                                  duration: Duration(
+                                    milliseconds: _scrubbing ? 200 : 220,
+                                  ),
+                                  curve: Curves.easeOutCubic,
+                                  alignment: Alignment.topCenter,
+                                  child: Container(
+                                    width:
+                                        constraints.maxWidth *
+                                        (_fineScrubbing ? .32 : .22),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(
+                                        alpha: .92,
+                                      ),
+                                      border: Border.all(color: Colors.white54),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Colors.black54,
+                                          blurRadius: 12,
+                                          offset: Offset(0, 6),
+                                        ),
+                                      ],
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        AspectRatio(
+                                          aspectRatio: 16 / 9,
+                                          child: AnimatedSwitcher(
+                                            duration: const Duration(
+                                              milliseconds: 160,
+                                            ),
+                                            switchInCurve: Curves.easeOutCubic,
+                                            switchOutCurve: Curves.easeOut,
+                                            transitionBuilder:
+                                                (child, animation) =>
+                                                    FadeTransition(
+                                                      opacity: animation,
+                                                      child: SlideTransition(
+                                                        position: Tween<Offset>(
+                                                          begin: const Offset(
+                                                            0,
+                                                            .04,
+                                                          ),
+                                                          end: Offset.zero,
+                                                        ).animate(animation),
+                                                        child: child,
+                                                      ),
+                                                    ),
+                                            child: FittedBox(
+                                              key: ValueKey(
+                                                previewStop.commandIndex,
+                                              ),
+                                              fit: BoxFit.cover,
+                                              child: SizedBox(
+                                                width: 1280,
+                                                height: 720,
+                                                child: CustomPaint(
+                                                  key: const Key(
+                                                    'story-progress-preview-stage',
+                                                  ),
+                                                  size: const Size(1280, 720),
+                                                  painter: StagePainter(
+                                                    previewState!,
+                                                    widget.story.catalog,
+                                                    textures,
+                                                    slideMask,
+                                                    slideMaskShader,
+                                                    sprites,
+                                                    fontFamily: fontFamily,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          child: AnimatedSwitcher(
+                                            duration: const Duration(
+                                              milliseconds: 160,
+                                            ),
+                                            child: Text(
+                                              '${previewStop.speaker.isEmpty ? '剧情' : previewStop.speaker}\n${previewStop.text}',
+                                              key: ValueKey(
+                                                'preview-text-${previewStop.commandIndex}',
+                                              ),
+                                              maxLines: 4,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12,
+                                                height: 1.25,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 
   Future<void> _saveProgress({bool force = false}) async {
     if (!ready ||
@@ -317,6 +807,11 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
         pageBuilder: (context, _, _) => _DialogueHistory(
           history: engine.state.history,
           fontFamily: fontFamily,
+          onSelect: (line) async {
+            Navigator.of(context).pop();
+            final target = line.stopCommandIndex;
+            if (target != null) await engine.seekToCommand(target);
+          },
         ),
       );
       if (mounted) setState(() => _showingHistory = false);
@@ -376,18 +871,22 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
         children: [
           if (ready && !_resumeFailed)
             Positioned.fill(
-              child: StoryStage(
-                engine: engine,
-                catalog: widget.story.catalog,
-                textures: textures,
-                slideMask: slideMask,
-                slideMaskShader: slideMaskShader,
-                sprites: sprites,
-                fontFamily: fontFamily,
-                showDialogue: !_showingHistory,
-                onFastForwardStart: _fastForwardStart,
-                onFastForwardMove: _fastForwardMove,
-                onFastForwardEnd: _fastForwardEnd,
+              child: AnimatedOpacity(
+                opacity: _scrubbing ? .55 : 1,
+                duration: const Duration(milliseconds: 120),
+                child: StoryStage(
+                  engine: engine,
+                  catalog: widget.story.catalog,
+                  textures: textures,
+                  slideMask: slideMask,
+                  slideMaskShader: slideMaskShader,
+                  sprites: sprites,
+                  fontFamily: fontFamily,
+                  showDialogue: !_showingHistory,
+                  onFastForwardStart: _fastForwardStart,
+                  onFastForwardMove: _fastForwardMove,
+                  onFastForwardEnd: _fastForwardEnd,
+                ),
               ),
             ),
           if (!ready)
@@ -461,6 +960,16 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                 );
               },
             ),
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+            left: 0,
+            right: 0,
+            top:
+                MediaQuery.sizeOf(context).height * .076 +
+                (_fineScrubbing ? 36 : 0),
+            child: _buildProgressBar(),
+          ),
           if (_fastForwarding > 0)
             Positioned.fill(
               child: IgnorePointer(
@@ -543,6 +1052,10 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _previewDebounce?.cancel();
+    _thumbSnapTimer?.cancel();
+    _previewShowTimer?.cancel();
+    _previewDismissTimer?.cancel();
     unawaited(_saveProgress());
     engine.removeListener(_progressChanged);
     slideMaskShader?.dispose();
@@ -561,11 +1074,60 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   }
 }
 
+class _ProgressTrackPainter extends CustomPainter {
+  const _ProgressTrackPainter({
+    required this.value,
+    required this.disabled,
+    required this.thickness,
+    required this.thumbRadius,
+  });
+
+  final double value, thickness, thumbRadius;
+  final bool disabled;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.height / 2;
+    final activeX = (size.width * value).clamp(0.0, size.width);
+    final track = Paint()
+      ..color = Colors.white.withValues(alpha: disabled ? .24 : .25)
+      ..strokeWidth = thickness
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset.zero.translate(0, center),
+      Offset(size.width, center),
+      track,
+    );
+    final active = Paint()
+      ..color = disabled ? Colors.white38 : Colors.white.withValues(alpha: .85)
+      ..strokeWidth = thickness
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(0, center), Offset(activeX, center), active);
+    canvas.drawCircle(
+      Offset(activeX, center),
+      thumbRadius,
+      Paint()..color = disabled ? Colors.white54 : Colors.white,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ProgressTrackPainter oldDelegate) =>
+      oldDelegate.value != value ||
+      oldDelegate.disabled != disabled ||
+      oldDelegate.thickness != thickness ||
+      oldDelegate.thumbRadius != thumbRadius;
+}
+
 class _DialogueHistory extends StatefulWidget {
-  const _DialogueHistory({required this.history, required this.fontFamily});
+  const _DialogueHistory({
+    required this.history,
+    required this.fontFamily,
+    required this.onSelect,
+  });
 
   final List<DialogueLine> history;
   final String fontFamily;
+  final Future<void> Function(DialogueLine line) onSelect;
 
   @override
   State<_DialogueHistory> createState() => _DialogueHistoryState();
@@ -613,37 +1175,42 @@ class _DialogueHistoryState extends State<_DialogueHistory> {
                     itemBuilder: (context, index) {
                       final line =
                           widget.history[widget.history.length - 1 - index];
-                      return Padding(
-                        padding: EdgeInsets.only(bottom: 22 * scale),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              width: constraints.maxWidth * .14,
-                              child: Text(
-                                line.speaker,
-                                textAlign: TextAlign.right,
-                                textScaler: TextScaler.noScaling,
-                                style: base.copyWith(
-                                  fontSize: 30 * scale,
-                                  color: const Color(0xff929292),
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: 32 * scale),
-                            Expanded(
-                              child: Text.rich(
-                                TextSpan(
-                                  children: storyTextSpans(
-                                    line.text,
-                                    line.text.runes.length,
-                                    base,
+                      return InkWell(
+                        onTap: line.stopCommandIndex == null
+                            ? null
+                            : () => widget.onSelect(line),
+                        child: Padding(
+                          padding: EdgeInsets.only(bottom: 22 * scale),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: constraints.maxWidth * .14,
+                                child: Text(
+                                  line.speaker,
+                                  textAlign: TextAlign.right,
+                                  textScaler: TextScaler.noScaling,
+                                  style: base.copyWith(
+                                    fontSize: 30 * scale,
+                                    color: const Color(0xff929292),
                                   ),
                                 ),
-                                textScaler: TextScaler.noScaling,
                               ),
-                            ),
-                          ],
+                              SizedBox(width: 32 * scale),
+                              Expanded(
+                                child: Text.rich(
+                                  TextSpan(
+                                    children: storyTextSpans(
+                                      line.text,
+                                      line.text.runes.length,
+                                      base,
+                                    ),
+                                  ),
+                                  textScaler: TextScaler.noScaling,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     },

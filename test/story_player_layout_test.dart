@@ -9,6 +9,7 @@ import 'package:arknights_story_player/story_player/script.dart';
 import 'package:arknights_story_player/story_player/stage_state.dart';
 import 'package:arknights_story_player/story_player/ui/story_player.dart';
 import 'package:arknights_story_player/story_player/ui/story_stage.dart';
+import 'package:arknights_story_player/story_player/ui/stage_painter.dart';
 
 Future<StoryStage> openPlayer(
   WidgetTester tester, {
@@ -20,7 +21,7 @@ Future<StoryStage> openPlayer(
     StoryDocument(
       title: '布局回归',
       script: StoryScript.parse(
-        '[header(is_autoable=$autoable)]\n第一句\n第二句\n第三句',
+        '[header(is_autoable=$autoable)]\n[Background(image="bg_a")]\n[Character(name="char_a")]\n第一句\n[Background(image="bg_b")]\n[Character(name="char_b")]\n第二句\n[Background(image="bg_c")]\n第三句',
       ),
     ),
     MediaCatalog(variables: {}, characters: {}, backgroundPpu: {}),
@@ -315,6 +316,63 @@ void main() {
     }
     expect(stage.engine.state.history, hasLength(1));
     expect(stage.engine.autoMode, 'default');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  testWidgets('进度条位于顶部并可拖动跳转到后续对白', (tester) async {
+    final stage = await openPlayer(tester);
+    final progress = find.byKey(const Key('story-progress-hit-area'));
+    expect(progress, findsOneWidget);
+    final rect = tester.getRect(progress);
+    expect(rect.top, greaterThan(35));
+    expect(rect.top, lessThan(80));
+    expect(rect.width, greaterThan(600));
+    expect(rect.height, closeTo(28, .01));
+    expect(
+      tester.getRect(find.byKey(const Key('story-progress-track'))).width,
+      greaterThan(600),
+    );
+    final trackPainter = find.descendant(
+      of: find.byKey(const Key('story-progress-track')),
+      matching: find.byType(CustomPaint),
+    );
+    expect(tester.getSize(trackPainter).width, greaterThan(600));
+
+    final gesture = await tester.startGesture(
+      Offset(rect.left + 8, rect.center.dy),
+    );
+    await gesture.moveTo(Offset(rect.right - 8, rect.center.dy));
+    await tester.pump(const Duration(milliseconds: 300));
+    final previewImage = find.byKey(const Key('story-progress-preview-stage'));
+    expect(previewImage, findsOneWidget);
+    expect(tester.getRect(previewImage).width, greaterThan(100));
+    final previewPainter =
+        tester.widget<CustomPaint>(previewImage).painter! as StagePainter;
+    expect(previewPainter.state.backgrounds.single.key, 'bg_c');
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(stage.engine.state.history.last.text, '第三句');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('下拉超过阈值进入精细定位并可取消', (tester) async {
+    await openPlayer(tester);
+    final progress = find.byKey(const Key('story-progress-hit-area'));
+    final before = tester.getRect(progress);
+    final gesture = await tester.startGesture(
+      Offset(before.center.dx, before.center.dy),
+    );
+    await gesture.moveBy(const Offset(0, 30));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(find.text('精细定位 · 灵敏度降低'), findsOneWidget);
+    await gesture.moveBy(const Offset(0, -6));
+    await tester.pump();
+    expect(find.text('精细定位 · 灵敏度降低'), findsNothing);
+    final after = tester.getRect(progress);
+    expect(after.top - before.top, closeTo(36, 1));
+    await gesture.cancel();
+    await tester.pumpAndSettle();
+    expect(find.text('精细定位 · 灵敏度降低'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }
