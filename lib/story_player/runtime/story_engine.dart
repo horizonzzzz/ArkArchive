@@ -13,9 +13,12 @@ typedef CommandHandler = Future<void> Function(StoryCommand command);
 
 /// 停顿点缩影里仅保留基础背景与立绘槽位，不模拟复杂演出层。
 class StoryPreviewCharacter {
-  const StoryPreviewCharacter(this.slot, this.name);
+  const StoryPreviewCharacter(this.slot, this.name, {this.brightness = 1});
 
   final String slot, name;
+
+  /// 立绘压暗：focus 语义下非聚焦槽位为 0.5，缩影如实还原。
+  final double brightness;
 }
 
 /// 可供进度条吸附的剧情停顿点。commandIndex 是脚本命令索引，而不是行号。
@@ -26,16 +29,28 @@ class StoryStopPoint {
     required this.speaker,
     required this.text,
     required this.kind,
+    this.ordinal = 0,
     this.background = '',
+    this.backgroundFit = '',
+    this.blockerDark = false,
     this.characters = const [],
   });
 
   final int commandIndex;
+
+  /// 1 起始的停顿点序号，供缩影卡「第 X / N 句」显示。
+  final int ordinal;
   final int line;
   final String speaker;
   final String text;
   final String kind;
   final String background;
+
+  /// 背景 screenadapt 缺省为空串（不缩放），与运行时 _image 语义一致。
+  final String backgroundFit;
+
+  /// 停顿点时刻处于全黑 blocker 的黑幕演出段。
+  final bool blockerDark;
   final List<StoryPreviewCharacter> characters;
 
   bool get isChoice => kind == 'choice';
@@ -896,45 +911,80 @@ class StoryEngine extends ChangeNotifier {
 
   List<StoryStopPoint> _buildStopPoints() {
     final points = <StoryStopPoint>[];
-    final characters = <String, String>{};
+    final names = <String, String>{};
+    final brightness = <String, double>{};
     var background = '';
+    var backgroundFit = '';
+    var blockerDark = false;
     for (var i = 0; i < script.commands.length; i++) {
       final command = script.commands[i];
       switch (command.tag) {
+        // BackgroundTween 只缩放/位移当前背景，没有 image 参数；
+        // 若在这里取 image 会把缩影背景清空，因此不参与摘要。
         case 'background':
-        case 'backgroundtween':
           background = command.value('image');
+          final adapt = command.args['screenadapt'];
+          backgroundFit = adapt is String ? adapt : '';
+          break;
+        case 'blocker':
+          blockerDark = _summarizeBlockerDark(command);
           break;
         case 'charslot':
           final rawSlot = command.value('slot').trim();
           if (rawSlot.isEmpty) {
-            characters.clear();
+            names.clear();
+            brightness.clear();
           } else {
             final slot = _slot(rawSlot);
+            final focusSlots = _focusSlots(command.value('focus', 'all'));
+            // _applyFocus 语义：聚焦外的既有立绘统一压暗。
+            for (final key in names.keys) {
+              brightness[key] = focusSlots.contains(key) ? 1.0 : .5;
+            }
             final name = command.value('name');
             if (name == 'char_empty') {
-              characters.remove(slot);
+              names.remove(slot);
+              brightness.remove(slot);
             } else if (slot.isNotEmpty && name.isNotEmpty) {
-              characters[slot] = name;
+              names[slot] = name;
+              brightness[slot] = focusSlots.contains(slot) ? 1.0 : .5;
             }
           }
           break;
         case 'character':
           final first = command.value('name');
           final second = command.value('name2');
+          final focus = command.number('focus').toInt();
           if (first.isEmpty && second.isEmpty) {
-            characters.clear();
+            names.clear();
+            brightness.clear();
           } else if (second.isEmpty) {
-            characters
+            names
               ..removeWhere((slot, _) => slot != 'm')
               ..remove('r');
-            if (first.isNotEmpty) characters['m'] = first;
+            brightness
+              ..removeWhere((slot, _) => slot != 'm')
+              ..remove('r');
+            if (first.isNotEmpty) {
+              names['m'] = first;
+              brightness['m'] = focus > 1 ? .5 : 1.0;
+            }
           } else {
-            characters
+            names
               ..remove('m')
               ..removeWhere((slot, _) => slot == 'l' || slot == 'r');
-            if (first.isNotEmpty) characters['l'] = first;
-            if (second.isNotEmpty) characters['r'] = second;
+            brightness
+              ..remove('m')
+              ..removeWhere((slot, _) => slot == 'l' || slot == 'r');
+            if (first.isNotEmpty) {
+              names['l'] = first;
+              brightness['l'] = focus > 1 ? .5 : 1.0;
+            }
+            if (second.isNotEmpty) {
+              names['r'] = second;
+              // 与 _legacyCharacter 一致：r 槽位 focus=0/2 时点亮，其余压暗。
+              brightness['r'] = focus == 0 || focus == 2 ? 1.0 : .5;
+            }
           }
           break;
       }
@@ -943,20 +993,42 @@ class StoryEngine extends ChangeNotifier {
         points.add(
           StoryStopPoint(
             commandIndex: point.commandIndex,
+            ordinal: points.length + 1,
             line: point.line,
             speaker: point.speaker,
             text: point.text,
             kind: point.kind,
             background: background,
+            backgroundFit: backgroundFit,
+            blockerDark: blockerDark,
             characters: List.unmodifiable([
-              for (final entry in characters.entries)
-                StoryPreviewCharacter(entry.key, entry.value),
+              for (final entry in names.entries)
+                StoryPreviewCharacter(
+                  entry.key,
+                  entry.value,
+                  brightness: brightness[entry.key] ?? 1,
+                ),
             ]),
           ),
         );
       }
     }
     return List.unmodifiable(points);
+  }
+
+  /// 摘要层判断停顿点是否处于全黑 blocker：无遮挡图、不透足够暗。
+  /// 只取动画终值（to 值），与 _blocker 的落点语义一致。
+  bool _summarizeBlockerDark(StoryCommand c) {
+    final style = c.value('style', 'default');
+    final hasImage = style == 'default' && c.value('image').isNotEmpty;
+    if (hasImage) return false;
+    final toA = c.args.containsKey('a')
+        ? (double.tryParse(c.value('a')) ?? 1).clamp(0.0, 1.0)
+        : 1.0;
+    if (toA < .6) return false;
+    double channel(String key) =>
+        (double.tryParse(c.value(key)) ?? 0).clamp(0.0, 1.0);
+    return channel('r') <= .05 && channel('g') <= .05 && channel('b') <= .05;
   }
 
   StoryStopPoint? _stopPointFor(int index, StoryCommand command) {
@@ -1031,18 +1103,20 @@ class StoryEngine extends ChangeNotifier {
     await audio.stop();
 
     var reached = false;
+    // warp 回环保护：正常剧本重放步数远小于脚本长度的常数倍；
+    // 回跳型 warp（可由自定义剧本构造）会让循环永不终止，超限即中止。
+    final maxSteps = script.commands.length * 8;
+    var steps = 0;
     try {
       while (!_disposed &&
           cursor <= commandIndex &&
           cursor < script.commands.length) {
         final index = cursor;
         final command = script.commands[cursor++];
+        if (++steps > maxSteps) break;
+        // endtip 不在此过滤：_executeCommand 内部有 _rebuilding 宽免，
+        // 与 restore 同路径，否则 default 模式下 seek 到 endtip 必然失败。
         if (command.tag != 'predicate' && !_predicateActive()) continue;
-        if (command.tag != 'predicate' &&
-            command.tag == 'endtip' &&
-            autoMode == 'default') {
-          continue;
-        }
 
         _waitingInput = false;
         _playbackTrace.add(index);

@@ -18,12 +18,18 @@ Future<StoryEngine> _mountPlayer(
     [],
   );
   await tester.runAsync(() async {
-    await tester.pumpWidget(MaterialApp(home: StoryPlayer(
-      story: story,
-      audio: SilentStoryAudio(),
-      resumable: resumable,
-      onProgress: (value) async { saved.add(value); },
-    )));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StoryPlayer(
+          story: story,
+          audio: SilentStoryAudio(),
+          resumable: resumable,
+          onProgress: (value) async {
+            saved.add(value);
+          },
+        ),
+      ),
+    );
     final deadline = DateTime.now().add(const Duration(seconds: 5));
     while (find.byType(StoryStage).evaluate().isEmpty &&
         DateTime.now().isBefore(deadline)) {
@@ -47,8 +53,11 @@ void main() {
 
   testWidgets('推进时保存，逐字显示不重复写入，后台补存，播完清除', (tester) async {
     final saved = <PlaybackCheckpoint?>[];
-    final engine = await _mountPlayer(tester,
-      script: StoryScript.parse('第一句\n第二句'), saved: saved);
+    final engine = await _mountPlayer(
+      tester,
+      script: StoryScript.parse('第一句\n第二句'),
+      saved: saved,
+    );
     await tester.tap(find.text('开始播放'));
     await tester.pump();
     expect(saved.length, 2);
@@ -66,9 +75,9 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump();
     expect(saved.length, 4);
-    expect(engine.paused, isTrue);
+    expect(engine.paused, isFalse);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await engine.setPaused(false);
+
     await engine.advance();
     await engine.advance();
     await tester.pump();

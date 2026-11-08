@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,7 @@ import 'package:arknights_story_player/story_player/ui/stage_painter.dart';
 Future<StoryStage> openPlayer(
   WidgetTester tester, {
   bool autoable = false,
+  String? script,
 }) async {
   final assets = AssetStore();
   addTearDown(assets.close);
@@ -21,7 +23,8 @@ Future<StoryStage> openPlayer(
     StoryDocument(
       title: '布局回归',
       script: StoryScript.parse(
-        '[header(is_autoable=$autoable)]\n[Background(image="bg_a")]\n[Character(name="char_a")]\n第一句\n[Background(image="bg_b")]\n[Character(name="char_b")]\n第二句\n[Background(image="bg_c")]\n第三句',
+        script ??
+            '[header(is_autoable=$autoable)]\n[Background(image="bg_a")]\n[Character(name="char_a")]\n第一句\n[Background(image="bg_b")]\n[Character(name="char_b")]\n第二句\n[Background(image="bg_c")]\n第三句',
       ),
     ),
     MediaCatalog(variables: {}, characters: {}, backgroundPpu: {}),
@@ -92,7 +95,7 @@ void main() {
     await tester.tap(find.byTooltip('对话记录'));
     await tester.pumpAndSettle();
 
-    expect(stage.engine.paused, isTrue);
+    expect(stage.engine.paused, isFalse);
     expect(
       tester.widget<StoryStage>(find.byType(StoryStage)).showDialogue,
       isFalse,
@@ -127,16 +130,16 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('空记录和诊断面板保留各自行为及原暂停状态', (tester) async {
+  testWidgets('空记录和诊断面板不暂停剧情', (tester) async {
     final stage = await openPlayer(tester);
     stage.engine.state.history.clear();
-    await stage.engine.setPaused(true);
+
     await tester.tap(find.byTooltip('对话记录'));
     await tester.pumpAndSettle();
     expect(find.text('暂无对话记录'), findsOneWidget);
     await tester.tap(find.byTooltip('关闭对话记录'));
     await tester.pumpAndSettle();
-    expect(stage.engine.paused, isTrue);
+    expect(stage.engine.paused, isFalse);
 
     stage.engine.warn('诊断测试信息');
     await tester.tap(find.byTooltip('资源与指令诊断'));
@@ -145,7 +148,7 @@ void main() {
     expect(find.text('诊断测试信息'), findsOneWidget);
     await tester.tap(find.byTooltip('关闭'));
     await tester.pumpAndSettle();
-    expect(stage.engine.paused, isTrue);
+    expect(stage.engine.paused, isFalse);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -348,6 +351,19 @@ void main() {
     final previewPainter =
         tester.widget<CustomPaint>(previewImage).painter! as StagePainter;
     expect(previewPainter.state.backgrounds.single.key, 'bg_c');
+
+    // 信息区跟随目标句切换（key 必须在 AnimatedSwitcher 直接 child 上，
+    // 否则跨句不更新且入场动画方向错乱）。
+    final ordinal = find.text('第 3 / 3 句');
+    expect(ordinal, findsOneWidget);
+    expect(find.textContaining('第三句'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 200));
+    // 位置回归：信息区文本不得越过画面区下边界（防「上浮黑块」复发）。
+    expect(
+      tester.getTopLeft(ordinal).dy,
+      greaterThanOrEqualTo(tester.getBottomRight(previewImage).dy - 2),
+    );
+
     await gesture.up();
     await tester.pumpAndSettle();
     expect(stage.engine.state.history.last.text, '第三句');
@@ -364,15 +380,214 @@ void main() {
     await gesture.moveBy(const Offset(0, 30));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
-    expect(find.text('精细定位 · 灵敏度降低'), findsOneWidget);
-    await gesture.moveBy(const Offset(0, -6));
+    // 面板随下拉深度连续展开（拉 30px：深度 30/110，下移 36×30/110≈9.8px）。
+    final partial = tester.getRect(progress);
+    expect(partial.top - before.top, closeTo(36 * 30 / 110, 1));
+    expect(find.byKey(const Key('story-fine-tag')), findsOneWidget);
+    expect(find.textContaining('×0.50'), findsOneWidget);
+    // 拉满深度：下移到位、灵敏度降到 ×0.18、出现停顿点刻度。
+    await gesture.moveBy(const Offset(0, 110));
+    // 隐式动画（duration 0）同样需要两帧：一帧触发、一帧 layout。
     await tester.pump();
-    expect(find.text('精细定位 · 灵敏度降低'), findsNothing);
-    final after = tester.getRect(progress);
-    expect(after.top - before.top, closeTo(36, 1));
+    await tester.pump();
+    final full = tester.getRect(progress);
+    expect(full.top - before.top, closeTo(36, 1));
+    expect(find.textContaining('×0.18'), findsOneWidget);
+    // C1 回归：上滑退出后小幅度下移不会立即重入。
+    await gesture.moveBy(const Offset(0, -2));
+    await tester.pump();
+    expect(find.byKey(const Key('story-fine-tag')), findsNothing);
+    await gesture.moveBy(const Offset(0, 5));
+    await tester.pump();
+    expect(find.byKey(const Key('story-fine-tag')), findsNothing);
+    // 重新下拉超过 24px 阈值才再次进入。
+    await gesture.moveBy(const Offset(0, 26));
+    await tester.pump();
+    expect(find.byKey(const Key('story-fine-tag')), findsOneWidget);
     await gesture.cancel();
     await tester.pumpAndSettle();
-    expect(find.text('精细定位 · 灵敏度降低'), findsNothing);
+    expect(find.byKey(const Key('story-fine-tag')), findsNothing);
+    expect(tester.getRect(progress).top, before.top);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('小幅拖动松手视为取消，明显拖动跳转到目标句', (tester) async {
+    final stage = await openPlayer(tester);
+    expect(stage.engine.state.text, '第一句');
+    final rect = tester.getRect(
+      find.byKey(const Key('story-progress-hit-area')),
+    );
+
+    // 增量拖动（§0/S4）：拖回原位松手即取消，不产生跳转。
+    final cancel = await tester.startGesture(
+      Offset(rect.center.dx, rect.center.dy),
+    );
+    await cancel.moveBy(const Offset(40, 0));
+    await tester.pump();
+    await cancel.moveBy(const Offset(-40, 0));
+    await tester.pump();
+    await cancel.up();
+    await tester.pumpAndSettle();
+    expect(stage.engine.state.text, '第一句');
+    expect(stage.engine.state.history, hasLength(1));
+
+    // 拖出 1.5% 以上才生效，吸附到最近停顿点。
+    final seek = await tester.startGesture(
+      Offset(rect.center.dx, rect.center.dy),
+    );
+    await seek.moveBy(const Offset(40, 0));
+    await tester.pump();
+    await seek.moveBy(const Offset(80, 0));
+    await tester.pump();
+    await seek.up();
+    // 黑闪期间（§5-A8）：黑闪层 target opacity 为 1。
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(
+      tester
+          .widget<AnimatedOpacity>(find.byKey(const Key('story-seek-flash')))
+          .opacity,
+      1,
+    );
+    await tester.pumpAndSettle();
+    expect(stage.engine.state.text, '第二句');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('选项面板弹出时进度条禁用，选择后恢复', (tester) async {
+    final stage = await openPlayer(
+      tester,
+      script: '[header]\n第一句\n[Decision(options="甲;乙",values="1;2")]\n[Predicate(references="1")]\n甲分支\n[Predicate]\n结尾',
+    );
+    GestureDetector hitArea() => tester.widget<GestureDetector>(
+      find.byKey(const Key('story-progress-hit-area')),
+    );
+    expect(hitArea().onPanStart, isNotNull);
+    // tap1 完成第一句打字，tap2 推进到 decision 面板。
+    await tester.tap(find.byKey(const Key('story-stage')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('story-stage')));
+    await tester.pump();
+    expect(stage.engine.state.choices, isNotEmpty);
+    expect(hitArea().onPanStart, isNull);
+    expect(hitArea().onTapUp, isNull);
+    await stage.engine.choose(stage.engine.state.choices.first.value);
+    await tester.pump();
+    expect(stage.engine.state.choices, isEmpty);
+    expect(hitArea().onPanStart, isNotNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Log 行点击跳转带黑闪，hover 提示且当前句高亮锚定', (tester) async {
+    final stage = await openPlayer(tester);
+    // 推进到第二句：Log 有两行，第二句为当前句。
+    await tester.tap(find.byKey(const Key('story-stage')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('story-stage')));
+    await tester.pump();
+    expect(stage.engine.state.text, '第二句');
+
+    await tester.tap(find.byTooltip('对话记录'));
+    await tester.pumpAndSettle();
+    expect(find.text('当前句 ▸'), findsOneWidget);
+    expect(find.text('跳转 ↵'), findsNothing);
+
+    // hover 第一句行显示跳转提示（仅指针设备）。
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(find.text('第一句')));
+    await tester.pump();
+    expect(find.text('跳转 ↵'), findsOneWidget);
+    await mouse.removePointer();
+    await tester.pump();
+    expect(find.text('跳转 ↵'), findsNothing);
+
+    await tester.tap(find.text('第一句'));
+    await tester.pump();
+    // 跳转通道黑闪中（§4：Log 与进度条走同一 seek 通道）。
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(
+      tester
+          .widget<AnimatedOpacity>(find.byKey(const Key('story-seek-flash')))
+          .opacity,
+      1,
+    );
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.pumpAndSettle();
+    expect(stage.engine.state.text, '第一句');
+    expect(stage.engine.state.revealed, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('进度条播放中自动隐藏，轻点呼出后再点跳转', (tester) async {
+    final stage = await openPlayer(tester);
+    double fadeOpacity() => tester
+        .widget<AnimatedOpacity>(find.byKey(const Key('story-progress-fade')))
+        .opacity;
+    final rect = tester.getRect(
+      find.byKey(const Key('story-progress-hit-area')),
+    );
+
+    // 开始播放的头几秒展示进度条（功能可发现性）。
+    expect(fadeOpacity(), 1);
+    // 3 秒无操作自动淡出，让位给剧情。
+    await tester.pump(const Duration(milliseconds: 3200));
+    expect(fadeOpacity(), 0);
+
+    // 隐藏态轻点条带：只呼出、不跳转（防误触）。
+    await tester.tapAt(Offset(rect.center.dx, rect.center.dy));
+    await tester.pump();
+    expect(fadeOpacity(), 1);
+    expect(stage.engine.state.text, '第一句');
+    expect(stage.engine.state.history, hasLength(1));
+
+    // 呼出后的第二次轻点：吸附最近停顿点跳转。
+    await tester.tapAt(Offset(rect.left + rect.width * .9, rect.center.dy));
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.pumpAndSettle();
+    expect(stage.engine.state.text, '第三句');
+    // seek 完成后展示 3 秒再淡出。
+    expect(fadeOpacity(), 1);
+    await tester.pump(const Duration(milliseconds: 3200));
+    expect(fadeOpacity(), 0);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('进度条隐藏后可直接拖动呼出，或经顶部热区 hover 呼出', (tester) async {
+    final stage = await openPlayer(tester);
+    double fadeOpacity() => tester
+        .widget<AnimatedOpacity>(find.byKey(const Key('story-progress-fade')))
+        .opacity;
+    final rect = tester.getRect(
+      find.byKey(const Key('story-progress-hit-area')),
+    );
+    await tester.pump(const Duration(milliseconds: 3200));
+    expect(fadeOpacity(), 0);
+
+    // 隐藏态直接拖动：呼出并进入正常增量拖动流程。
+    final gesture = await tester.startGesture(
+      Offset(rect.center.dx, rect.center.dy),
+    );
+    await gesture.moveBy(const Offset(40, 0));
+    await tester.pump();
+    expect(fadeOpacity(), 1);
+    await gesture.moveBy(const Offset(80, 0));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(stage.engine.state.text, '第二句');
+
+    // 隐藏后鼠标进入顶部宽热区（工具条区域）hover 呼出，移出后重新计时。
+    await tester.pump(const Duration(milliseconds: 3200));
+    expect(fadeOpacity(), 0);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(400, 30));
+    await tester.pump();
+    expect(fadeOpacity(), 1);
+    await mouse.moveTo(const Offset(400, 400));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 3200));
+    expect(fadeOpacity(), 0);
+    await mouse.removePointer();
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

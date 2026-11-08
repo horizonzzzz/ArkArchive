@@ -268,4 +268,158 @@ void main() {
     expect(points.first.characters.single.name, 'char_a');
     expect(points.last.characters.single.name, 'char_b');
   });
+
+  test('A1 回归：BackgroundTween 不清空缩影背景', () {
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[Background(image="room_a", screenadapt="showall")]
+[name="甲"]第一句
+[BackgroundTween(duration=1)]
+[name="乙"]第二句
+'''),
+      typingInterval: Duration.zero,
+    );
+    addTearDown(engine.dispose);
+
+    final points = engine.stopPoints;
+    expect(points, hasLength(2));
+    expect(points.last.background, 'room_a');
+    expect(points.last.backgroundFit, 'showall');
+  });
+
+  test('A2 回归：default 模式可 seek 到 endtip 停顿点', () async {
+    final engine = StoryEngine(
+      StoryScript.parse('[name="甲"]正文\n[endtip]尾句'),
+      typingInterval: Duration.zero,
+    );
+    addTearDown(engine.dispose);
+    expect(engine.autoMode, 'default');
+
+    final endtipPoint = engine.stopPoints.last;
+    expect(endtipPoint.text, '尾句');
+    expect(await engine.seekToStop(endtipPoint), isTrue);
+    expect(engine.state.text, '尾句');
+    expect(engine.state.dialogueVisible, isTrue);
+  });
+
+  test('A3 回归：seek 穿过 warp 回环时中止并返回 false', () async {
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[label(name="loop")]
+[name="甲"]第一句
+[warp(name="loop")]
+[name="乙"]结束
+'''),
+      typingInterval: Duration.zero,
+    );
+    addTearDown(engine.dispose);
+
+    final target = engine.stopPoints.last;
+    expect(target.text, '结束');
+    // 回跳型 warp 会让重放永不收敛；步数上限兜底，不挂死、如实失败。
+    expect(await engine.seekToStop(target), isFalse);
+  });
+
+  test('seek 可回退到已读停顿点并重建历史', () async {
+    final engine = StoryEngine(
+      StoryScript.parse('[name="甲"]第一句\n[name="乙"]第二句\n[name="丙"]第三句'),
+      typingInterval: Duration.zero,
+    );
+    addTearDown(engine.dispose);
+
+    expect(await engine.seekToStop(engine.stopPoints.last), isTrue);
+    expect(engine.state.text, '第三句');
+    expect(await engine.seekToStop(engine.stopPoints.first), isTrue);
+    expect(engine.state.text, '第一句');
+    expect(engine.state.history.map((line) => line.text), ['第一句']);
+    expect(engine.progress, closeTo(1 / 3, .01));
+  });
+
+  test('seek 后生成的断点可保存并沿 trace 往返恢复', () async {
+    final script = StoryScript.parse(
+      '[name="甲"]第一句\n[Decision(options="右;左",values="2;1")]\n[Predicate(references="2")]\n[name="乙"]右边\n[Predicate]\n[name="丙"]结尾',
+    );
+    final engine = StoryEngine(script, typingInterval: Duration.zero);
+    final restored = StoryEngine(script, typingInterval: Duration.zero);
+    addTearDown(engine.dispose);
+    addTearDown(restored.dispose);
+
+    expect(await engine.seekToStop(engine.stopPoints.last), isTrue);
+    expect(engine.state.text, '结尾');
+    final checkpoint = engine.checkpoint;
+    expect(checkpoint, isNotNull);
+
+    await restored.restore(checkpoint!);
+    expect(restored.state.text, '结尾');
+    expect(restored.state.history.map((line) => line.text), [
+      '第一句',
+      '右边',
+      '结尾',
+    ]);
+  });
+
+  test('重放路径上的全禁用 decision 使 seek 失败返回 false', () async {
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[name="甲"]第一句
+[Decision(options="&锁甲;锁乙",values="1;2")]
+[Predicate(references="1")]
+[name="乙"]第二句
+'''),
+      typingInterval: Duration.zero,
+    );
+    addTearDown(engine.dispose);
+
+    final target = engine.stopPoints.last;
+    expect(target.text, '第二句');
+    // 目标在 decision 之后，重放路径上没有可选分支，如实失败。
+    expect(await engine.seekToStop(target), isFalse);
+  });
+
+  test('multiline 停顿点可 seek 并重放到首段', () async {
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[name="甲"]引导句
+[multiline(name="甲")]多行第一段
+[multiline(name="甲", end=true)]多行第二段
+[name="甲"]收尾句
+'''),
+      typingInterval: Duration.zero,
+    );
+    addTearDown(engine.dispose);
+
+    final multilinePoint = engine.stopPoints.firstWhere(
+      (p) => p.kind == 'multiline',
+    );
+    expect(multilinePoint.text, '多行第一段');
+    expect(await engine.seekToStop(multilinePoint), isTrue);
+    expect(engine.state.text, '多行第一段');
+    expect(engine.state.dialogueVisible, isTrue);
+  });
+
+  test('摘要记录黑幕标记、focus 压暗与序号', () {
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[Blocker(a=1)]
+[name="甲"]黑幕中
+[Blocker(a=0)]
+[Character(name="a",name2="b",focus=1,fadetime=0)]
+[name="乙"]聚光句
+'''),
+      typingInterval: Duration.zero,
+    );
+    addTearDown(engine.dispose);
+
+    final points = engine.stopPoints;
+    expect(points, hasLength(2));
+    expect(points.first.blockerDark, isTrue);
+    expect(points.last.blockerDark, isFalse);
+    // focus=1：左亮右暗（旧版 Character 语义）。
+    expect(points.last.characters.map((c) => '${c.slot}:${c.brightness}'), [
+      'l:1.0',
+      'r:0.5',
+    ]);
+    expect(points.first.ordinal, 1);
+    expect(points.last.ordinal, 2);
+  });
 }

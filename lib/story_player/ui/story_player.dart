@@ -53,11 +53,16 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   bool _showingHistory = false;
   int _fastForwarding = 0;
   bool _resumeFailed = false, _progressErrorReported = false;
+
+  Future<void>? _seekQueue;
   int _savedRevision = 0;
   bool _scrubbing = false;
   double? _scrubPosition;
-  bool _scrubWasPaused = false;
+
   bool _fineScrubbing = false;
+
+  /// seek 黑闪：规格 §5-A8，100ms 入 / 180ms 出，掩盖确定性重放的瞬跳。
+  bool _seekFlash = false;
 
   bool _progressHovered = false, _previewVisible = false;
   StoryStopPoint? _displayedPreviewStop;
@@ -65,9 +70,18 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   Timer? _thumbSnapTimer;
   bool _thumbSnapping = false;
   StoryStopPoint? _previewStop;
-  double? _scrubDragOriginY;
+  double? _scrubDragOriginX, _scrubDragOriginY;
   double _scrubStartPosition = 0;
   double _finePull = 0;
+
+  /// 进度条自动隐藏（播放中让位给剧情）：顶部交互后显示约 3 秒，
+  /// 无操作则淡出；拖动/黑闪/悬停期间保持显示。
+  bool _progressRevealed = true;
+  bool _topAreaHovered = false;
+
+  int _lastCursor = 0;
+  Timer? _progressHideTimer;
+  static const _progressHideDelay = Duration(seconds: 3);
 
   /// 长按快进档位与换挡步长：每下滑一步（64 逻辑像素）提升一档。
   static const _fastForwardSpeeds = [2, 4, 8, 16];
@@ -191,7 +205,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     } catch (_) {
       _resumeFailed = true;
       engine.theaterMode = false;
-      await engine.setPaused(true);
+
       if (mounted) setState(() {});
       return;
     }
@@ -219,19 +233,53 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _fastForwardEnd();
     _cancelScrub();
+    _progressHideTimer?.cancel();
     if (state != AppLifecycleState.resumed) {
       unawaited(_saveProgress(force: true));
     }
-    if (state != AppLifecycleState.resumed) unawaited(engine.setPaused(true));
   }
 
-  void _progressChanged() => unawaited(_saveProgress());
+  void _progressChanged() {
+    unawaited(_saveProgress());
+    // 开始播放的头几秒展示进度条（功能可发现性），随后自动让位给剧情。
+    if (_lastCursor == 0 && engine.cursor > 0 && _progressRevealed) {
+      _scheduleProgressHide();
+    }
+    _lastCursor = engine.cursor;
+  }
+
   bool get _progressDisabled =>
       !ready ||
       engine.cursor == 0 ||
       engine.finished ||
       engine.state.metadata.isVideoOnly ||
       engine.state.choices.isNotEmpty;
+
+  /// 进度条当前的可见态：拖动、黑闪与用户主动呼出任一成立即显示。
+  bool get _progressActive => _scrubbing || _seekFlash || _progressRevealed;
+
+  /// 呼出进度条并重新计时。
+  void _revealProgress() {
+    _progressHideTimer?.cancel();
+    if (mounted && !_progressRevealed) {
+      setState(() => _progressRevealed = true);
+    }
+    _scheduleProgressHide();
+  }
+
+  void _scheduleProgressHide() {
+    _progressHideTimer?.cancel();
+    _progressHideTimer = Timer(_progressHideDelay, () {
+      if (!mounted) return;
+      // 拖动或悬停中延后重试。
+      if (_scrubbing || _topAreaHovered) {
+        _scheduleProgressHide();
+        return;
+      }
+      if (_seekFlash) return;
+      if (_progressRevealed) setState(() => _progressRevealed = false);
+    });
+  }
 
   StoryStopPoint? _nearestStop(double position) {
     final points = engine.stopPoints;
@@ -254,42 +302,55 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
         : after;
   }
 
-  void _startScrub(DragStartDetails details, double width) {
+  /// [seekToPointer] 仅为单击跳转服务：按下点即映射为位置；
+  /// 按住拖动（粗扫）走增量映射——起始比例 + Δx，拖回原位即可取消（§0/S4）。
+  void _startScrub(
+    DragStartDetails details,
+    double width, {
+    bool seekToPointer = false,
+  }) {
     if (_progressDisabled) return;
+
     _thumbSnapTimer?.cancel();
     _thumbSnapping = false;
     _previewDebounce?.cancel();
     _previewShowTimer?.cancel();
     _previewDismissTimer?.cancel();
+    _revealProgress();
     _scrubbing = true;
     _fineScrubbing = false;
     _finePull = 0;
+    _scrubDragOriginX = details.localPosition.dx;
     _scrubDragOriginY = details.localPosition.dy;
     _scrubStartPosition = engine.progress;
     _previewStop = null;
     _displayedPreviewStop = null;
     _previewVisible = false;
-    _scrubWasPaused = engine.paused;
-    if (!_scrubWasPaused) unawaited(engine.setPaused(true));
     _previewShowTimer = Timer(const Duration(milliseconds: 200), () {
       if (!mounted || !_scrubbing) return;
       setState(() => _previewVisible = true);
     });
-    _updateScrub(details.localPosition.dx, width);
+    _setScrubPosition(
+      seekToPointer
+          ? (details.localPosition.dx / width).clamp(0.0, 1.0)
+          : _scrubStartPosition,
+    );
   }
 
   void _updateFineScrub(DragUpdateDetails details, double width) {
     if (width <= 0 || _scrubPosition == null) return;
-    final pull = _finePull + details.delta.dy;
-    if (details.delta.dy < -4) {
+    if (details.delta.dy < 0) {
+      // 上滑退出精细模式，并以当前手柄位置重新建立粗扫基准，避免跳点。
       _finePull = 0;
       _fineScrubbing = false;
-      _setScrubPosition(
-        (_scrubPosition! + details.delta.dx / width).clamp(0.0, 1.0),
-      );
+      _scrubStartPosition = _scrubPosition!;
+      _scrubDragOriginX = details.localPosition.dx;
+      _scrubDragOriginY = details.localPosition.dy;
+      setState(() {});
       return;
     }
-    _finePull = pull.clamp(0.0, 110.0);
+
+    _finePull = (_finePull + details.delta.dy).clamp(0.0, 110.0);
     final depth = (_finePull / 110).clamp(0.0, 1.0);
     final eased = 1 - math.pow(1 - depth, 3).toDouble();
     final sensitivity = 1 - .82 * eased;
@@ -324,9 +385,15 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     });
   }
 
-  void _updateScrub(double dx, double width) {
+  /// 粗扫增量映射：位置 = 起始比例 + 手指相对按下点的水平位移（§1 位置层）。
+  void _applyCoarseScrub(DragUpdateDetails details, double width) {
     if (_progressDisabled || width <= 0) return;
-    _setScrubPosition((dx / width).clamp(0.0, 1.0));
+    final originX = _scrubDragOriginX;
+    if (originX == null || _scrubPosition == null) return;
+    _setScrubPosition(
+      (_scrubStartPosition + (details.localPosition.dx - originX) / width)
+          .clamp(0.0, 1.0),
+    );
   }
 
   void _startFineScrub() {
@@ -339,7 +406,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     _previewDebounce?.cancel();
     _previewShowTimer?.cancel();
     _previewDismissTimer?.cancel();
-    _previewVisible = false;
+    if (mounted && _previewVisible) setState(() => _previewVisible = false);
     _previewDismissTimer = Timer(const Duration(milliseconds: 220), () {
       if (!mounted || _scrubbing) return;
       setState(() {
@@ -354,8 +421,9 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     final position = _scrubPosition ?? engine.progress;
     final moved = (position - _scrubStartPosition).abs();
     final shouldSeek = allowSmallSeek || moved >= .015;
+
     final target = shouldSeek ? _nearestStop(position) : null;
-    final wasPaused = _scrubWasPaused;
+
     final snapPosition = target == null
         ? _scrubStartPosition
         : ((target.commandIndex + 1) / engine.script.commands.length).clamp(
@@ -366,6 +434,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
       _scrubbing = false;
       _fineScrubbing = false;
       _finePull = 0;
+      _scrubDragOriginX = null;
       _scrubDragOriginY = null;
       _scrubPosition = snapPosition;
       _thumbSnapping = true;
@@ -380,41 +449,146 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
       });
     });
     if (target == null) {
-      if (!wasPaused) unawaited(engine.setPaused(false));
+      _revealProgress();
       return;
     }
-    unawaited(() async {
-      await engine.seekToStop(target);
-      if (!mounted) return;
-      setState(() => _scrubPosition = null);
-      if (!wasPaused) await engine.setPaused(false);
-    }());
+    unawaited(_seekWithFlash(target.commandIndex));
+  }
+
+  /// 统一的 seek 通道：黑闪 100ms 入 → 确定性重放 → 黑闪 180ms 出（§5-A8）。
+  /// 进度条松手、单击轨道与 Log 行跳转共用。
+  Future<void> _seekWithFlash(int commandIndex) {
+    final previous = _seekQueue;
+    final operation = previous == null
+        ? _performSeekWithFlash(commandIndex)
+        : previous.then((_) => _performSeekWithFlash(commandIndex));
+    _seekQueue = operation;
+    return operation;
+  }
+
+  Future<void> _performSeekWithFlash(int commandIndex) async {
+    if (!mounted) return;
+
+    setState(() => _seekFlash = true);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    final ok = await engine.seekToCommand(commandIndex);
+
+    if (!mounted) return;
+    if (!ok) {
+      engine.warn('第 ${commandIndex + 1} 条命令附近无法跳转：可能存在无法自动抉择的全禁用分支。');
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('该处剧情暂不支持跳转')));
+    }
+    setState(() => _seekFlash = false);
+    // 快速连拖时旧回调不得清掉进行中的新拖动位置。
+    if (!mounted || _scrubbing) return;
+    setState(() => _scrubPosition = null);
+    _revealProgress();
   }
 
   void _cancelScrub() {
     if (!_scrubbing) return;
-    final wasPaused = _scrubWasPaused;
+
     setState(() {
       _scrubbing = false;
       _fineScrubbing = false;
       _finePull = 0;
+      _scrubDragOriginX = null;
       _scrubDragOriginY = null;
       _scrubPosition = null;
     });
     _dismissPreview();
-    if (!wasPaused) unawaited(engine.setPaused(false));
+
+    _revealProgress();
   }
+
+  /// 跨句滚动切换（§3-B）：新卡 translateY(60%→0) 淡入，旧卡 translateY(0→−115%) 淡出。
+  /// AnimatedSwitcher 对新旧 child 共用本 builder，按 key 判定方向。
+  Widget _rollTransition(
+    Widget child,
+    Animation<double> animation, {
+    required Key incomingKey,
+  }) {
+    final isIncoming = child.key == incomingKey;
+    final slide = isIncoming
+        ? Tween<Offset>(begin: const Offset(0, .6), end: Offset.zero)
+        : Tween<Offset>(begin: Offset.zero, end: const Offset(0, -1.15));
+    return FadeTransition(
+      opacity: animation,
+      child: SlideTransition(
+        position: slide.animate(animation),
+        child: RepaintBoundary(child: child),
+      ),
+    );
+  }
+
+  /// 信息区锁高布局（§3 callout「LayoutBuilder 锁高，交叠期间不跳动」）：
+  /// Stack 尺寸只由当前新卡决定，旧卡贴顶摆放且超出部分由 Stack 裁剪——
+  /// 旧卡滚出不会侵入画面区，新卡下方也不留黑块。
+  Widget _previewStackLayout(
+    Widget? currentChild,
+    List<Widget> previousChildren,
+  ) => Stack(
+    alignment: Alignment.topLeft,
+    clipBehavior: Clip.hardEdge,
+    children: [
+      for (final previous in previousChildren)
+        Positioned(top: 0, left: 0, child: previous),
+      if (currentChild != null)
+        Align(alignment: Alignment.topLeft, child: currentChild),
+    ],
+  );
 
   StageState _previewStageState(StoryStopPoint point) {
     final state = StageState();
     if (point.background.isNotEmpty) {
-      state.backgrounds.add(StageImage(point.background));
+      // fit 传摘要记录的 screenadapt（空串 = 不缩放），与真实舞台一致（所见即所得）。
+      state.backgrounds.add(
+        StageImage(point.background, fit: point.backgroundFit),
+      );
     }
     state.characters.addAll([
       for (final character in point.characters)
-        StageCharacter(character.slot, character.name),
+        StageCharacter(character.slot, character.name)
+          ..brightness = character.brightness,
     ]);
     return state;
+  }
+
+  /// 当前正在播放的停顿点序号（1 起始）；无障碍播报与排序行共用。
+  StoryStopPoint? get _currentStop {
+    if (engine.cursor == 0 || engine.state.history.isEmpty) return null;
+    int? stopIndex;
+    for (final line in engine.state.history) {
+      if (line.stopCommandIndex != null) stopIndex = line.stopCommandIndex;
+    }
+    if (stopIndex == null) return null;
+    final points = engine.stopPoints;
+    var low = 0, high = points.length;
+    while (low < high) {
+      final middle = (low + high) >> 1;
+      if (points[middle].commandIndex < stopIndex) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low < points.length && points[low].commandIndex == stopIndex
+        ? points[low]
+        : null;
+  }
+
+  /// 无障碍（§6）：Slider 语义，value 为句序号；前后停顿点可开调操作。
+  void _seekRelativeStop(int offset) {
+    final current = _currentStop;
+    final points = engine.stopPoints;
+    if (points.isEmpty || _progressDisabled) return;
+    var index = current == null
+        ? -1
+        : points.indexWhere((p) => p.commandIndex == current.commandIndex);
+    if (index < 0) index = 0;
+    final target = (index + offset).clamp(0, points.length - 1);
+    unawaited(_seekWithFlash(points[target].commandIndex));
   }
 
   Widget _buildProgressBar() => AnimatedBuilder(
@@ -426,22 +600,36 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
       final previewState = previewStop == null
           ? null
           : _previewStageState(previewStop);
-      final targetThickness = _fineScrubbing
-          ? 22.0
-          : _scrubbing
-          ? 10.0
+      // 精细展开跟手连续（§5-A5）：深度 0→1 驱动轨道厚度 10→22 与面板下移。
+      final fineDepth = (_finePull / 110).clamp(0.0, 1.0);
+      final fineEased = 1 - math.pow(1 - fineDepth, 3).toDouble();
+      final fineSensitivity = 1 - .82 * fineEased;
+      final targetThickness = _scrubbing
+          ? 10 + 12 * fineDepth
           : _progressHovered
           ? 6.0
           : 4.0;
+      final currentStop = _currentStop;
+      final stopPoints = engine.stopPoints;
       return MouseRegion(
         onEnter: (_) {
+          _revealProgress();
           if (!_progressHovered) setState(() => _progressHovered = true);
         },
         onExit: (_) {
           if (_progressHovered) setState(() => _progressHovered = false);
         },
         child: AnimatedOpacity(
-          opacity: engine.theaterMode ? 0 : (disabled ? .35 : 1),
+          key: const Key('story-progress-fade'),
+          // 剧场模式与未开始完全不显示；其余隐藏态只受自动隐藏控制，
+          // choices/结束等禁用态沿用 .35 半透明告知。
+          opacity:
+              engine.theaterMode ||
+                  !ready ||
+                  engine.cursor == 0 ||
+                  !_progressActive
+              ? 0
+              : (disabled ? .35 : 1),
           duration: const Duration(milliseconds: 200),
           child: IgnorePointer(
             ignoring: engine.theaterMode,
@@ -450,245 +638,358 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                 horizontal: MediaQuery.sizeOf(context).width * .025,
               ),
               child: LayoutBuilder(
-                builder: (context, constraints) => GestureDetector(
-                  key: const Key('story-progress-hit-area'),
-                  behavior: HitTestBehavior.opaque,
-                  dragStartBehavior: DragStartBehavior.down,
-                  onTapUp: disabled
-                      ? null
-                      : (details) {
-                          _startScrub(
+                builder: (context, constraints) => Semantics(
+                  label: '剧情进度',
+                  value: currentStop == null || stopPoints.isEmpty
+                      ? '未开始'
+                      : '第 ${currentStop.ordinal} / ${stopPoints.length} 句',
+                  increasedValue: '跳到下一句',
+                  decreasedValue: '跳到上一句',
+                  onIncrease: disabled ? null : () => _seekRelativeStop(1),
+                  onDecrease: disabled ? null : () => _seekRelativeStop(-1),
+                  child: GestureDetector(
+                    key: const Key('story-progress-hit-area'),
+                    behavior: HitTestBehavior.opaque,
+                    dragStartBehavior: DragStartBehavior.down,
+                    onTapUp: disabled
+                        ? null
+                        : (details) {
+                            // 隐藏态轻点只呼出不跳转（防误触）；
+                            // 显示态轻点才吸附最近停顿点跳转。
+                            if (!_progressActive) {
+                              _revealProgress();
+                              return;
+                            }
+                            _startScrub(
+                              DragStartDetails(
+                                localPosition: details.localPosition,
+                              ),
+                              constraints.maxWidth,
+                              seekToPointer: true,
+                            );
+                            _finishScrub(allowSmallSeek: true);
+                          },
+                    onPanStart: disabled
+                        ? null
+                        : (details) => _startScrub(
                             DragStartDetails(
                               localPosition: details.localPosition,
                             ),
                             constraints.maxWidth,
-                          );
-                          _finishScrub(allowSmallSeek: true);
-                        },
-                  onPanStart: disabled
-                      ? null
-                      : (details) => _startScrub(
-                          DragStartDetails(
-                            localPosition: details.localPosition,
                           ),
-                          constraints.maxWidth,
-                        ),
-                  onPanUpdate: disabled
-                      ? null
-                      : (details) {
-                          final originY = _scrubDragOriginY;
-                          if (!_fineScrubbing &&
-                              originY != null &&
-                              details.localPosition.dy - originY > 24) {
-                            _startFineScrub();
-                          }
-                          if (_fineScrubbing) {
-                            _updateFineScrub(details, constraints.maxWidth);
-                          } else {
-                            _updateScrub(
-                              details.localPosition.dx,
-                              constraints.maxWidth,
-                            );
-                          }
-                        },
-                  onPanEnd: disabled ? null : (_) => _finishScrub(),
-                  onPanCancel: _cancelScrub,
-                  child: SizedBox(
-                    height: _scrubbing ? 200 : 28,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Align(
-                          alignment: Alignment.topCenter,
-                          child: SizedBox(
-                            key: const Key('story-progress-track'),
-                            width: double.infinity,
-                            height: 28,
-                            child: TweenAnimationBuilder<double>(
-                              tween: Tween<double>(
-                                begin: 4,
-                                end: targetThickness,
+                    onPanUpdate: disabled
+                        ? null
+                        : (details) {
+                            final originY = _scrubDragOriginY;
+                            if (!_fineScrubbing &&
+                                originY != null &&
+                                details.localPosition.dy - originY > 24) {
+                              _startFineScrub();
+                            }
+                            if (_fineScrubbing) {
+                              _updateFineScrub(details, constraints.maxWidth);
+                            } else {
+                              _applyCoarseScrub(details, constraints.maxWidth);
+                            }
+                          },
+                    onPanEnd: disabled ? null : (_) => _finishScrub(),
+                    onPanCancel: _cancelScrub,
+                    child: SizedBox(
+                      height: _scrubbing ? 200 : 28,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Align(
+                            alignment: Alignment.topCenter,
+                            child: SizedBox(
+                              key: const Key('story-progress-track'),
+                              width: double.infinity,
+                              height: 28,
+                              child: TweenAnimationBuilder<double>(
+                                tween: Tween<double>(
+                                  begin: 4,
+                                  end: targetThickness,
+                                ),
+                                // 精细跟手时不加缓动；按下展开 120ms（§5-A2），hover 增厚 80ms（§5-A1）。
+                                duration: Duration(
+                                  milliseconds: _scrubbing
+                                      ? (fineDepth > 0 ? 0 : 120)
+                                      : 80,
+                                ),
+                                curve: Curves.easeOutCubic,
+                                builder: (context, thickness, _) {
+                                  final thumbRadius = thickness <= 10
+                                      ? 4 + (thickness - 4) * 2 / 3
+                                      : 8 + (thickness - 10) / 6;
+                                  return TweenAnimationBuilder<double>(
+                                    tween: Tween<double>(end: position),
+                                    duration: Duration(
+                                      milliseconds: _thumbSnapping ? 300 : 0,
+                                    ),
+                                    curve: _thumbSnapping
+                                        ? Curves.easeOutBack
+                                        : Curves.linear,
+                                    builder: (context, animatedPosition, _) =>
+                                        CustomPaint(
+                                          painter: _ProgressTrackPainter(
+                                            value: animatedPosition,
+                                            disabled: disabled,
+                                            thickness: thickness,
+                                            thumbRadius: thumbRadius,
+                                            // 精细模式刻度点（S2）：随展开淡入。
+                                            tickAlpha: _fineScrubbing
+                                                ? fineEased
+                                                : 0,
+                                            tickFractions: [
+                                              for (final stop in stopPoints)
+                                                (stop.commandIndex + 1) /
+                                                    engine
+                                                        .script
+                                                        .commands
+                                                        .length,
+                                            ],
+                                          ),
+                                        ),
+                                  );
+                                },
                               ),
+                            ),
+                          ),
+                          if (_fineScrubbing)
+                            Positioned(
+                              key: const Key('story-fine-tag'),
+                              left: 0,
+                              top: 30,
+                              child: IgnorePointer(
+                                child: Text(
+                                  // 实时倍率（§5-A5）：1.0 → 0.18 随下拉深度连续变化。
+                                  '精细定位 · 灵敏度 ×${fineSensitivity.toStringAsFixed(2)} · 拉得越深越慢',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                    backgroundColor: Color(0x66000000),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (previewStop != null)
+                            AnimatedPositioned(
+                              // 跟手连续：精细展开时卡宽 22%→32%、下沉 36→68px（S2/§5-A5）。
                               duration: Duration(
-                                milliseconds: _fineScrubbing ? 160 : 120,
+                                milliseconds: _fineScrubbing ? 0 : 120,
                               ),
                               curve: Curves.easeOutCubic,
-                              builder: (context, thickness, _) {
-                                final thumbRadius = thickness <= 10
-                                    ? 4 + (thickness - 4) * 2 / 3
-                                    : 8 + (thickness - 10) / 6;
-                                return TweenAnimationBuilder<double>(
-                                  tween: Tween<double>(end: position),
-                                  duration: Duration(
-                                    milliseconds: _thumbSnapping ? 300 : 0,
-                                  ),
-                                  curve: _thumbSnapping
-                                      ? Curves.easeOutBack
-                                      : Curves.linear,
-                                  builder: (context, animatedPosition, _) =>
-                                      CustomPaint(
-                                        painter: _ProgressTrackPainter(
-                                          value: animatedPosition,
-                                          disabled: disabled,
-                                          thickness: thickness,
-                                          thumbRadius: thumbRadius,
-                                        ),
-                                      ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        if (_fineScrubbing)
-                          const Positioned(
-                            left: 0,
-                            top: 30,
-                            child: IgnorePointer(
-                              child: Text(
-                                '精细定位 · 灵敏度降低',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 11,
-                                  backgroundColor: Color(0x66000000),
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (previewStop != null)
-                          AnimatedPositioned(
-                            duration: const Duration(milliseconds: 120),
-                            curve: Curves.easeOutCubic,
-                            left:
-                                ((constraints.maxWidth * position) -
+                              left:
+                                  ((constraints.maxWidth * position) -
+                                          constraints.maxWidth *
+                                              (.11 + .05 * fineDepth))
+                                      .clamp(
+                                        0.0,
                                         constraints.maxWidth *
-                                            (_fineScrubbing ? .16 : .11))
-                                    .clamp(
-                                      0.0,
-                                      constraints.maxWidth *
-                                          (_fineScrubbing ? .68 : .78),
-                                    ),
-                            top: _fineScrubbing ? 68 : 36,
-                            child: IgnorePointer(
-                              child: AnimatedOpacity(
-                                opacity: _previewVisible && _scrubbing ? 1 : 0,
-                                duration: Duration(
-                                  milliseconds: _scrubbing ? 200 : 220,
-                                ),
-                                curve: Curves.easeOut,
-                                child: AnimatedScale(
-                                  scale: _previewVisible && _scrubbing
+                                            (.78 - .10 * fineDepth),
+                                      ),
+                              top: 36 + 32 * fineDepth,
+                              child: IgnorePointer(
+                                child: AnimatedOpacity(
+                                  opacity: _previewVisible && _scrubbing
                                       ? 1
-                                      : .97,
+                                      : 0,
                                   duration: Duration(
                                     milliseconds: _scrubbing ? 200 : 220,
                                   ),
-                                  curve: Curves.easeOutCubic,
-                                  alignment: Alignment.topCenter,
-                                  child: Container(
-                                    width:
-                                        constraints.maxWidth *
-                                        (_fineScrubbing ? .32 : .22),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withValues(
-                                        alpha: .92,
-                                      ),
-                                      border: Border.all(color: Colors.white54),
-                                      boxShadow: const [
-                                        BoxShadow(
-                                          color: Colors.black54,
-                                          blurRadius: 12,
-                                          offset: Offset(0, 6),
-                                        ),
-                                      ],
+                                  curve: Curves.easeOut,
+                                  child: AnimatedScale(
+                                    scale: _previewVisible && _scrubbing
+                                        ? 1
+                                        : .97,
+                                    duration: Duration(
+                                      milliseconds: _scrubbing ? 200 : 220,
                                     ),
-                                    clipBehavior: Clip.antiAlias,
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        AspectRatio(
-                                          aspectRatio: 16 / 9,
-                                          child: AnimatedSwitcher(
-                                            duration: const Duration(
-                                              milliseconds: 160,
-                                            ),
-                                            switchInCurve: Curves.easeOutCubic,
-                                            switchOutCurve: Curves.easeOut,
-                                            transitionBuilder:
-                                                (child, animation) =>
-                                                    FadeTransition(
-                                                      opacity: animation,
-                                                      child: SlideTransition(
-                                                        position: Tween<Offset>(
-                                                          begin: const Offset(
-                                                            0,
-                                                            .04,
+                                    curve: Curves.easeOutCubic,
+                                    alignment: Alignment.topCenter,
+                                    child: Container(
+                                      width:
+                                          constraints.maxWidth *
+                                          (.22 + .10 * fineDepth),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withValues(
+                                          alpha: .92,
+                                        ),
+                                        border: Border.all(
+                                          color: Colors.white54,
+                                        ),
+                                        boxShadow: const [
+                                          BoxShadow(
+                                            color: Colors.black54,
+                                            blurRadius: 12,
+                                            offset: Offset(0, 6),
+                                          ),
+                                        ],
+                                      ),
+                                      clipBehavior: Clip.antiAlias,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          AspectRatio(
+                                            aspectRatio: 16 / 9,
+                                            child: AnimatedSwitcher(
+                                              duration: const Duration(
+                                                milliseconds: 160,
+                                              ),
+                                              switchInCurve:
+                                                  Curves.easeOutCubic,
+                                              switchOutCurve: Curves.easeOut,
+                                              // 滚动式切换（§3-B）：新卡自下方 60% 滑入，
+                                              // 旧卡向上 -115% 滚出；交叠期 RepaintBoundary
+                                              // 隔离两块 1280x720 画面，避免快扫掉帧。
+                                              transitionBuilder:
+                                                  (
+                                                    child,
+                                                    animation,
+                                                  ) => _rollTransition(
+                                                    child,
+                                                    animation,
+                                                    // 黑幕态与画面态 key 不同，入场方向都要按「新卡」判定。
+                                                    incomingKey:
+                                                        previewStop.blockerDark
+                                                        ? ValueKey(
+                                                            'blocker-${previewStop.commandIndex}',
+                                                          )
+                                                        : ValueKey(
+                                                            previewStop
+                                                                .commandIndex,
                                                           ),
-                                                          end: Offset.zero,
-                                                        ).animate(animation),
-                                                        child: child,
+                                                  ),
+                                              child: previewStop.blockerDark
+                                                  ? DecoratedBox(
+                                                      key: ValueKey(
+                                                        'blocker-${previewStop.commandIndex}',
+                                                      ),
+                                                      decoration:
+                                                          const BoxDecoration(
+                                                            color: Colors.black,
+                                                          ),
+                                                      child: const Center(
+                                                        child: Text(
+                                                          '黑幕演出',
+                                                          style: TextStyle(
+                                                            color:
+                                                                Colors.white54,
+                                                            fontSize: 13,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    )
+                                                  : FittedBox(
+                                                      key: ValueKey(
+                                                        previewStop
+                                                            .commandIndex,
+                                                      ),
+                                                      fit: BoxFit.cover,
+                                                      child: SizedBox(
+                                                        width: 1280,
+                                                        height: 720,
+                                                        child: CustomPaint(
+                                                          key: const Key(
+                                                            'story-progress-preview-stage',
+                                                          ),
+                                                          size: const Size(
+                                                            1280,
+                                                            720,
+                                                          ),
+                                                          painter: StagePainter(
+                                                            previewState!,
+                                                            widget
+                                                                .story
+                                                                .catalog,
+                                                            textures,
+                                                            slideMask,
+                                                            slideMaskShader,
+                                                            sprites,
+                                                            fontFamily:
+                                                                fontFamily,
+                                                          ),
+                                                        ),
                                                       ),
                                                     ),
-                                            child: FittedBox(
-                                              key: ValueKey(
-                                                previewStop.commandIndex,
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 8,
+                                            ),
+                                            child: AnimatedSwitcher(
+                                              duration: const Duration(
+                                                milliseconds: 160,
                                               ),
-                                              fit: BoxFit.cover,
-                                              child: SizedBox(
-                                                width: 1280,
-                                                height: 720,
-                                                child: CustomPaint(
-                                                  key: const Key(
-                                                    'story-progress-preview-stage',
+                                              switchInCurve:
+                                                  Curves.easeOutCubic,
+                                              switchOutCurve: Curves.easeOut,
+                                              layoutBuilder:
+                                                  _previewStackLayout,
+                                              transitionBuilder:
+                                                  (
+                                                    child,
+                                                    animation,
+                                                  ) => _rollTransition(
+                                                    child,
+                                                    animation,
+                                                    incomingKey: ValueKey(
+                                                      'preview-text-${previewStop.commandIndex}',
+                                                    ),
                                                   ),
-                                                  size: const Size(1280, 720),
-                                                  painter: StagePainter(
-                                                    previewState!,
-                                                    widget.story.catalog,
-                                                    textures,
-                                                    slideMask,
-                                                    slideMaskShader,
-                                                    sprites,
-                                                    fontFamily: fontFamily,
-                                                  ),
+                                              // 无障碍（§6）：缩影卡台词同步 liveRegion。
+                                              // key 必须挂在 AnimatedSwitcher 的直接 child 上，
+                                              // 否则跨句不触发切换、滚动方向判定也会失效。
+                                              child: Semantics(
+                                                key: ValueKey(
+                                                  'preview-text-${previewStop.commandIndex}',
+                                                ),
+                                                liveRegion: true,
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment
+                                                          .stretch,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      '第 ${previewStop.ordinal} / ${stopPoints.length} 句',
+                                                      style: const TextStyle(
+                                                        color: Colors.white54,
+                                                        fontSize: 11,
+                                                        height: 1.2,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      '${previewStop.speaker.isEmpty ? '剧情' : previewStop.speaker}\n${previewStop.text}',
+                                                      maxLines: 4,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 12,
+                                                        height: 1.25,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 8,
-                                          ),
-                                          child: AnimatedSwitcher(
-                                            duration: const Duration(
-                                              milliseconds: 160,
-                                            ),
-                                            child: Text(
-                                              '${previewStop.speaker.isEmpty ? '剧情' : previewStop.speaker}\n${previewStop.text}',
-                                              key: ValueKey(
-                                                'preview-text-${previewStop.commandIndex}',
-                                              ),
-                                              maxLines: 4,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 12,
-                                                height: 1.25,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -727,8 +1028,6 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
 
   Future<void> _showLog({bool diagnostics = false}) async {
     _fastForwardEnd();
-    final wasPaused = engine.paused;
-    await engine.setPaused(true);
     if (!mounted) return;
     if (diagnostics) {
       var copyStatus = '复制全部';
@@ -810,13 +1109,14 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
           onSelect: (line) async {
             Navigator.of(context).pop();
             final target = line.stopCommandIndex;
-            if (target != null) await engine.seekToCommand(target);
+            if (target == null) return;
+            // Log 跳转与进度条走同一 seek 通道（§4）：黑闪 + 确定性重放。
+            await _seekWithFlash(target);
           },
         ),
       );
       if (mounted) setState(() => _showingHistory = false);
     }
-    if (mounted && !wasPaused) await engine.setPaused(false);
   }
 
   void _setFastForward(int multiplier) {
@@ -908,7 +1208,6 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                   const Text('观看断点已失效，无法恢复原观看位置。'),
                   TextButton(
                     onPressed: () async {
-                      await engine.setPaused(false);
                       await engine.restart();
                       if (!mounted) return;
                       setState(() => _resumeFailed = false);
@@ -961,13 +1260,17 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
               },
             ),
           AnimatedPositioned(
-            duration: const Duration(milliseconds: 160),
+            // 工具条正下方 8px（S0）：固定偏移 = 安全区 + 56 + 8，
+            // 与窗口高宽比解耦，桌面窗口化不与工具条错位。
+            // 精细态 duration 0 直接跟手；进出用 160ms 过渡（§5-A5）。
+            duration: Duration(milliseconds: _fineScrubbing ? 0 : 160),
             curve: Curves.easeOut,
             left: 0,
             right: 0,
             top:
-                MediaQuery.sizeOf(context).height * .076 +
-                (_fineScrubbing ? 36 : 0),
+                MediaQuery.paddingOf(context).top +
+                64 +
+                36 * (_finePull / 110).clamp(0.0, 1.0),
             child: _buildProgressBar(),
           ),
           if (_fastForwarding > 0)
@@ -982,6 +1285,41 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                 ),
               ),
             ),
+          // seek 黑闪层（§5-A8）：100ms linear 入 / 180ms ease-out 出，最顶层。
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                key: const Key('story-seek-flash'),
+                opacity: _seekFlash ? 1 : 0,
+                duration: Duration(milliseconds: _seekFlash ? 100 : 180),
+                curve: _seekFlash ? Curves.linear : Curves.easeOut,
+                child: const ColoredBox(color: Colors.black),
+              ),
+            ),
+          ),
+          // 顶部宽热区（工具条同高）：桌面鼠标移入即呼出进度条，
+          // 轻点工具条空白同样呼出；不拦截工具条按钮，也不覆盖进度条条带。
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: MediaQuery.paddingOf(context).top + 64,
+            child: MouseRegion(
+              onEnter: (_) {
+                _topAreaHovered = true;
+                _revealProgress();
+              },
+              onExit: (_) {
+                _topAreaHovered = false;
+                _scheduleProgressHide();
+              },
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _revealProgress,
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
           AnimatedBuilder(
             animation: engine,
             builder: (context, _) => AnimatedOpacity(
@@ -1056,6 +1394,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     _thumbSnapTimer?.cancel();
     _previewShowTimer?.cancel();
     _previewDismissTimer?.cancel();
+    _progressHideTimer?.cancel();
     unawaited(_saveProgress());
     engine.removeListener(_progressChanged);
     slideMaskShader?.dispose();
@@ -1080,10 +1419,15 @@ class _ProgressTrackPainter extends CustomPainter {
     required this.disabled,
     required this.thickness,
     required this.thumbRadius,
+    this.tickAlpha = 0,
+    this.tickFractions = const [],
   });
 
-  final double value, thickness, thumbRadius;
+  final double value, thickness, thumbRadius, tickAlpha;
   final bool disabled;
+
+  /// 精细模式下的停顿点刻度位置（命令比例），仅 tickAlpha > 0 时绘制。
+  final List<double> tickFractions;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1103,6 +1447,19 @@ class _ProgressTrackPainter extends CustomPainter {
       ..strokeWidth = thickness
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(Offset(0, center), Offset(activeX, center), active);
+    if (tickAlpha > 0) {
+      // 停顿点刻度（S2）：3px 白点、50% 透明度，随精细展开淡入；
+      // 相邻间距不足 6px 自动降采样，避免长剧密集刻度糊成一串。
+      final tick = Paint()
+        ..color = Colors.white.withValues(alpha: .5 * tickAlpha);
+      var lastX = -6.0;
+      for (final fraction in tickFractions) {
+        final x = size.width * fraction;
+        if (x - lastX < 6) continue;
+        lastX = x;
+        canvas.drawCircle(Offset(x, center), 1.5, tick);
+      }
+    }
     canvas.drawCircle(
       Offset(activeX, center),
       thumbRadius,
@@ -1115,7 +1472,9 @@ class _ProgressTrackPainter extends CustomPainter {
       oldDelegate.value != value ||
       oldDelegate.disabled != disabled ||
       oldDelegate.thickness != thickness ||
-      oldDelegate.thumbRadius != thumbRadius;
+      oldDelegate.thumbRadius != thumbRadius ||
+      oldDelegate.tickAlpha != tickAlpha ||
+      oldDelegate.tickFractions.length != tickFractions.length;
 }
 
 class _DialogueHistory extends StatefulWidget {
@@ -1135,6 +1494,9 @@ class _DialogueHistory extends StatefulWidget {
 
 class _DialogueHistoryState extends State<_DialogueHistory> {
   final _scrollController = ScrollController();
+
+  /// hover 中的显示行索引（reverse 列表索引，0 为最新一行）。
+  int? _hoveredIndex;
 
   @override
   void dispose() {
@@ -1175,41 +1537,75 @@ class _DialogueHistoryState extends State<_DialogueHistory> {
                     itemBuilder: (context, index) {
                       final line =
                           widget.history[widget.history.length - 1 - index];
-                      return InkWell(
-                        onTap: line.stopCommandIndex == null
-                            ? null
-                            : () => widget.onSelect(line),
-                        child: Padding(
-                          padding: EdgeInsets.only(bottom: 22 * scale),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: constraints.maxWidth * .14,
-                                child: Text(
-                                  line.speaker,
-                                  textAlign: TextAlign.right,
-                                  textScaler: TextScaler.noScaling,
-                                  style: base.copyWith(
-                                    fontSize: 30 * scale,
-                                    color: const Color(0xff929292),
-                                  ),
-                                ),
-                              ),
-                              SizedBox(width: 32 * scale),
-                              Expanded(
-                                child: Text.rich(
-                                  TextSpan(
-                                    children: storyTextSpans(
-                                      line.text,
-                                      line.text.runes.length,
-                                      base,
+                      // reverse 列表第 0 项即最新一行：正在播放的当前句。
+                      final isCurrent = index == 0;
+                      final jumpable =
+                          line.stopCommandIndex != null && !isCurrent;
+                      final isHovered = _hoveredIndex == index;
+                      return MouseRegion(
+                        onEnter: jumpable
+                            ? (_) => setState(() => _hoveredIndex = index)
+                            : null,
+                        onExit: isHovered
+                            ? (_) => setState(() => _hoveredIndex = null)
+                            : null,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: isCurrent
+                                ? Colors.white.withValues(alpha: .06)
+                                : null,
+                          ),
+                          child: InkWell(
+                            hoverColor: Colors.white.withValues(alpha: .08),
+                            onTap: jumpable
+                                ? () => widget.onSelect(line)
+                                : null,
+                            child: Padding(
+                              padding: EdgeInsets.only(bottom: 22 * scale),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: constraints.maxWidth * .14,
+                                    child: Text(
+                                      line.speaker,
+                                      textAlign: TextAlign.right,
+                                      textScaler: TextScaler.noScaling,
+                                      style: base.copyWith(
+                                        fontSize: 30 * scale,
+                                        color: const Color(0xff929292),
+                                      ),
                                     ),
                                   ),
-                                  textScaler: TextScaler.noScaling,
-                                ),
+                                  SizedBox(width: 32 * scale),
+                                  Expanded(
+                                    child: Text.rich(
+                                      TextSpan(
+                                        children: storyTextSpans(
+                                          line.text,
+                                          line.text.runes.length,
+                                          base,
+                                        ),
+                                      ),
+                                      textScaler: TextScaler.noScaling,
+                                    ),
+                                  ),
+                                  if (isCurrent || (isHovered && jumpable))
+                                    Padding(
+                                      padding: EdgeInsets.only(
+                                        left: 12 * scale,
+                                      ),
+                                      child: Text(
+                                        isCurrent ? '当前句 ▸' : '跳转 ↵',
+                                        style: base.copyWith(
+                                          fontSize: 20 * scale,
+                                          color: Colors.white54,
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       );
