@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>对白语音交互原型 · 方舟档案室</title>
+<style>
+/* ========== Reset & Base（配色取自 app_theme.dart 设计 tokens） ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { min-height: 100%; }
+body {
+  font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", "Noto Sans SC", sans-serif;
+  color: #e8edf0;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+  background: linear-gradient(160deg, #10141a 0%, #0d1014 55%, #11151b 100%);
+  min-height: 100vh;
+}
+body > * { position: relative; }
+::selection { background: rgba(223,192,128,.35); }
+
+/* ========== 封面 ========== */
+.title {
+  position: relative; overflow: hidden;
+  padding: 44px 36px;
+  text-align: center;
+  background: linear-gradient(135deg, #171c20 0%, #1d262d 55%, #233038 100%);
+  border: 1px solid #354048;
+  border-radius: 14px;
+  margin-bottom: 20px;
+}
+.title::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 50% at 82% 12%, rgba(165,199,213,.10) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 60% at 8% 92%, rgba(223,192,128,.08) 0%, transparent 55%);
+}
+.title > * { position: relative; }
+.title .sup {
+  font-family: Bahnschrift, "Segoe UI", sans-serif;
+  font-weight: 700; letter-spacing: 3px;
+  font-size: 12px; color: #a5c7d5; margin-bottom: 10px;
+}
+.title h1 { font-size: 27px; font-weight: 800; letter-spacing: 1px; color: #e8eff2; margin: 0 0 12px; }
+.title .accent-line { width: 48px; height: 3px; background: #dfc080; margin: 0 auto 14px; border-radius: 2px; }
+.title p { font-size: 14px; color: #9ba9b3; margin: 0; }
+.title p b { color: #dfc080; font-weight: 600; }
+
+/* ========== Tab 导航 ========== */
+.tab-nav { display: flex; gap: 0; border-bottom: 1px solid #354048; margin: 0 0 20px; flex-wrap: wrap; }
+.tab-btn {
+  padding: 10px 20px; border: none; background: transparent;
+  font-size: 14px; color: #9ba9b3; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition: color .2s, border-color .2s; font-family: inherit;
+}
+.tab-btn:hover { color: #e8eff2; }
+.tab-btn.active { color: #e8eff2; border-bottom-color: #dfc080; font-weight: 600; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ========== 章节标题 / 正文 ========== */
+h1.heading { font-size: 24px; color: #e8eff2; margin: 32px 0 14px; font-weight: 700; border-left: 4px solid #dfc080; padding-left: 14px; }
+h2.heading { font-size: 19px; color: #e8eff2; margin: 24px 0 10px; padding-bottom: 7px; border-bottom: 1px solid #354048; font-weight: 600; }
+h3.heading { font-size: 16px; color: #a5c7d5; margin: 18px 0 8px; font-weight: 600; }
+p.paragraph { font-size: 14.5px; color: #c2ccd3; margin: 0 0 12px; }
+p.paragraph b, p.paragraph strong { color: #e8eff2; }
+.doc-section {
+  background: #171c20; border: 1px solid #283138; border-radius: 12px;
+  padding: 22px 24px; margin: 0 0 16px;
+}
+.doc-section.alt { background: #13181d; border-color: #232b31; }
+ul.list { padding-left: 22px; margin: 0 0 12px; }
+ul.list li { font-size: 14px; color: #c2ccd3; margin-bottom: 6px; }
+ul.list li b { color: #e8eff2; }
+code.inline {
+  font-family: "Cascadia Code", Consolas, monospace; font-size: .92em;
+  background: #20272c; border: 1px solid #354048; border-radius: 4px;
+  padding: 1px 6px; color: #a5c7d5; white-space: nowrap;
+}
+
+/* ========== callout ========== */
+.callout {
+  margin: 0 0 16px; padding: 14px 20px;
+  background: rgba(165,199,213,.08);
+  border-left: 4px solid #a5c7d5; border-radius: 8px;
+}
+.callout[data-variant="warning"] { background: rgba(223,192,128,.08); border-left-color: #dfc080; }
+.callout[data-variant="tip"] { background: rgba(164,198,160,.08); border-left-color: #a4c6a0; }
+.callout p { font-size: 13.5px; color: #c2ccd3; margin: 0; }
+.callout p b { color: #e8eff2; }
+
+/* ========== 表格 ========== */
+table.table { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: 13px; }
+table.table th {
+  background: #20272c; color: #a5c7d5; font-weight: 600; text-align: left;
+  padding: 8px 10px; border: 1px solid #283138;
+}
+table.table td { padding: 8px 10px; border: 1px solid #283138; color: #c2ccd3; vertical-align: top; }
+table.table tr:nth-child(even) td { background: #151a1f; }
+table.table td b { color: #e8eff2; }
+table.table .keep { color: #a4c6a0; }
+table.table .move { color: #dfc080; }
+table.table .new  { color: #a5c7d5; font-weight: 600; }
+
+/* ========== 代码块 ========== */
+pre.code {
+  background: #0d1117; border: 1px solid #283138; border-radius: 8px;
+  color: #c2ccd3; padding: 14px 18px; font-size: 12.5px; line-height: 1.65;
+  overflow-x: hidden; margin: 0 0 14px;
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+}
+pre.code b { color: #dfc080; font-weight: 400; }
+pre.code i { color: #a5c7d5; font-style: normal; }
+pre.code em { color: #83939f; font-style: normal; }
+
+/* ============================================================
+   播放器原型（Tab 1）
+   ============================================================ */
+.proto-wrap { position: relative; margin: 0 0 8px; }
+.player {
+  position: relative; aspect-ratio: 16 / 9; min-height: 430px;
+  border-radius: 12px; overflow: hidden; border: 1px solid #354048;
+  background: linear-gradient(165deg, #232a33 0%, #171d24 48%, #10141a 100%);
+  user-select: none; cursor: pointer;
+}
+.player::after { /* 舞台渐晕 */
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse 90% 70% at 50% 30%, transparent 55%, rgba(5,8,11,.55) 100%);
+}
+.stage-char { /* 立绘占位 */
+  position: absolute; right: 14%; bottom: 18%; width: 21%; height: 62%;
+  border: 1px dashed rgba(165,199,213,.35); border-radius: 90px 90px 8px 8px;
+  background: linear-gradient(180deg, rgba(165,199,213,.10), rgba(165,199,213,.02));
+  display: flex; align-items: center; justify-content: center;
+  color: #83939f; font-size: 12px; letter-spacing: 2px; pointer-events: none;
+}
+.ff-panel {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  display: none; flex-direction: column; gap: 8px; z-index: 30;
+}
+.ff-panel.visible { display: flex; }
+.ff-item {
+  width: 44px; height: 40px; border-radius: 6px; border: 1px solid #576570;
+  background: rgba(13,16,20,.75); color: #9ba9b3; font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  font-family: Bahnschrift, "Segoe UI", sans-serif;
+}
+.ff-item.on { background: rgba(223,192,128,.16); border-color: #dfc080; color: #dfc080; }
+
+/* —— 对话框 —— */
+.dialog {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 10;
+  background: rgba(8,11,14,.82); backdrop-filter: blur(3px);
+  padding: 14px 20px 18px 22px; border-top: 1px solid rgba(165,199,213,.14);
+}
+.dialog-speaker-row { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+.voice-badge { display: none; align-items: center; gap: 6px; }
+.voice-badge .bars { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
+.voice-badge .bars i {
+  width: 2.5px; background: #83939f; border-radius: 1px; height: 3px;
+}
+.voice-badge.speaking .bars i { background: #dfc080; animation: vbar .9s ease-in-out infinite; }
+.voice-badge.speaking .bars i:nth-child(2){ animation-delay:.15s } .voice-badge.speaking .bars i:nth-child(3){ animation-delay:.3s }
+.voice-badge.speaking .bars i:nth-child(4){ animation-delay:.45s } .voice-badge.speaking .bars i:nth-child(5){ animation-delay:.6s }
+@keyframes vbar { 0%,100%{height:3px} 40%{height:12px} 70%{height:6px} }
+.voice-badge em { font-style: normal; font-size: 10.5px; color: #9ba9b3; letter-spacing: .5px; }
+.voice-badge.on { display: flex; }
+.speaker {
+  font-size: 16px; font-weight: 700; color: #e8eff2; letter-spacing: 1px;
+  padding-left: 9px; border-left: 3px solid #dfc080;
+}
+.speaker.narr { color: #9ba9b3; border-left-color: #576570; font-weight: 600; }
+.dialog-text { font-size: 15px; color: #dfe6ea; min-height: 3.4em; line-height: 1.7; padding-right: 24px; }
+.dialog-text .caret { display: inline-block; width: 8px; height: 1em; background: #dfc080; vertical-align: -2px; margin-left: 2px; animation: blink .8s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0 } }
+.advance-arrow {
+  position: absolute; right: 16px; bottom: 10px; color: #dfc080;
+  font-size: 13px; animation: bounce 1.6s ease-in-out infinite;
+}
+@keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(4px)} }
+
+/* —— 顶部工具条 —— */
+.topbar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 20;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 12px;
+}
+.icon-btn {
+  width: 38px; height: 38px; border-radius: 50%; border: none; cursor: pointer;
+  background: rgba(13,16,20,.45); color: #e8eff2;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .2s; position: relative;
+}
+.icon-btn:hover { background: rgba(223,192,128,.18); }
+.icon-btn.on { background: rgba(223,192,128,.22); color: #dfc080; }
+.icon-btn[disabled] { opacity: .35; cursor: default; }
+.icon-btn svg { width: 19px; height: 19px; }
+.topbar-right { display: flex; gap: 8px; }
+.icon-btn .dot {
+  position: absolute; top: 5px; right: 5px; width: 7px; height: 7px;
+  border-radius: 50%; background: #dfc080; display: none;
+}
+.icon-btn.has-new .dot { display: block; }
+
+/* —— 进度条热区 —— */
+.pzone { position: absolute; top: 56px; left: 0; right: 0; height: 60px; z-index: 15; cursor: default; }
+.pzone .progress {
+  position: relative; margin: 6px 16px 0; height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,.22); opacity: 0; transition: opacity .25s;
+}
+.pzone:hover .progress { opacity: 1; }
+.progress .fill { position: absolute; left: 0; top: 0; height: 100%; width: 0; background: rgba(255,255,255,.9); border-radius: 2px; }
+.progress .tick {
+  position: absolute; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%; background: rgba(255,255,255,.55);
+}
+.pzone .pcount {
+  opacity: 0; transition: opacity .25s; font-size: 10.5px; color: #9ba9b3;
+  margin: 8px 18px 0; font-family: Bahnschrift, Consolas, sans-serif; letter-spacing: 1px;
+}
+.pzone:hover .pcount { opacity: 1; }
+
+/* —— 控制中心（决策③：右侧滑入抽屉） —— */
+.hub-backdrop {
+  position: absolute; inset: 0; z-index: 40; background: rgba(5,8,11,.5);
+  display: none;
+}
+.hub-backdrop.visible { display: block; }
+.hub-sheet {
+  position: absolute; top: 0; bottom: 0; right: 0; z-index: 41;
+  width: min(410px, 94%);
+  background: rgba(19,24,29,.97); border-left: 1px solid #354048; border-radius: 14px 0 0 14px;
+  padding: 14px 18px 14px; overflow-y: auto; box-shadow: -8px 0 24px rgba(0,0,0,.35);
+  transform: translateX(100%); visibility: hidden; pointer-events: none;
+  transition: transform .28s ease-out, visibility .28s;
+}
+.hub-sheet.visible { transform: translateX(0); visibility: visible; pointer-events: auto; }
+.hub-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; position: sticky; top: -14px; background: inherit; padding-top: 14px; z-index: 2; }
+.hub-head .t { font-size: 15px; font-weight: 700; color: #e8eff2; letter-spacing: 1px; }
+.hub-head .t small { font-size: 11px; color: #83939f; font-weight: 400; margin-left: 8px; letter-spacing: 0; }
+.hub-close { background: none; border: none; color: #9ba9b3; font-size: 16px; cursor: pointer; padding: 4px 8px; }
+.hub-group { border-top: 1px solid #232b31; padding: 10px 0 6px; }
+.hub-group .g-label {
+  font-size: 11px; color: #dfc080; letter-spacing: 2px; font-weight: 700;
+  margin-bottom: 8px; font-family: Bahnschrift, "Segoe UI", sans-serif;
+}
+.seg { display: inline-flex; border: 1px solid #354048; border-radius: 6px; overflow: hidden; }
+.seg button {
+  border: none; background: transparent; color: #9ba9b3; font-size: 12px;
+  padding: 5px 14px; cursor: pointer; font-family: inherit;
+}
+.seg button + button { border-left: 1px solid #354048; }
+.seg button.on { background: rgba(223,192,128,.16); color: #dfc080; font-weight: 600; }
+.seg button[disabled] { opacity: .3; cursor: default; }
+.hub-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 0; flex-wrap: wrap; }
+.hub-row .lab { font-size: 13px; color: #c2ccd3; }
+.hub-row .lab small { display: block; font-size: 11px; color: #83939f; }
+
+/* 滑杆 */
+.slider-row { display: grid; grid-template-columns: 92px 1fr 46px; align-items: center; gap: 10px; padding: 3px 0; }
+.slider-row .sl { font-size: 12.5px; color: #c2ccd3; }
+.slider-row .sv { font-size: 12px; color: #dfc080; text-align: right; font-family: Bahnschrift, Consolas, monospace; }
+input[type=range] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 3px;
+  background: #313b43; border-radius: 2px; outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
+  background: #e8eff2; border: 2px solid #dfc080;
+}
+input[type=range][disabled] { opacity: .35; }
+
+/* 开关 */
+.switch { position: relative; width: 40px; height: 21px; flex: none; }
+.switch input { position: absolute; inset: 0; opacity: 0; z-index: 2; cursor: pointer; }
+.switch .track { position: absolute; inset: 0; background: #313b43; border-radius: 11px; transition: background .2s; }
+.switch .track::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 15px; height: 15px;
+  border-radius: 50%; background: #9ba9b3; transition: left .2s, background .2s;
+}
+.switch input:checked + .track { background: rgba(223,192,128,.4); }
+.switch input:checked + .track::after { left: 22px; background: #dfc080; }
+.switch input[disabled] + .track { opacity: .4; }
+
+/* 语音包状态卡 */
+.pack-state {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  background: #171c20; border: 1px solid #283138; border-radius: 8px; margin: 6px 0;
+}
+.pack-state .pi { font-size: 16px; }
+.pack-state .pt { flex: 1; font-size: 12.5px; color: #c2ccd3; }
+.pack-state .pt small { display: block; font-size: 11px; color: #83939f; }
+.pack-state.ok { border-color: rgba(164,198,160,.4); }
+.pack-state.ok .pi { color: #a4c6a0; }
+.btn {
+  border: 1px solid #354048; background: #20272c; color: #c2ccd3; font-size: 12.5px;
+  border-radius: 6px; padding: 5px 14px; cursor: pointer; font-family: inherit;
+  transition: background .2s, border-color .2s; white-space: nowrap;
+}
+.btn:hover { border-color: #dfc080; color: #e8eff2; }
+.btn.primary { background: rgba(223,192,128,.14); border-color: #dfc080; color: #dfc080; }
+.btn.primary:hover { background: rgba(223,192,128,.25); }
+.btn[disabled] { opacity: .4; cursor: default; }
+.btn.danger { color: #f28d8d; border-color: rgba(242,141,141,.4); }
+.dl-bar { height: 4px; background: #313b43; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.dl-bar .fill { height: 100%; width: 0; background: #dfc080; transition: width .25s; }
+
+/* 音色 chip */
+.chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 2px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; color: #c2ccd3; background: #20272c;
+  border: 1px solid #354048; border-radius: 14px; padding: 4px 6px 4px 12px;
+}
+.chip .sid { color: #a5c7d5; font-family: Bahnschrift, Consolas, monospace; font-size: 11px; }
+.chip .listen {
+  border: none; background: none; color: #dfc080; cursor: pointer; font-size: 12px;
+  padding: 2px 6px; border-radius: 10px;
+}
+.chip .listen:hover { background: rgba(223,192,128,.15); }
+.chip.listening { border-color: #dfc080; }
+.hub-note { font-size: 11px; color: #83939f; margin-top: 8px; }
+
+/* toast */
+.toast {
+  position: absolute; left: 50%; top: 16%; transform: translateX(-50%);
+  background: rgba(13,16,20,.9); border: 1px solid #354048; color: #e8eff2;
+  font-size: 12.5px; border-radius: 16px; padding: 6px 16px; z-index: 50;
+  display: none; white-space: nowrap;
+}
+.toast.visible { display: block; }
+
+/* 原型角标 */
+.mark {
+  position: absolute; z-index: 60; width: 21px; height: 21px; border-radius: 50%;
+  background: #dfc080; color: #14181c; font-size: 12px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 3px rgba(223,192,128,.25); font-family: Bahnschrift, sans-serif;
+}
+.mark.m1 { top: 54px; right: 10px; }
+.mark.m2 { bottom: 150px; left: 10px; }
+.mark.m3 { bottom: 12px; right: 12px; }
+.mark.m4 { top: 78px; left: 8px; }
+.hint-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 16px; }
+.hint-chips span {
+  font-size: 12px; color: #9ba9b3; background: #171c20; border: 1px solid #283138;
+  border-radius: 6px; padding: 4px 10px;
+}
+.hint-chips span b { color: #dfc080; font-weight: 600; }
+.legend { counter-reset: mark; }
+.legend ol { list-style: none; padding: 0; }
+.legend li { font-size: 13.5px; color: #c2ccd3; padding: 7px 0; border-bottom: 1px dashed #232b31; display: flex; gap: 10px; }
+.legend li:last-child { border-bottom: none; }
+.legend .n {
+  counter-increment: mark; flex: none; width: 21px; height: 21px; border-radius: 50%;
+  background: #dfc080; color: #14181c; font-size: 12px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; align-self: center; font-family: Bahnschrift, sans-serif;
+}
+.legend .n::before { content: counter(mark); }
+.legend code { font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; color: #a5c7d5; }
+
+/* ============================================================
+   应用层原型（Tab 2）
+   ============================================================ */
+.app-mock {
+  display: grid; grid-template-columns: 218px 1fr; gap: 14px;
+  background: #101419; border: 1px solid #283138; border-radius: 12px; padding: 16px;
+}
+@media (max-width: 720px) { .app-mock { grid-template-columns: 1fr; } }
+.app-nav { background: #171c20; border-radius: 8px; border: 1px solid #232b31; overflow: hidden; }
+.app-nav .cat {
+  display: flex; gap: 10px; align-items: center; padding: 11px 14px; font-size: 13px;
+  color: #9ba9b3; border-bottom: 1px solid #1c2328;
+}
+.app-nav .cat:last-child { border-bottom: none; }
+.app-nav .cat.on { color: #e8eff2; background: #20272c; border-right: 2px solid #dfc080; }
+.app-nav .cat .nm small { display: block; font-size: 10.5px; color: #83939f; }
+.app-nav .cat.on .nm small { color: #9ba9b3; }
+.app-panel { background: #171c20; border: 1px solid #232b31; border-radius: 8px; padding: 16px 18px; }
+.app-panel .ph { font-size: 15px; font-weight: 700; color: #e8eff2; margin-bottom: 4px; }
+.app-panel .phs { font-size: 11.5px; color: #83939f; margin-bottom: 12px; }
+.app-panel .slider-row { grid-template-columns: 100px 1fr 46px; padding: 6px 0; }
+.tag-new {
+  font-size: 10px; color: #dfc080; border: 1px solid rgba(223,192,128,.5);
+  border-radius: 4px; padding: 0 5px; margin-left: 6px; vertical-align: 2px; font-weight: 700;
+}
+.pack-card {
+  border: 1px solid #283138; border-radius: 8px; padding: 12px 14px; margin: 10px 0;
+  background: #13181d;
+}
+.pack-card .pc-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pack-card .pc-name { font-size: 14px; font-weight: 700; color: #e8eff2; }
+.pack-card .pc-name small { font-weight: 400; color: #83939f; margin-left: 6px; font-size: 11.5px; }
+.pack-attrs { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 4px; }
+.pack-attrs span { font-size: 11.5px; color: #9ba9b3; }
+.pack-attrs b { color: #a5c7d5; font-weight: 600; }
+.status-pill {
+  font-size: 11px; border-radius: 10px; padding: 2px 10px; font-weight: 700;
+}
+.status-pill.ok { color: #a4c6a0; background: rgba(164,198,160,.14); }
+.status-pill.none { color: #9ba9b3; background: rgba(155,169,179,.12); }
+.status-pill.soon { color: #dfc080; background: rgba(223,192,128,.12); }
+
+/* 附注码（Tab2 内联编号） */
+.note-n {
+  display: inline-flex; width: 19px; height: 19px; border-radius: 50%;
+  background: #a5c7d5; color: #14181c; font-size: 11.5px; font-weight: 800;
+  align-items: center; justify-content: center; margin: 0 3px; vertical-align: -4px;
+  font-family: Bahnschrift, sans-serif;
+}
+
+/* 方案三列卡 */
+.three-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 0 0 4px; }
+@media (max-width: 760px) { .three-cols { grid-template-columns: 1fr; } }
+.lay-card { border: 1px solid #283138; border-radius: 10px; padding: 14px 16px; background: #13181d; }
+.lay-card h4 { font-size: 14px; color: #dfc080; margin-bottom: 3px; font-weight: 700; }
+.lay-card .en { font-size: 10.5px; color: #83939f; letter-spacing: 2px; margin-bottom: 8px; font-family: Bahnschrift, sans-serif; }
+.lay-card p { font-size: 12.5px; color: #c2ccd3; margin: 0; }
+.lay-card p b { color: #e8eff2; }
+
+/* 对比卡 */
+.opt-card { border: 1px solid #283138; border-radius: 10px; padding: 14px 16px; background: #13181d; flex: 1; }
+.opt-card.win { border-color: rgba(164,198,160,.5); }
+.opt-card h4 { font-size: 14px; color: #e8eff2; margin-bottom: 6px; }
+.opt-card h4 .verdict { font-size: 11px; border-radius: 4px; padding: 1px 7px; margin-left: 7px; font-weight: 700; }
+.opt-card h4 .verdict.ok { color: #a4c6a0; background: rgba(164,198,160,.15); }
+.opt-card h4 .verdict.no { color: #f28d8d; background: rgba(242,141,141,.12); }
+.opt-card p { font-size: 12.5px; color: #9ba9b3; margin: 0; }
+.opt-card p b { color: #c2ccd3; }
+
+/* ========== 尾页 ========== */
+.end_page {
+  margin-top: 26px; padding: 36px 24px; text-align: center;
+  background: linear-gradient(135deg, #171c20 0%, #233038 100%);
+  border: 1px solid #354048; border-radius: 14px;
+}
+.end_page h1 { font-size: 21px; color: #e8eff2; margin: 0 0 10px; font-weight: 800; }
+.end_page p { font-size: 13.5px; color: #9ba9b3; margin: 0; line-height: 1.9; }
+.end_page p b { color: #dfc080; }
+.footer-credit { text-align: center; font-size: 11px; color: #4e5a63; margin-top: 18px; letter-spacing: 1px; }
+
+/* ========== 响应式 ========== */
+@media screen and (max-width: 620px) {
+  body { padding: 16px 12px 48px; }
+  .title h1 { font-size: 20px; }
+  .player { min-height: 380px; }
+  .hub-sheet { width: min(340px, 100%); padding: 14px 14px 12px; }
+}
+
+/* ========== 打印 ========== */
+@media print {
+  body { background: #0d1014; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .tab-panel { display: block !important; }
+  .proto-wrap .mark { display: none; }
+}
+</style>
+</head>
+<body class="mode-auto" data-palette="arkarchive-dark">
+
+<!-- ===== 封面 ===== -->
+<section class="title">
+  <div class="sup">ARKARCHIVE · TTS PROTOTYPE</div>
+  <h1>对白语音（本地 TTS）· 交互与集成原型</h1>
+  <div class="accent-line"></div>
+  <p>配套技术方案 <b>docs/tts-design.md</b> 的交互层原型：① 播放器层改造（控制中心 + 语音状态）② 应用层改造（设置与语音包）③ 文件级修改清单</p>
+</section>
+
+<!-- ===== Tab 导航 ===== -->
+<div class="tab-nav" role="tablist">
+  <button class="tab-btn active" data-tab="0" role="tab">① 播放器原型</button>
+  <button class="tab-btn" data-tab="1" role="tab">② 应用层原型</button>
+  <button class="tab-btn" data-tab="2" role="tab">③ 交互改造与代码修改</button>
+</div>
+
+<!-- ============================================================
+     Tab 1 · 播放器原型
+     ============================================================ -->
+<div class="tab-panel active" data-panel="0" role="tabpanel">
+  <p class="paragraph">下图为<b>可交互模拟</b>：可直接点击画面推进对白、<b>长按画面快进</b>、悬停顶部呼出进度条、右上角 <b>⚙ 打开控制中心</b>。演示从「语音包未安装」状态开始——打开控制中心点「下载语音包」后，TTS 开关解锁，对白推进时说话人旁出现语音状态。</p>
+
+  <div class="proto-wrap">
+    <div class="player" id="player">
+      <div class="stage-char">阿米娅 · 立绘占位</div>
+
+      <!-- 顶部工具条 -->
+      <div class="topbar">
+        <button class="icon-btn" title="退出播放器（不变）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></button>
+        <div class="topbar-right">
+          <button class="icon-btn" title="对话记录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></button>
+          <button class="icon-btn" id="autoBtn" title="自动播放（速度档在控制中心·自动模式下可调）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11.5V5.8a1.8 1.8 0 013.6 0v5"/><path d="M12.6 10.9a1.7 1.7 0 013.2.8v1.8c0 3.5-2.2 6-5.4 6s-4.9-2-5.7-4.6c-.4-1.4.8-2.4 2-1.7l1.4.8"/></svg></button>
+          <button class="icon-btn has-new" id="hubBtn" title="控制中心（右侧滑入）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h9"/><path d="M17 7h3"/><path d="M4 12h3"/><path d="M11 12h9"/><path d="M4 17h9"/><path d="M17 17h3"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="15" cy="17" r="2"/></svg><span class="dot"></span></button>
+        </div>
+      </div>
+
+      <!-- 进度条热区 -->
+      <div class="pzone" id="pzone">
+        <div class="progress" id="progress"><div class="fill" id="pfill"></div></div>
+        <div class="pcount" id="pcount">STOP 0 / 7</div>
+      </div>
+
+      <!-- 长按快进面板 -->
+      <div class="ff-panel" id="ffPanel">
+        <div class="ff-item on" data-v="2">2x</div>
+        <div class="ff-item" data-v="4">4x</div>
+        <div class="ff-item" data-v="8">8x</div>
+        <div class="ff-item" data-v="16">16x</div>
+      </div>
+
+      <!-- 对话框 -->
+      <div class="dialog">
+        <div class="dialog-speaker-row">
+          <span class="voice-badge" id="voiceBadge"><span class="bars"><i></i><i></i><i></i><i></i><i></i></span><em id="voiceState">本地合成</em></span>
+          <span class="speaker" id="speaker">旁白</span>
+        </div>
+        <p class="dialog-text" id="dialogText"></p>
+        <span class="advance-arrow">▽</span>
+      </div>
+
+      <!-- 控制中心 -->
+      <div class="hub-backdrop" id="hubBackdrop"></div>
+      <div class="hub-sheet" id="hubSheet">
+        <div class="hub-head">
+          <span class="t">控制中心<small>偏好设置 · 即改即生效</small></span>
+          <button class="hub-close" id="hubClose">✕ 收起</button>
+        </div>
+        <div class="hub-group">
+          <div class="g-label">播放节奏</div>
+          <div class="hub-row">
+            <span class="lab">模式<small>手动 / 自动 / 快速播放</small></span>
+            <span class="seg" id="segMode">
+              <button class="on" data-v="manual">手动</button><button data-v="auto">自动</button><button data-v="quick">快速</button>
+            </span>
+          </div>
+          <div class="hub-row">
+            <span class="lab">速度档<small>仅自动模式可调（I / II / III）</small></span>
+            <span class="seg" id="segSpeed">
+              <button class="on" data-v="0" disabled>I</button><button data-v="1" disabled>II</button><button data-v="2" disabled>III</button>
+            </span>
+          </div>
+          <div class="hub-row">
+            <span class="lab">剧场模式<small>隐藏工具条全屏沉浸（引擎已支持，首次露出入口）</small></span>
+            <label class="switch"><input type="checkbox" id="swTheater"><span class="track"></span></label>
+          </div>
+        </div>
+        <div class="hub-group">
+          <div class="g-label">音频通道</div>
+          <div class="slider-row"><span class="sl">主音量</span><input type="range" min="0" max="100" value="80" data-ch="master"><span class="sv">80%</span></div>
+          <div class="slider-row"><span class="sl">背景音乐</span><input type="range" min="0" max="100" value="75" data-ch="bgm"><span class="sv">75%</span></div>
+          <div class="slider-row"><span class="sl">音效环境</span><input type="range" min="0" max="100" value="85" data-ch="sfx"><span class="sv">85%</span></div>
+          <div class="slider-row"><span class="sl">对白语音</span><input type="range" min="0" max="100" value="90" data-ch="voice" id="hubVoice"><span class="sv">90%</span></div>
+        </div>
+        <div class="hub-group">
+          <div class="g-label">对白语音 · 本地合成</div>
+          <div class="pack-state" id="packState">
+            <span class="pi">⬇</span>
+            <span class="pt"><b id="packTitle">kokoro 中文语音包（int8）未安装</b><small id="packDesc">约 92 MB · 103 音色 · 中英混读 · Apache-2.0 · 按需下载</small></span>
+            <button class="btn primary" id="packDlBtn">下载</button>
+          </div>
+          <div class="dl-bar" id="dlBar"><div class="fill" id="dlFill"></div></div>
+          <div class="hub-row" style="margin-top:8px">
+            <span class="lab">朗读对白<small>对白 / 旁白 / 结尾语；字幕与贴纸不朗读</small></span>
+            <label class="switch"><input type="checkbox" id="swVoice" disabled><span class="track"></span></label>
+          </div>
+          <div class="hub-row">
+            <span class="lab">角色音色映射<small>同一角色在任意剧情音色一致</small></span>
+            <button class="btn" id="goSettings">在设置中管理</button>
+          </div>
+          <div class="chip-row" id="chipRow">
+            <span class="chip">阿米娅<span class="sid">zf_032</span><button class="listen" title="试听（模拟）">▶</button></span>
+            <span class="chip">杜宾<span class="sid">zm_041</span><button class="listen">▶</button></span>
+            <span class="chip">凯尔希<span class="sid">zf_059</span><button class="listen">▶</button></span>
+            <span class="chip">旁白<span class="sid">zm_080</span><button class="listen">▶</button></span>
+          </div>
+          <div class="hub-note">快进（长按 2–16x）与快速播放模式下自动静音；合成失败静音降级，不影响剧情推进。</div>
+        </div>
+      </div>
+
+      <div class="toast" id="toast"></div>
+    </div>
+    <span class="mark m1">1</span>
+    <span class="mark m2">2</span>
+    <span class="mark m3">3</span>
+    <span class="mark m4">4</span>
+  </div>
+
+  <div class="hint-chips">
+    <span><b>点击画面</b> 下一句对白</span>
+    <span><b>长按画面</b> 快进 2–16x（下移换挡）</span>
+    <span><b>悬停顶部</b> 呼出进度条</span>
+    <span><b>右上 ⚙</b> 控制中心（右侧滑入）</span>
+    <span><b>自动播放时</b> 打开面板即暂停推进</span>
+  </div>
+
+  <div class="doc-section legend">
+    <h2 class="heading">播放器层可交互改动点</h2>
+    <ol>
+      <li><span class="n"></span><span>顶部工具条为「退出 / 对话记录 / 自动播放 / 控制中心」四键；<b>诊断按钮移出播放器</b>（决策①），入口归入应用设置·网络与节点（见 Tab②）。改动：<code>lib/story_player/ui/story_player.dart</code> 顶栏 Row。</span></li>
+      <li><span class="n"></span><span>对话框「语音状态徽标」<b>常驻</b>（决策⑤）：语音开启时始终显示于说话人左侧——待机（灰条 +「语音待机」）/ 朗读中（跳动动画 + 音色 ID）两态；快进与快速模式显示「静音」态；关闭语音或未装包时隐藏。新增轻组件 <code>VoiceBadge</code>，数据来自 <code>DialogueVoice.status</code> 流。</span></li>
+      <li><span class="n"></span><span>控制中心为播放器内<b>右侧滑入抽屉</b>（决策③：横屏右侧空间富余，与顶部进度条、底部对话框零重叠，桌面与移动端一致），收纳偏好类功能：播放节奏（模式 / 速度档·仅自动模式可调 / 剧场模式）、四通道音量、对白语音（开关 / 音色试听 / 语音包）。新增 <code>lib/story_player/ui/control_hub_sheet.dart</code>。</span></li>
+      <li><span class="n"></span><span>进度条交互保持不变（顶部热区呼出、停顿点刻度、拖动预览）；本原型仅示意位置，点击可跳句。</span></li>
+    </ol>
+    <aside class="callout" data-variant="tip" style="margin-top:12px">
+      <p>抽屉打开期间（决策②）：<b>自动播放暂停推进，关闭后自动续播</b>——避免设置过程漏看剧情；手动模式本就无自动推进，不受影响。速度档仅在自动模式下可调（决策④）。长按快进手势只在舞台区生效，与面板按钮无冲突（事件冒泡已在 <code>_FastForwardGesture</code> 中隔离）。</p>
+    </aside>
+  </div>
+</div>
+
+<!-- ============================================================
+     Tab 2 · 应用层原型
+     ============================================================ -->
+<div class="tab-panel" data-panel="1" role="tabpanel">
+  <p class="paragraph">应用层改动集中在<b>设置页</b>：「音频通道」新增对白语音滑杆与语音包管理入口；语音包沿用剧情缓存的下载任务模型（暂停 / 恢复 / 失败原因 / 移动网络提醒）。<b>本页与播放器原型共享同一演示状态</b>——若刚才已下载，此处即显示已安装。</p>
+
+  <div class="app-mock">
+    <div class="app-nav">
+      <div class="cat on"><span>🎚</span><span class="nm">音频通道<small>主音量、音乐与音效</small></span></div>
+      <div class="cat"><span>🎬</span><span class="nm">演出偏好<small>自动播放与文字显示速度</small></span></div>
+      <div class="cat"><span>💾</span><span class="nm">存储与缓存<small>缓存占用、下载与本地文件</small></span></div>
+      <div class="cat"><span>🌐</span><span class="nm">网络与节点<small>连接检查 · 资源与指令诊断</small></span></div>
+      <div class="cat"><span>i</span><span class="nm">关于<small>版本、更新与开源信息</small></span></div>
+    </div>
+    <div class="app-panel">
+      <div class="ph">音频通道</div>
+      <div class="phs">音频设置即时生效，并随断点记忆持久化</div>
+
+      <div class="slider-row"><span class="sl">主音量</span><input type="range" min="0" max="100" value="80" data-ch="master"><span class="sv">80%</span></div>
+      <div class="slider-row"><span class="sl">背景音乐 BGM</span><input type="range" min="0" max="100" value="75" data-ch="bgm"><span class="sv">75%</span></div>
+      <div class="slider-row"><span class="sl">音效与环境 SFX</span><input type="range" min="0" max="100" value="85" data-ch="sfx"><span class="sv">85%</span></div>
+      <div class="slider-row"><span class="sl">对白语音<span class="tag-new">新增</span></span><input type="range" min="0" max="100" value="90" data-ch="voice" id="setVoice"><span class="sv">90%</span></div>
+
+      <div class="pack-card">
+        <div class="pc-top">
+          <span class="pc-name">语音包管理<span class="tag-new">新增</span></span>
+          <span class="status-pill none" id="setPill">未安装</span>
+        </div>
+
+        <div class="pack-card" style="background:#171c20">
+          <div class="pc-top">
+            <span class="pc-name">kokoro 中文语音包<small>kokoro-multi-lang-v1.1 · int8</small></span>
+            <span>
+              <button class="btn primary" id="setDlBtn">下载 · 约 92 MB</button>
+              <button class="btn" id="setVerifyBtn" disabled>校验</button>
+              <button class="btn danger" id="setDelBtn" disabled>删除</button>
+            </span>
+          </div>
+          <div class="pack-attrs">
+            <span>音色 <b>103</b>（55 女 / 45 男 / 3 英）</span><span>采样率 <b>24 kHz</b></span>
+            <span>许可 <b>Apache-2.0</b></span><span><b>默认包</b> · 全角色兜底</span>
+          </div>
+          <div class="hub-note">随对白实时合成，安装后即可离线朗读；下载源 GitHub Release（主）+ hf-mirror（备）。</div>
+        </div>
+
+        <div class="pc-top" style="margin-top:8px"><span class="pc-name" style="font-size:13px">角色语音包<small>更高辨识度的角色专属音色</small></span><span class="status-pill soon">阶段 5 规划</span></div>
+        <div class="pack-attrs">
+          <span>阿米娅专属包 — <b>未上线</b></span><span>凯尔希专属包 — <b>未上线</b></span><span>扩展包可卸载，<b>自动回落</b>默认音色</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="doc-section legend" style="margin-top:14px">
+    <h2 class="heading">应用层可交互改动点</h2>
+    <ol>
+      <li><span class="n"></span><span>「音频通道」新增<b>对白语音</b>第四通道：滑杆样式与既有三通道完全一致。<code>PlaybackSettings</code> 增加 <code>voice</code> 字段（0 即关闭），沿用 <code>copyWith / toJson / fromJson</code> 与 clamp 模式，存储结构不变。</span></li>
+      <li><span class="n"></span><span><b>语音包管理</b>卡片：包状态 / 下载 / 校验 / 删除。下载任务复用 <code>cache_job.dart</code> 任务模型与 <code>file_cache</code> 下载管线（含移动网络提醒与并发控制），文件 sha256 校验通过后原子置为已安装。新增 <code>lib/story_player/data/voice_pack.dart</code>。</span></li>
+      <li><span class="n"></span><span><b>角色语音包</b>（阶段 5）：同一 manifest schema，按包独立下载安装，卸载后自动回落默认包映射；设置页提供「按角色 / 按包」两个管理视角。</span></li>
+      <li><span class="n"></span><span><b>诊断入口迁移</b>（决策①）：播放器顶栏诊断按钮移除；「网络与节点」新增「资源与指令诊断」行，展示最近播放累积的 <code>engine.warnings</code>（未找到音频、暂不支持指令等），供问题反馈排查，常规播放不可见。</span></li>
+    </ol>
+    <p style="text-align:center;margin-top:10px"><button class="btn" id="resetDemo">↺ 重置演示状态（恢复未安装）</button></p>
+  </div>
+</div>
+
+<!-- ============================================================
+     Tab 3 · 交互方式改造与代码修改清单
+     ============================================================ -->
+<div class="tab-panel" data-panel="2" role="tabpanel">
+
+  <h1 class="heading">三、播放器功能交互改造：三层交互模型</h1>
+  <div class="doc-section">
+    <p class="paragraph">播放器已承载：点击推进、长按快进（2–16x）、进度条（拖动 / 预览 / 精细刻度）、自动播放、对话记录、诊断、剧场模式（引擎级，未露入口）——而 TTS 将再带来<b>开关、音量、角色音色、试听、语音包</b>五组新交互。沉浸式播放器的屏幕与注意力预算有限，继续平铺顶部按钮不可持续。</p>
+    <div class="three-cols">
+      <div class="lay-card"><h4>常驻层</h4><div class="en">ALWAYS-ON</div><p>顶栏四键：<b>退出 / 对话记录 / 自动播放 / 控制中心入口</b>。高频、单状态、一键直达。诊断对用户基本无用（决策①），整体移出播放器。</p></div>
+      <div class="lay-card"><h4>手势层</h4><div class="en">GESTURE-DRIVEN</div><p>节奏控制全部走既有手势：<b>单击推进、长按快进换挡、顶部呼出进度条</b>。手势零新增、零学习成本，快进期间 TTS 自动静音。</p></div>
+      <div class="lay-card"><h4>收拢层</h4><div class="en">CONTROL HUB</div><p>所有<b>偏好类</b>功能收进右侧控制中心抽屉：速度档（仅自动模式）、四通道音量、TTS 全家桶、剧场模式——打开即改即生效，即写回设置持久化；诊断整体移出播放器（决策①）。</p></div>
+    </div>
+
+    <h3 class="heading">备选形态对比</h3>
+    <div class="three-cols">
+      <div class="opt-card win"><h4>右侧滑入抽屉<span class="verdict ok">采用</span></h4><p>横屏 16:9 右侧空间富余；与顶部进度条热区、底部对话框零重叠；桌面与移动端形态一致；<b>showGeneralDialog / endDrawer</b> 实现成本低（决策③）。</p></div>
+      <div class="opt-card"><h4>底部上滑抽屉<span class="verdict no">放弃</span></h4><p>与底部对话框阅读区纵向抢空间；横屏高度预算紧张，分组多时需内部滚动。</p></div>
+      <div class="opt-card"><h4>扩顶栏按钮 / 径向菜单<span class="verdict no">放弃</span></h4><p>6+ 图标超出沉浸式预算且与原作风格冲突；径向菜单与长按快进手势冲突、可发现性差。</p></div>
+    </div>
+
+    <h3 class="heading">功能归置表</h3>
+    <table class="table" data-caption="现有与新增功能的归置">
+      <thead><tr><th style="width:16%">功能</th><th style="width:22%">现状位置</th><th style="width:26%">调整后位置</th><th style="width:36%">说明</th></tr></thead>
+      <tbody>
+        <tr><td>退出播放器</td><td>顶栏左侧</td><td class="keep">不变</td><td>高频，保留原位</td></tr>
+        <tr><td>对话记录</td><td>顶栏右侧</td><td class="keep">不变</td><td>高频，保留原位</td></tr>
+        <tr><td>自动播放开关</td><td>顶栏右侧</td><td class="keep">不变</td><td>单状态切换保留；<b>速度档</b>脱离按钮移入控制中心</td></tr>
+        <tr><td>资源与指令诊断</td><td>顶栏右侧</td><td class="move">→ 应用设置·网络与节点</td><td>低频调试信息（决策①）：播放器内完全移除，设置页提供 warnings 汇总入口</td></tr>
+        <tr><td>速度档 I/II/III</td><td>无 UI 入口（引擎已支持）</td><td class="new">控制中心·播放节奏</td><td>仅自动模式可调（决策④）；引擎 <code>setSpeedLevel</code> 已就绪，首次补 UI</td></tr>
+        <tr><td>剧场模式</td><td>引擎级状态，未暴露</td><td class="new">控制中心·播放节奏</td><td>开关工具条沉浸模式</td></tr>
+        <tr><td>音量四通道</td><td>仅应用设置页</td><td class="new">控制中心 + 设置页同步</td><td>播放中调音不再退出播放器；两处同源 PlaybackSettings</td></tr>
+        <tr><td>对白语音开关 / 音量</td><td>（新增）</td><td class="new">控制中心 + 设置页</td><td>语音音量=0 即关闭，与既有三通道语义一致</td></tr>
+        <tr><td>角色音色 / 试听</td><td>（新增）</td><td class="new">控制中心（快捷试听）+ 设置页（完整管理）</td><td>控制中心只放当前剧情角色 chips，全量管理在设置页</td></tr>
+        <tr><td>语音包下载 / 管理</td><td>（新增）</td><td class="new">设置页·语音包管理</td><td>控制中心仅作激活引导入口</td></tr>
+        <tr><td>快进 / 进度条</td><td>手势</td><td class="keep">不变</td><td>手势层全部保留；快进期间 TTS 静音</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h1 class="heading">四、代码修改清单</h1>
+
+  <div class="doc-section">
+    <h2 class="heading">4.1 播放器层（lib/story_player/）</h2>
+    <table class="table" data-caption="播放器层修改">
+      <thead><tr><th style="width:26%">文件</th><th style="width:50%">修改点</th><th style="width:12%">阶段</th><th style="width:12%">性质</th></tr></thead>
+      <tbody>
+        <tr><td><code>runtime/dialogue_voice.dart</code></td><td>新增 <b>DialogueVoice 抽象</b> + SilentDialogueVoice 静默实现 + status 状态流（合成中/播放中/空闲 + 当前音色）</td><td>0</td><td class="new">新文件</td></tr>
+        <tr><td rowspan="3"><code>runtime/story_engine.dart</code></td><td>构造注入 <code>voice</code>；<code>_showDialogue</code> 触发 <code>speak(translate后 speaker, plainText(text))</code>；multiline 于 <code>end</code> 整句触发</td><td>0</td><td rowspan="3" class="move">接线</td></tr>
+        <tr><td>打断接线：<code>advance 换句 / seekToCommand / restart / skipNode / choose / setFastForward</code> 调 <code>voice.stop()</code>；<code>setPaused</code> 同步 <code>pause/resume</code></td><td>0</td></tr>
+        <tr><td><code>_rebuilding == true</code> 重放期间不触发；requestId 随推进递增，过期合成结果丢弃</td><td>0</td></tr>
+        <tr><td><code>ui/story_player.dart</code></td><td>①创建 voice 实例传入 engine；②顶栏四键（退出/记录/自动/控制中心，诊断移出至设置）；③对话框挂 <b>VoiceBadge</b>（常驻两态）；④dispose 释放 voice</td><td>0 / 2 / 3</td><td class="move">改造</td></tr>
+        <tr><td><code>ui/control_hub_sheet.dart</code></td><td>新增控制中心<b>右侧滑入面板</b>（决策③）：播放节奏 / 音频通道 / 对白语音三分组；打开时自动播放暂停推进、关闭续播（决策②）；速度档仅自动模式可调（决策④）；开关与滑杆直接读写 <code>PlaybackSettings</code>（onSettingsChanged 回传持久化）</td><td>2</td><td class="new">新文件</td></tr>
+        <tr><td><code>data/playback_settings.dart</code></td><td>增加 <code>voice</code> 字段（默认 0.9）：copyWith / toJson / fromJson clamp 0–1，序列化结构向后兼容（缺键回退默认）</td><td>0</td><td class="move">扩展</td></tr>
+        <tr><td><code>runtime/sherpa_voice.dart</code></td><td>SherpaVoice：OfflineTts 懒加载 → generateWithConfig(sid, speed) → PCM 封 WAV → 独立 just_audio BytesSource 播放；超时/失败静音降级</td><td>2</td><td class="new">新文件</td></tr>
+        <tr><td><code>data/voice_profile.dart</code></td><td>角色→(packId, sid, speed) 映射：内置表 → 稳定散列兜底（未映射角色取散列音色，跨设备一致）；含试听接口</td><td>3</td><td class="new">新文件</td></tr>
+        <tr><td><code>data/voice_pack.dart</code></td><td>VoicePackStore：manifest 解析 / 下载任务（复用 cache_job / file_cache）/ sha256 校验 / 安装目录管理 / 状态流</td><td>2</td><td class="new">新文件</td></tr>
+      </tbody>
+    </table>
+
+    <h2 class="heading">4.2 应用层（lib/app/）</h2>
+    <table class="table" data-caption="应用层修改">
+      <thead><tr><th style="width:26%">文件</th><th style="width:50%">修改点</th><th style="width:12%">阶段</th><th style="width:12%">性质</th></tr></thead>
+      <tbody>
+        <tr><td><code>settings_page.dart</code></td><td>「音频通道」第四滑杆「对白语音」；新增「语音包管理」卡片（状态 / 下载 / 校验 / 删除 / 角色语音包位）；设置项经由既有 onSettingsChanged 链路持久化</td><td>0 / 2 / 3</td><td class="move">扩展</td></tr>
+        <tr><td><code>app.dart</code></td><td>PlaybackSettings 持久化读写补 <code>voice</code> 键；VoicePackStore 单例注入（与 file_cache 同生命周期）</td><td>0 / 2</td><td class="move">扩展</td></tr>
+        <tr><td><code>story_launcher.dart</code></td><td>打开播放器前按需装配 DialogueVoice：默认包已安装且 voice&gt;0 → SherpaVoice；否则 SilentVoice；设置透传进 StoryPlayer</td><td>2</td><td class="move">扩展</td></tr>
+        <tr><td><code>cache_page.dart</code></td><td>语音包任务并入缓存页任务模型（暂停 / 恢复 / 失败原因）；按包展示占用，删除语音包不清断点</td><td>2</td><td class="move">扩展</td></tr>
+        <tr><td><code>pubspec.yaml</code></td><td>dependencies 增加 <code>sherpa_onnx: ^2.0.1</code>（Android / Windows / Linux 原生库随包）；README 功能与鸣谢同步（AGENTS.md 文档原则）</td><td>2</td><td class="new">依赖</td></tr>
+      </tbody>
+    </table>
+
+    <h2 class="heading">4.3 关键代码形态</h2>
+    <pre class="code" data-lang="dart"><em>// lib/story_player/runtime/dialogue_voice.dart —— 对白语音抽象（阶段 0）</em>
+abstract class DialogueVoice {
+  Future&lt;void&gt; speak({required String speaker, required String text, int? requestId});
+  Future&lt;void&gt; stop();  <em>// 打断：换句 / seek / skip / 快进 / choose</em>
+  Future&lt;void&gt; pause(); Future&lt;void&gt; resume(); Future&lt;void&gt; dispose();
+  Stream&lt;VoiceStatus&gt; get status; <em>// → VoiceBadge / 试听 UI</em>
+}
+
+class SilentDialogueVoice implements DialogueVoice { <i>/* 全空实现，默认回滚点 */</i> }</pre>
+
+    <pre class="code" data-lang="dart"><em>// story_engine.dart —— 触发点（保持 _rebuilding 门控）</em>
+void _showDialogue(String speaker, String text, {int line = 0, ...}) {
+  ...
+  if (!_rebuilding) {
+    <b>_voiceRequestId++;</b>
+    unawaited(voice.speak(
+      speaker: state.speaker,
+      text: plainText(state.text),      <em>// 去富文本标签后合成</em>
+      requestId: _voiceRequestId,
+    ));
+  }
+}
+<em>// _runMultiline：仅 end=true 时对 _multilineText 整句触发；advance 换句前 voice.stop()</em></pre>
+
+    <pre class="code" data-lang="dart"><em>// ui/control_hub_sheet.dart —— 控制中心：右侧滑入（决策③）</em>
+showGeneralDialog(
+  context: context,
+  barrierColor: Colors.black54, barrierDismissible: true,
+  transitionDuration: const Duration(milliseconds: 250),
+  pageBuilder: (_, __, ___) =&gt; const ControlHubSheet(),
+  transitionBuilder: (_, anim, __, child) =&gt; SlideTransition(
+    position: Tween(begin: const Offset(1, 0), end: Offset.zero).animate(anim),
+    child: Align(alignment: Alignment.centerRight, child: child)),
+);
+<em>// 决策②：打开时 autoMode == button_auto → engine.setPaused(true)，关闭恢复</em>
+ControlHubSheet(
+  settings: settings,
+  onSettingsChanged: widget.onSettingsChanged,  <em>// 与应用设置同源持久化</em>
+  voicePack: voicePackStore,                    <em>// 状态/下载引导</em>
+  profile: voiceProfile,                        <em>// 当前剧情角色 chips + 试听</em>
+)</pre>
+
+    <aside class="callout" data-variant="tip">
+      <p><b>阶段对应关系</b>（详见 docs/tts-design.md §8）：阶段 0 接线静默 → 阶段 1 flutter_tts MVP 链路验证 → 阶段 2 sherpa 引擎 + 语音包下载 + 控制中心上线 → 阶段 3 角色映射 + 设置页完善 → 阶段 4 节奏对齐（自动播放等待语音、预取）→ 阶段 5 角色语音包。</p>
+    </aside>
+  </div>
+
+  <h1 class="heading">五、决策记录（已确认 2026-11-09）</h1>
+  <div class="doc-section">
+    <table class="table" data-caption="交互决策定案">
+      <thead><tr><th style="width:22%">决策点</th><th style="width:78%">结论与影响</th></tr></thead>
+      <tbody>
+        <tr><td>① 诊断去向</td><td><b>移出播放器</b>：顶栏移除诊断按钮；入口归入 设置·网络与节点 →「资源与指令诊断」（engine.warnings 汇总），常规播放不可见</td></tr>
+        <tr><td>② 面板打开时</td><td><b>自动播放暂停推进</b>（engine.setPaused），关闭面板后自动续播；手动模式不受影响</td></tr>
+        <tr><td>③ 面板形态</td><td><b>右侧滑入抽屉</b>：桌面横屏右侧富余，与进度条/对话框零重叠，移动端一致</td></tr>
+        <tr><td>④ 速度档</td><td><b>仅挂自动模式</b>：I/II/III 对应 buttonSpeeds；手动与快速模式下不可调，快速档位不暴露 UI</td></tr>
+        <tr><td>⑤ TTS 徽标</td><td><b>说话人旁常驻</b>：待机 / 朗读中两态；快进与快速模式显示静音态；关闭语音或未装包时隐藏</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== 尾页 ===== -->
+<section class="title end_page">
+  <h1>评审提示</h1>
+  <p>本原型为<b>交互示意</b>，对白文案与音色映射均为演示数据；工程细节以 <b>docs/tts-design.md</b>（技术方案）为准。<br>五项交互决策已定案（Tab③ 决策记录），原型已按定案实现；后续可评审控制中心分组顺位与阶段 0 实施排期。</p>
+</section>
+<p class="footer-credit">ARKARCHIVE UI PROTOTYPE · AI 辅助生成 · 2026-11-09</p>
+
+<script>
+(function(){
+  'use strict';
+  /* ---------- Tab 切换 ---------- */
+  var tabBtns = document.querySelectorAll('.tab-btn');
+  tabBtns.forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var idx = btn.getAttribute('data-tab');
+      tabBtns.forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      document.querySelectorAll('.tab-panel').forEach(function(p){
+        p.classList.toggle('active', p.getAttribute('data-panel') === idx);
+      });
+    });
+  });
+  function gotoTab(i){ tabBtns[i].click(); }
+
+  /* ---------- 共享演示状态（mode: manual / auto / quick） ---------- */
+  var state = { idx: 0, packInstalled: false, dlBusy: false, voiceOn: false, theater: false, quick: false, mode: 'manual' };
+
+  var dialogues = [
+    { s: '旁白',  t: '罗德岛的走廊里回荡着轻微的脚步声。', narr: true, sid: 'zm_080' },
+    { s: '阿米娅', t: '博士，您醒了。这片区域已经净化完毕，请放心跟随大家行动。', sid: 'zf_032' },
+    { s: '杜宾',  t: '各单位注意，回收区域的信号已经稳定，可以开始行动了。', sid: 'zm_041' },
+    { s: '凯尔希', t: '记住，我们的目标是救援，而不是战斗。不要偏离预定路线。', sid: 'zf_059' },
+    { s: '阿米娅', t: '明白了。行动期间请务必与小队保持联络，有任何情况立即汇报。', sid: 'zf_032' },
+    { s: '旁白',  t: '远处的天色渐渐暗了下来。', narr: true, sid: 'zm_080' },
+    { s: '',     t: '—— 通讯中断 ——', narr: true, endtip: true, sid: 'zm_080' }
+  ];
+
+  /* ---------- 播放器：对白推进 ---------- */
+  var elText = document.getElementById('dialogText');
+  var elSpeaker = document.getElementById('speaker');
+  var badge = document.getElementById('voiceBadge');
+  var badgeState = document.getElementById('voiceState');
+  var toast = document.getElementById('toast');
+  var player = document.getElementById('player');
+  var typingTimer = null, voiceTimers = [];
+  var ffActive = false;
+
+  function clearTimers(){
+    if (typingTimer) { clearInterval(typingTimer); typingTimer = null; }
+    voiceTimers.forEach(clearTimeout); voiceTimers = [];
+  }
+  function showToast(msg){
+    toast.textContent = msg; toast.classList.add('visible');
+    setTimeout(function(){ toast.classList.remove('visible'); }, 1600);
+  }
+
+  function render(advanceTyping){
+    var d = dialogues[state.idx];
+    elSpeaker.textContent = d.endtip ? '结尾语' : d.s;
+    elSpeaker.classList.toggle('narr', !!d.narr || !!d.endtip);
+    elText.textContent = '';
+    var full = d.t, i = 0;
+    if (advanceTyping === false) { elText.textContent = full; updateVoiceBadge(d); updateProgress(); return; }
+    typingTimer = setInterval(function(){
+      i++;
+      elText.innerHTML = full.slice(0, i) + (i < full.length ? '<span class="caret"></span>' : '');
+      if (i >= full.length) { clearInterval(typingTimer); typingTimer = null; }
+    }, 34);
+    updateVoiceBadge(d);
+    updateProgress();
+  }
+
+  /* 决策⑤：徽标常驻两态 —— 待机（灰条）/ 朗读中（跳動 + 音色 ID）；静音源显示静音态 */
+  function badgeBase(){
+    voiceTimers.forEach(clearTimeout); voiceTimers = [];
+    badge.classList.remove('on','idle','speaking');
+    if (!state.voiceOn || !state.packInstalled) return;   // 未启用：隐藏
+    badge.classList.add('on','idle');
+    if (state.quick)   { badgeState.textContent = '快速模式静音'; return; }
+    if (ffActive)      { badgeState.textContent = '快进静音'; return; }
+    badgeState.textContent = '语音待机';
+  }
+  function updateVoiceBadge(d){
+    badgeBase();
+    if (!d || !badge.classList.contains('on') || state.quick || ffActive) return;
+    badgeState.textContent = '本地合成…';
+    voiceTimers.push(setTimeout(function(){
+      badge.classList.remove('idle'); badge.classList.add('speaking');
+      badgeState.textContent = '朗读中 · ' + d.sid;
+      voiceTimers.push(setTimeout(badgeBase, 420 + d.t.length * 130));
+    }, 380));
+  }
+
+  function advance(){
+    if (ffActive) return;
+    state.idx = (state.idx + 1) % dialogues.length;
+    render();
+  }
+
+  /* 点击 vs 长按快进（舞台手势） */
+  var holdTimer = null, holdStart = 0, lastY = 0;
+  player.addEventListener('pointerdown', function(e){
+    if (e.target.closest('.topbar,.pzone,.hub-sheet,.hub-backdrop,.ff-panel,.toast')) return;
+    holdStart = Date.now(); lastY = e.clientY;
+    holdTimer = setTimeout(startFF, 380);
+  });
+  player.addEventListener('pointermove', function(e){
+    if (!ffActive) return;
+    var dy = e.clientY - lastY;
+    if (dy > 34) { lastY = e.clientY; gearUp(); }
+  });
+  function endPress(e){
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+    if (ffActive) { stopFF(); return; }
+    if (!holdStart) return;
+    if (Date.now() - holdStart < 350) advance();
+    holdStart = 0;
+  }
+  player.addEventListener('pointerup', endPress);
+  player.addEventListener('pointercancel', endPress);
+  player.addEventListener('pointerleave', function(){ if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; } if (ffActive) stopFF(); });
+
+  var ffPanel = document.getElementById('ffPanel');
+  var gears = [2,4,8,16], gearIdx = 0;
+  function startFF(){
+    ffActive = true; gearIdx = 0; paintGear();
+    ffPanel.classList.add('visible');
+    badgeBase();   // 决策⑤：快进期间常驻徽标显示「快进静音」
+  }
+  function gearUp(){
+    if (gearIdx < gears.length - 1) { gearIdx++; paintGear(); }
+  }
+  function paintGear(){
+    ffPanel.querySelectorAll('.ff-item').forEach(function(it, i){
+      it.classList.toggle('on', i === gearIdx);
+    });
+  }
+  function stopFF(){
+    ffActive = false;
+    ffPanel.classList.remove('visible');
+    badgeBase();
+    showToast('已停止快进（快进期间语音静音）');
+  }
+  ffPanel.querySelectorAll('.ff-item').forEach(function(it, i){
+    it.addEventListener('click', function(e){ e.stopPropagation(); gearIdx = i; paintGear(); });
+  });
+
+  /* ---------- 进度条 ---------- */
+  var pfill = document.getElementById('pfill'), pcount = document.getElementById('pcount');
+  var progressEl = document.getElementById('progress');
+  (function buildTicks(){
+    for (var i = 0; i < dialogues.length; i++){
+      var t = document.createElement('span');
+      t.className = 'tick';
+      t.style.left = ((i + 0.5) / dialogues.length * 100) + '%';
+      progressEl.appendChild(t);
+    }
+  })();
+  function updateProgress(){
+    var p = ((state.idx + 0.5) / dialogues.length) * 100;
+    pfill.style.width = p + '%';
+    pcount.textContent = 'STOP ' + (state.idx + 1) + ' / ' + dialogues.length + ' · 悬停显示缩略预览';
+  }
+  document.getElementById('pzone').addEventListener('click', function(e){
+    if (e.target.closest('.topbar')) return;
+    e.stopPropagation();
+    var r = progressEl.getBoundingClientRect();
+    var ratio = (e.clientX - r.left) / r.width;
+    state.idx = Math.min(dialogues.length - 1, Math.max(0, Math.round(ratio * dialogues.length - 0.5)));
+    render();
+    showToast('已跳至第 ' + (state.idx + 1) + ' 句（重放期间语音静默）');
+  });
+
+  /* ---------- 控制中心（决策②：自动模式下打开即暂停推进，关闭续播） ---------- */
+  var hubSheet = document.getElementById('hubSheet');
+  var hubBackdrop = document.getElementById('hubBackdrop');
+  var hubBtn = document.getElementById('hubBtn');
+  function openHub(){
+    hubSheet.classList.add('visible'); hubBackdrop.classList.add('visible');
+    hubBtn.classList.remove('has-new');
+    if (state.mode === 'auto') showToast('自动播放已暂停（面板设置中）');
+  }
+  function closeHub(){
+    hubSheet.classList.remove('visible'); hubBackdrop.classList.remove('visible');
+    if (state.mode === 'auto') showToast('自动播放已继续');
+  }
+  /* 自动模式定时推进：面板打开或快进期间跳过（等效暂停续播） */
+  var autoTimer = null;
+  function syncAuto(){
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    if (state.mode === 'auto') {
+      autoTimer = setInterval(function(){
+        if (!hubSheet.classList.contains('visible') && !ffActive) advance();
+      }, 4800);
+    }
+  }
+  hubBtn.addEventListener('click', function(e){ e.stopPropagation(); hubSheet.classList.contains('visible') ? closeHub() : openHub(); });
+  document.getElementById('hubClose').addEventListener('click', closeHub);
+  hubBackdrop.addEventListener('click', closeHub);
+
+  /* 模式 / 速度 / 剧场：速度档仅自动模式可调（决策④） */
+  function applyMode(v){
+    state.mode = v;
+    state.quick = (v === 'quick');
+    document.getElementById('autoBtn').classList.toggle('on', v === 'auto');
+    document.getElementById('segSpeed').querySelectorAll('button').forEach(function(b){
+      b.disabled = (v !== 'auto');
+    });
+    badgeBase();
+    syncAuto();
+  }
+  function bindSeg(id, cb){
+    var seg = document.getElementById(id);
+    seg.querySelectorAll('button').forEach(function(b){
+      b.addEventListener('click', function(){
+        if (b.disabled) return;
+        seg.querySelectorAll('button').forEach(function(x){ x.classList.remove('on'); });
+        b.classList.add('on'); cb(b.getAttribute('data-v'));
+      });
+    });
+  }
+  bindSeg('segMode', function(v){
+    applyMode(v);
+    showToast(v === 'quick' ? '快速播放：语音自动静音' : (v === 'auto' ? '自动播放：开启' : '手动播放：开启'));
+  });
+  bindSeg('segSpeed', function(){ showToast('速度档已调整'); });
+  document.getElementById('swTheater').addEventListener('change', function(){
+    state.theater = this.checked;
+    showToast(state.theater ? '剧场模式：工具条自动隐藏' : '剧场模式已关闭');
+  });
+
+  /* 自动播放（顶栏，与控制中心模式同步） */
+  var autoBtn = document.getElementById('autoBtn');
+  autoBtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    var next = state.mode === 'auto' ? 'manual' : 'auto';
+    var seg = document.getElementById('segMode');
+    seg.querySelectorAll('button').forEach(function(b){
+      b.classList.toggle('on', b.getAttribute('data-v') === next);
+    });
+    applyMode(next);
+    showToast(next === 'auto' ? '自动播放：开启' : '手动播放：开启');
+  });
+
+  /* ---------- 音频滑杆（控制中心 + 设置页双向同步） ---------- */
+  document.querySelectorAll('input[type=range][data-ch]').forEach(function(input){
+    input.addEventListener('input', function(){
+      var ch = input.getAttribute('data-ch');
+      document.querySelectorAll('input[type=range][data-ch="' + ch + '"]').forEach(function(other){
+        if (other !== input) other.value = input.value;
+        var row = other.closest('.slider-row');
+        if (row) row.querySelector('.sv').textContent = input.value + '%';
+      });
+      var row = input.closest('.slider-row');
+      if (row) row.querySelector('.sv').textContent = input.value + '%';
+      if (ch === 'voice') {
+        var off = Number(input.value) === 0;
+        if (state.packInstalled && !off && !state.voiceOn) showToast('对白语音音量与开关：0% 即关闭');
+      }
+    });
+  });
+
+  /* ---------- 语音包下载 / 状态 ---------- */
+  var packState = document.getElementById('packState');
+  var packTitle = document.getElementById('packTitle');
+  var packDesc = document.getElementById('packDesc');
+  var packDlBtn = document.getElementById('packDlBtn');
+  var dlBar = document.getElementById('dlBar');
+  var dlFill = document.getElementById('dlFill');
+  var swVoice = document.getElementById('swVoice');
+  var setPill = document.getElementById('setPill');
+  var setDlBtn = document.getElementById('setDlBtn');
+  var setVerifyBtn = document.getElementById('setVerifyBtn');
+  var setDelBtn = document.getElementById('setDelBtn');
+
+  function paintPack(){
+    if (state.packInstalled) {
+      packState.className = 'pack-state ok';
+      packState.querySelector('.pi').textContent = '✓';
+      packTitle.textContent = 'kokoro 中文语音包（int8）已就绪';
+      packDesc.textContent = 'v1 · 约 92 MB · 103 音色 · 已通过校验 · 点「在设置中管理」查看详情';
+      packDlBtn.textContent = '重新校验';
+      packDlBtn.classList.remove('primary');
+      swVoice.disabled = false;
+      setPill.textContent = '已安装';
+      setPill.className = 'status-pill ok';
+      setDlBtn.textContent = '更新';
+      setVerifyBtn.disabled = false; setDelBtn.disabled = false;
+    } else {
+      packState.className = 'pack-state';
+      packState.querySelector('.pi').textContent = '⬇';
+      packTitle.textContent = 'kokoro 中文语音包（int8）未安装';
+      packDesc.textContent = '约 92 MB · 103 音色 · 中英混读 · Apache-2.0 · 按需下载';
+      packDlBtn.textContent = '下载';
+      packDlBtn.classList.add('primary');
+      dlFill.style.width = '0%';
+    }
+  }
+  function startDownload(){
+    if (state.dlBusy || state.packInstalled) return;
+    state.dlBusy = true;
+    packDlBtn.disabled = true; setDlBtn.disabled = true;
+    packDlBtn.textContent = '下载中…';
+    var p = 0;
+    var iv = setInterval(function(){
+      p += 5 + Math.random() * 9;
+      if (p >= 100) { p = 100; }
+      dlFill.style.width = p + '%';
+      packDesc.textContent = '正在下载 · ' + Math.round(p) + '%（sha256 校验中…）';
+      if (p >= 100) {
+        clearInterval(iv);
+        state.packInstalled = true; state.dlBusy = false;
+        packDlBtn.disabled = false; setDlBtn.disabled = false;
+        paintPack();
+        setDlBtn.textContent = '更新';
+        badgeBase();
+        showToast('语音包安装完成，朗读对白已解锁');
+      }
+    }, 180);
+  }
+  packDlBtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    if (!state.packInstalled) startDownload();
+    else showToast('校验通过 · 完整性 OK');
+  });
+  setDlBtn.addEventListener('click', startDownload);
+  swVoice.addEventListener('change', function(){
+    state.voiceOn = this.checked;
+    showToast(state.voiceOn ? '朗读对白：开启（对白/旁白/结尾语）' : '朗读对白：关闭');
+    badgeBase();
+    if (state.voiceOn) updateVoiceBadge(dialogues[state.idx]);
+  });
+  document.getElementById('goSettings').addEventListener('click', function(){ closeHub(); gotoTab(1); });
+  setVerifyBtn.addEventListener('click', function(){ showToast('校验通过 · 完整性 OK'); });
+  setDelBtn.addEventListener('click', function(){
+    state.packInstalled = false; state.voiceOn = false;
+    swVoice.checked = false; swVoice.disabled = true;
+    setVerifyBtn.disabled = true; setDelBtn.disabled = true;
+    setDlBtn.textContent = '下载 · 约 92 MB';
+    paintPack();
+    badgeBase();
+    showToast('语音包已删除 · 朗读对白回退静音');
+  });
+  document.getElementById('resetDemo').addEventListener('click', function(){
+    state.packInstalled = false; state.voiceOn = false; state.dlBusy = false;
+    swVoice.checked = false; swVoice.disabled = true;
+    setVerifyBtn.disabled = true; setDelBtn.disabled = true;
+    setPill.textContent = '未安装'; setPill.className = 'status-pill none';
+    setDlBtn.textContent = '下载 · 约 92 MB'; setDlBtn.disabled = false;
+    paintPack();
+    badgeBase();
+    showToast('演示状态已重置');
+  });
+
+  /* ---------- 音色试听（chip） ---------- */
+  document.querySelectorAll('.chip .listen').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var chip = btn.closest('.chip');
+      chip.classList.add('listening');
+      btn.textContent = '♪';
+      setTimeout(function(){ chip.classList.remove('listening'); btn.textContent = '▶'; }, 1400);
+    });
+  });
+
+  /* ---------- 初始化 ---------- */
+  paintPack();
+  render(false);
+  updateProgress();
+})();
+</script>
+</body>
+</html>
