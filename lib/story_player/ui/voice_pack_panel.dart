@@ -30,7 +30,7 @@ class _VoicePackPanelState extends State<VoicePackPanel> {
   Future<void> _download() async {
     final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
       title: const Text('下载默认语音包'),
-      content: const Text('将从 GitHub 下载 Kokoro INT8 语音包（147 MB），安装需额外的临时磁盘空间。首次下载需要联网，安装后对白合成完全离线。使用移动数据会消耗流量。'),
+      content: const Text('将从国内镜像（hf-mirror.com，备用 HuggingFace）下载 Kokoro INT8 语音包（约 176 MB），安装需额外的临时磁盘空间。首次下载需要联网，安装后对白合成完全离线。使用移动数据会消耗流量。'),
       actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
         FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('下载'))],
     ));
@@ -73,12 +73,12 @@ class _VoicePackPanelState extends State<VoicePackPanel> {
         value: widget.enabled, onChanged: _packs.supported ? widget.onEnabledChanged : null),
       const SizedBox(height: 8),
       Row(children: [const Expanded(child: Text('Kokoro 多语言 · INT8')),
-        Text(_packs.installed ? '已安装' : '147 MB', style: Theme.of(context).textTheme.labelMedium)]),
+        Text(_packs.installed ? '已安装' : '约 176 MB', style: Theme.of(context).textTheme.labelMedium)]),
       const SizedBox(height: 8),
       Text(switch (status) {
         VoicePackStatus.unavailable => '支持 Android、Windows 和 Linux。',
         VoicePackStatus.missing => '尚未安装语音包，剧情继续以文字播放。',
-        VoicePackStatus.downloading => '正在下载 ${(_packs.receivedBytes / 1000000).toStringAsFixed(1)} / 147.1 MB',
+        VoicePackStatus.downloading => '正在下载 ${(_packs.receivedBytes / 1000000).toStringAsFixed(1)} / ${(VoicePackStore.downloadBytes / 1000000).toStringAsFixed(1)} MB',
         VoicePackStatus.paused => '下载已暂停，再次打开应用也可继续下载。',
         VoicePackStatus.verifying => '正在校验并安装，请稍候…',
         VoicePackStatus.installed => '离线可用 · 本地占用 ${(_packs.installedBytes / 1000000).toStringAsFixed(1)} MB',
@@ -116,7 +116,7 @@ class _VoicePackPanelState extends State<VoicePackPanel> {
       ]),
       Text(_packs.profile.overrides.containsKey(_speaker) ? '已指定音色；同名角色在所有章节生效。' : '使用默认分配；未收录的角色会按名称稳定分配音色。', style: Theme.of(context).textTheme.bodySmall),
       const SizedBox(height: 8),
-      const Text('模型：Kokoro v1.1（Apache-2.0） · 推理：sherpa-onnx\n离线合成可能读错人名或生僻字，可关闭语音继续阅读。', style: TextStyle(fontSize: 11)),
+      const Text('模型：Kokoro v1.1（Apache-2.0） · 推理：sherpa-onnx · 下载：国内镜像优先，官方源兑底\n离线合成可能读错人名或生僻字，可关闭语音继续阅读。', style: TextStyle(fontSize: 11)),
     ]);
   });
 }

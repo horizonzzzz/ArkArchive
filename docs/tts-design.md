@@ -1,6 +1,6 @@
 # 对白语音（本地 TTS）技术方案
 
-> 本分支已实现可用首版：直接接入 sherpa-onnx，覆盖默认包下载/续传/校验、本地合成、切句打断、自动播放等待句尾、设置与右侧控制中心、角色映射及试听。下文阶段表保留规划背景；长句切段、下一句预合成和角色独立模型包仍待实现。当前模型包实际为 147,052,523 字节（界面约 147 MB），默认关闭语音。模型与角色映射存放于应用支持目录的 `voice_packs`，不随剧情缓存目录迁移或清理；删除模型保留角色映射。
+> 本分支已实现可用首版：直接接入 sherpa-onnx，覆盖默认包下载/续传/校验、本地合成、切句打断、自动播放等待句尾、设置与右侧控制中心、角色映射及试听。下文阶段表保留规划背景；长句切段、下一句预合成和角色独立模型包仍待实现。模型包改为从国内镜像 hf-mirror 逐文件下载（共 176,285,027 字节，约 176 MB），失败自动回退 HuggingFace 官方源，语音默认关闭。模型与角色映射存放于应用支持目录的 `voice_packs`，不随剧情缓存目录迁移或清理；删除模型保留角色映射。
 
 实现验证与平台边界见 [TTS 首版验证记录](tts-validation.md)。
 
@@ -169,7 +169,7 @@ abstract class DialogueVoice {
 | 首启体验 | 首次开启语音需等待下载，需设置页引导 | 开箱即用 |
 | 实现成本 | 复用现有下载管线（暂停/恢复/失败原因/并发控制/移动网络提醒均有现成语义） | assets 无法直接给 native 层文件路径，需「打包 + 首启复制到应用目录」流程 |
 
-**结论：默认语音包走按需下载**，设置页首次开启语音时引导下载（含移动网络提醒，与剧情缓存同策略）；下载源主：k2-fsa GitHub Release，备：hf-mirror（sherpa-onnx 官方镜像），失败可重试、可跳过（跳过即无语音）。
+**结论：默认语音包走按需下载**，设置页首次开启语音时引导下载（含移动网络提醒，与剧情缓存同策略）。**下载源：国内镜像 hf-mirror（`csukuangfj/kokoro-int8-multi-lang-v1_1` 仓库逐文件拉取）优先，HuggingFace 官方源兑底**；单一源失败（网络错误、HTTP 异常、哈希不符）自动切下一源，逐文件 sha256 校验（哈希来源为 HF LFS oid 与镜像实测），失败可重试、可跳过（跳过即无语音）。原 GitHub Release tar.bz2 整包链路已移除（国内可达性差，且散文件可细粒度续传），`archive` 解压依赖随之清理。
 若按需通道在初版受阻（如校验链路未就绪），降级为乙：随包 + 首启复制，二者对上层完全透明（`VoicePackStore` 统一暴露本地已就绪的包目录）。
 
 ### 4.3 下载与校验
@@ -332,7 +332,7 @@ class VoiceBinding {
 
 ## 附录 A：kokoro-multi-lang-v1.1 音色摘要
 
-- 下载：`https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_1.tar.bz2`（int8 版同 tag 获取，`落地核验`）
+- 下载：`https://hf-mirror.com/csukuangfj/kokoro-int8-multi-lang-v1_1/resolve/main/<file>`（全部共 176,285,027 字节；哈希清单见 `lib/story_player/data/voice_pack.dart`）
 - 采样率 24000 Hz；103 说话人：
   - sid 0–2：英语（af_maple / af_sol / bf_vale）
   - sid 3–57：中文女声 55 个（zf_001 … zf_099）

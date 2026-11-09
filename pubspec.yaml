@@ -51,7 +51,6 @@ dependencies:
   package_info_plus: ^10.2.2
   url_launcher: ^6.3.3
   sherpa_onnx: 2.0.1
-  archive: 4.0.9
 dev_dependencies:
   flutter_test:
     sdk: flutter

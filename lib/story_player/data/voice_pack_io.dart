@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -21,10 +21,13 @@ class LocalVoicePackStore extends VoicePackStore {
   LocalVoicePackStore({
     Future<Directory> Function()? supportDirectory,
     http.Client Function()? clientFactory,
+    List<VoicePackFile> files = VoicePackStore.files,
   }) : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory,
-       _clientFactory = clientFactory ?? http.Client.new;
+       _clientFactory = clientFactory ?? http.Client.new,
+       _files = List.unmodifiable(files);
   final Future<Directory> Function() _supportDirectory;
   final http.Client Function() _clientFactory;
+  final List<VoicePackFile> _files;
   @override
   VoicePackStatus status = VoicePackStatus.missing;
   @override
@@ -65,19 +68,40 @@ class LocalVoicePackStore extends VoicePackStore {
         }
       }
       final path = '${_root!.path}/${VoicePackStore.id}';
-      final size = await Isolate.run(() => validateVoicePack(path));
+      final files = _files;
+      final size = await Isolate.run(() => validateVoicePack(path, files));
       if (size > 0) {
         directory = path;
         installedBytes = size;
         status = VoicePackStatus.installed;
       }
-      final partial = File('${_root!.path}/model.tar.bz2.part');
-      if (await partial.exists()) receivedBytes = await partial.length();
+      final staging = Directory('${_root!.path}/.downloading');
+      if (await staging.exists()) receivedBytes = await _receivedIn(staging);
     } catch (e) {
       status = VoicePackStatus.failed;
       error = '无法读取语音包：$e';
     }
     notifyListeners();
+  }
+
+  /// staging 内已就位文件与未完成 .part 的总字节数，用于恢复下载进度。
+  Future<int> _receivedIn(Directory staging) async {
+    var total = 0;
+    final names = {for (final file in _files) file.name};
+    final sizes = {for (final file in _files) file.name: file.size};
+    for (final entry in await staging.list().toList()) {
+      if (entry is! File) continue;
+      final name = entry.uri.pathSegments.last;
+      final done = names.contains(name);
+      final partial = name.endsWith('.part') &&
+          names.contains(name.substring(0, name.length - 5));
+      if (done) {
+        total += sizes[name] ?? 0;
+      } else if (partial) {
+        total += await entry.length();
+      }
+    }
+    return total;
   }
 
   @override
@@ -90,92 +114,51 @@ class LocalVoicePackStore extends VoicePackStore {
     final root = _root;
     if (root == null) return;
     final control = _control = CacheControl();
-    final archive = File('${root.path}/model.tar.bz2.part');
+    final staging = Directory('${root.path}/.downloading');
     error = null;
     status = VoicePackStatus.downloading;
     notifyListeners();
     try {
-      receivedBytes = await archive.exists() ? await archive.length() : 0;
-      if (receivedBytes > VoicePackStore.downloadBytes) {
-        await archive.delete();
-        receivedBytes = 0;
-      }
-      if (receivedBytes < VoicePackStore.downloadBytes) {
-        final client = _client = _clientFactory();
-        try {
-          final request = http.Request(
-            'GET',
-            Uri.parse(VoicePackStore.downloadUrl),
-          );
-          if (receivedBytes > 0)
-            request.headers['Range'] = 'bytes=$receivedBytes-';
-          http.StreamedResponse response;
-          try {
-            response = await client
-                .send(request)
-                .timeout(const Duration(seconds: 30));
-            if (response.statusCode != 200 && response.statusCode != 206)
-              throw HttpException('HTTP ${response.statusCode}');
-          } catch (_) {
-            await control.checkpoint();
-            final fallback = http.Request(
-              'GET',
-              Uri.parse(VoicePackStore.assetApiUrl),
-            );
-            fallback.headers.addAll(request.headers);
-            fallback.headers['Accept'] = 'application/octet-stream';
-            response = await client
-                .send(fallback)
-                .timeout(const Duration(seconds: 30));
-          }
-          if (response.statusCode != 200 && response.statusCode != 206) {
-            throw HttpException('下载失败：HTTP ${response.statusCode}');
-          }
-          if (response.statusCode == 206 &&
-              response.headers['content-range'] !=
-                  'bytes $receivedBytes-${VoicePackStore.downloadBytes - 1}/${VoicePackStore.downloadBytes}') {
-            throw const FormatException('服务器返回的续传范围不匹配');
-          }
-          if (response.statusCode == 200) receivedBytes = 0;
-          final sink = archive.openWrite(
-            mode: receivedBytes == 0 ? FileMode.write : FileMode.append,
-          );
-          try {
-            var lastReport = 0;
-            await for (final bytes in response.stream) {
-              await control.checkpoint();
-              receivedBytes += bytes.length;
-              if (receivedBytes > VoicePackStore.downloadBytes)
-                throw const FormatException('语音包超过预期大小');
-              sink.add(bytes);
-              if (receivedBytes - lastReport >= 262144) {
-                lastReport = receivedBytes;
-                notifyListeners();
-                await sink.flush();
-              }
-            }
-          } finally {
-            await sink.close();
-          }
-        } finally {
-          client.close();
-          _client = null;
+      await staging.create(recursive: true);
+      var doneBytes = 0;
+      final pending = _files
+          .where(
+            (file) => !File('${staging.path}/${file.name}').existsSync(),
+          )
+          .toList();
+      doneBytes =
+          _files.fold(0, (sum, file) => sum + file.size) -
+          pending.fold(0, (sum, file) => sum + file.size);
+      receivedBytes = doneBytes;
+      for (final entry in await staging.list().toList()) {
+        if (entry is File && entry.path.endsWith('.part')) {
+          receivedBytes += await entry.length();
         }
       }
+      notifyListeners();
+      final client = _client = _clientFactory();
+      try {
+        for (final file in pending) {
+          await _downloadFile(control, staging, file, doneBytes);
+          doneBytes += file.size;
+        }
+      } finally {
+        client.close();
+        _client = null;
+      }
       await control.checkpoint();
-      if (receivedBytes != VoicePackStore.downloadBytes)
-        throw const FormatException('语音包未下载完整，请重试续传');
       status = VoicePackStatus.verifying;
       notifyListeners();
-      final archivePath = archive.path;
+      final stagingPath = staging.path;
       final rootPath = root.path;
+      final files = _files;
       installedBytes = await Isolate.run(
-        () => installVoiceArchive(archivePath, rootPath),
+        () => installDownloadedFiles(stagingPath, rootPath, files),
       );
       await control.checkpoint();
       directory = '${root.path}/${VoicePackStore.id}';
       status = VoicePackStatus.installed;
-      await archive.delete();
+      // staging 已原子改名为安装目录，无需再清理。
     } on CacheCancelled {
       status = VoicePackStatus.missing;
     } catch (e) {
@@ -187,6 +170,93 @@ class LocalVoicePackStore extends VoicePackStore {
       _control = null;
       notifyListeners();
     }
+  }
+
+  /// 单个文件：依次尝试镜像列表中的源，任一源成功即完成。
+  Future<void> _downloadFile(
+    CacheControl control,
+    Directory staging,
+    VoicePackFile file,
+    int doneBytes,
+  ) async {
+    final target = File('${staging.path}/${file.name}');
+    if (await target.exists()) return;
+    Object? failure;
+    for (final host in VoicePackStore.downloadHosts) {
+      try {
+        await _downloadFromHost(control, staging, file, host, doneBytes);
+        return;
+      } on CacheCancelled {
+        rethrow;
+      } catch (e) {
+        failure = e;
+        debugPrint('语音包 $host/${file.name} 下载失败，尝试下一个源：$e');
+      }
+    }
+    throw HttpException('下载 ${file.name} 失败：$failure');
+  }
+
+  Future<void> _downloadFromHost(
+    CacheControl control,
+    Directory staging,
+    VoicePackFile file,
+    String host,
+    int doneBytes,
+  ) async {
+    final part = File('${staging.path}/${file.name}.part');
+    var start = await part.exists() ? await part.length() : 0;
+    if (start > file.size) {
+      await part.delete();
+      start = 0;
+    }
+    final request = http.Request(
+      'GET',
+      Uri.parse(VoicePackStore.fileUrl(host, file.name)),
+    );
+    if (start > 0) request.headers['Range'] = 'bytes=$start-';
+    final response = await _client!
+        .send(request)
+        .timeout(const Duration(seconds: 30));
+    if (response.statusCode != 200 && response.statusCode != 206) {
+      throw HttpException('HTTP ${response.statusCode}');
+    }
+    if (response.statusCode == 206) {
+      final expected =
+          'bytes $start-${file.size - 1}/${file.size}';
+      if (response.headers['content-range'] != expected) {
+        throw const FormatException('服务器返回的续传范围不匹配');
+      }
+    }
+    final mode = response.statusCode == 200 ? FileMode.write : FileMode.append;
+    final sink = part.openWrite(mode: mode);
+    var position = response.statusCode == 200 ? 0 : start;
+    try {
+      var lastReport = position;
+      await for (final bytes in response.stream) {
+        await control.checkpoint();
+        position += bytes.length;
+        if (position > file.size) {
+          throw const FormatException('语音包文件超过预期大小');
+        }
+        sink.add(bytes);
+        receivedBytes = doneBytes + position;
+        if (position - lastReport >= 262144) {
+          lastReport = position;
+          notifyListeners();
+          await sink.flush();
+        }
+      }
+    } finally {
+      await sink.close();
+    }
+    if (position != file.size) {
+      throw const FormatException('下载不完整，请重试续传');
+    }
+    if ('${await sha256.bind(part.openRead()).first}' != file.sha256) {
+      await part.delete();
+      throw const FormatException('文件校验失败，已丢弃重新下载');
+    }
+    await part.rename('${staging.path}/${file.name}');
   }
 
   @override
@@ -224,8 +294,9 @@ class LocalVoicePackStore extends VoicePackStore {
       for (final release in releaseUsers.toList()) {
         await release();
       }
-      if (path != null && await Directory(path).exists())
+      if (path != null && await Directory(path).exists()) {
         await Directory(path).delete(recursive: true);
+      }
       status = VoicePackStatus.missing;
       installedBytes = 0;
       receivedBytes = 0;
@@ -235,7 +306,6 @@ class LocalVoicePackStore extends VoicePackStore {
     }
     notifyListeners();
   }
-
   @override
   Future<void> bind(String speaker, int? sid) async {
     await initialize();
@@ -257,109 +327,69 @@ class LocalVoicePackStore extends VoicePackStore {
   }
 }
 
+/// 安装前校验 staging 内全部文件并对齐安装记录，然后原子替换目标目录。
+/// staging 中残留的 .part 不会进入安装目录。
+Future<int> installDownloadedFiles(
+  String stagingPath,
+  String rootPath, [
+  List<VoicePackFile> files = VoicePackStore.files,
+]) async {
+  final staging = Directory(stagingPath);
+  var total = 0;
+  for (final file in files) {
+    final target = File('${staging.path}/${file.name}');
+    if (!await target.exists() || await target.length() != file.size) {
+      throw FormatException('语音包文件缺失或大小异常：${file.name}');
+    }
+    if ('${await sha256.bind(target.openRead()).first}' != file.sha256) {
+      throw FormatException('语音包文件校验失败：${file.name}');
+    }
+    total += file.size;
+  }
+  for (final entry in await staging.list().toList()) {
+    if (entry is File && entry.path.endsWith('.part')) await entry.delete();
+  }
+  await File('${staging.path}/installed.json').writeAsString(
+    jsonEncode({
+      'version': 1,
+      'files': {for (final file in files) file.name: file.sha256},
+    }),
+    flush: true,
+  );
+  if (await validateVoicePack(stagingPath, files) == 0) {
+    throw const FormatException('语音包安装校验失败');
+  }
+  final targetDir = Directory('$rootPath/${VoicePackStore.id}');
+  if (await targetDir.exists()) await targetDir.delete(recursive: true);
+  await staging.rename(targetDir.path);
+  return total;
+}
+
 /// 每次启动校验安装记录，损坏或缺文件的模型不会交给 native 引擎。
-Future<int> validateVoicePack(String path) async {
+Future<int> validateVoicePack(
+  String path, [
+  List<VoicePackFile> files = VoicePackStore.files,
+]) async {
   try {
     final marker = File('$path/installed.json');
     if (!await marker.exists()) return 0;
     final manifest =
         jsonDecode(await marker.readAsString()) as Map<String, dynamic>;
-    if (manifest['archiveSha256'] != VoicePackStore.archiveSha256) return 0;
-    var total = 0;
+    if (manifest['version'] != 1) return 0;
     final hashes = manifest['files'] as Map<String, dynamic>;
-    if (!hashes.containsKey('model.int8.onnx') ||
-        !hashes.containsKey('voices.bin') ||
-        !hashes.containsKey('tokens.txt') ||
-        !hashes.containsKey('lexicon-zh.txt') ||
-        !hashes.containsKey('lexicon-us-en.txt')) {
-      return 0;
-    }
-    for (final entry in hashes.entries) {
-      if (!safeVoicePath(entry.key)) return 0;
-      final file = File('$path/${entry.key}');
-      if (!await file.exists() ||
-          '${await sha256.bind(file.openRead()).first}' != entry.value)
+    if (hashes.length != files.length) return 0;
+    var total = 0;
+    for (final file in files) {
+      if (hashes[file.name] != file.sha256) return 0;
+      final target = File('$path/${file.name}');
+      if (!await target.exists() ||
+          '${await sha256.bind(target.openRead()).first}' != file.sha256) {
         return 0;
-      total += await file.length();
+      }
+      total += await target.length();
     }
     return total;
   } catch (_) {
     return 0;
-  }
-}
-
-bool safeVoicePath(String name) =>
-    name.isNotEmpty &&
-    !name.startsWith('/') &&
-    !name.contains('\\') &&
-    !name.contains(':') &&
-    !name.split('/').contains('..');
-
-Future<int> installVoiceArchive(String archivePath, String rootPath) async {
-  final packed = File(archivePath);
-  if ('${await sha256.bind(packed.openRead()).first}' !=
-      VoicePackStore.archiveSha256) {
-    await packed.delete();
-    throw const FormatException('语音包 SHA256 校验失败，请重新下载');
-  }
-  final staging = Directory('$rootPath/.installing');
-  final tarPath = '$rootPath/model.tar';
-  try {
-    if (await staging.exists()) await staging.delete(recursive: true);
-    await staging.create(recursive: true);
-    final input = InputFileStream(archivePath);
-    final output = OutputFileStream(tarPath);
-    try {
-      if (!BZip2Decoder().decodeStream(input, output, verify: true))
-        throw const FormatException('语音包解压失败');
-    } finally {
-      input.closeSync();
-      output.closeSync();
-    }
-    final tar = InputFileStream(tarPath);
-    final hashes = <String, String>{};
-    var total = 0;
-    try {
-      final archive = TarDecoder().decodeStream(tar);
-      for (final entry in archive) {
-        if (!safeVoicePath(entry.name) || entry.isSymbolicLink)
-          throw const FormatException('语音包包含不安全路径');
-        if (!entry.isFile) continue;
-        final parts = entry.name.split('/');
-        if (parts.first != VoicePackStore.id || parts.length < 2)
-          throw const FormatException('语音包目录不匹配');
-        final relative = parts.skip(1).join('/');
-        total += entry.size;
-        if (total > 700000000) throw const FormatException('语音包解压大小异常');
-        final file = File('${staging.path}/$relative');
-        await file.parent.create(recursive: true);
-        final out = OutputFileStream(file.path);
-        try {
-          entry.writeContent(out);
-        } finally {
-          out.closeSync();
-        }
-        hashes[relative] = '${await sha256.bind(file.openRead()).first}';
-      }
-    } finally {
-      tar.closeSync();
-    }
-    await File('${staging.path}/installed.json').writeAsString(
-      jsonEncode({
-        'version': 1,
-        'archiveSha256': VoicePackStore.archiveSha256,
-        'files': hashes,
-      }),
-      flush: true,
-    );
-    if (await validateVoicePack(staging.path) == 0)
-      throw const FormatException('语音包缺少模型或词典文件');
-    final target = Directory('$rootPath/${VoicePackStore.id}');
-    if (await target.exists()) await target.delete(recursive: true);
-    await staging.rename(target.path);
-    return total;
-  } finally {
-    if (await File(tarPath).exists()) await File(tarPath).delete();
-    if (await staging.exists()) await staging.delete(recursive: true);
   }
 }

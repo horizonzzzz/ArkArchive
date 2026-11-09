@@ -2,6 +2,16 @@
 
 本记录对应 `feat/tts` 分支的本地对白朗读实现。首版采用 sherpa-onnx 2.0.1 与 Kokoro v1.1 多语言 INT8，语音默认关闭。长句切段、下一句预合成和角色独立模型包仍属于后续范围。
 
+## 2026-11-09 墙补：下载改为国内镜像多源
+
+GitHub Release 下载在本机持续连接重置与超时，下载链路改为 hf-mirror 国内镜像优先、HuggingFace 官方兑底，按文件逐个拉取（不再下载/解压 tar.bz2 整包，`archive` 依赖已移除）：
+
+- `flutter analyze --no-pub`：通过，无问题；
+- `flutter test`：261 项通过，2 项跳过（新增镜像换源、篡改丢弃重下、细粒度续传、断点重启恢复、安装阶段 .part 清理等测试）；
+- 真实网络验证：对 `hf-mirror.com/csukuangfj/kokoro-int8-multi-lang-v1_1` 的 resolve 链路实测——小文件 200；Range 请求返回 206 且 `content-range` 格式与实现一致（如 `bytes 100-1110/1111`，total 与清单吻合）；`number-zh.fst` 完整下载 sha256 与硬编码清单一致；
+  - `model.int8.onnx`（114 MB LFS）经 hf-mirror 302 跳转到 HF 官方 CDN（us.aws.cdn.hf.co），Range 头在跳转后保留，206 与 total=114,203,914 与清单一致，本机可达。hf-mirror 对该大文件为跳转而非中转，实际加速效果取决于用户网络对 HF CDN 的连通性；若镜像体验不佳，可在 `downloadHosts` 清单中补充其他源（多源结构无需改动逻辑）；
+- 默认包改为 8 个散文件共 176,285,027 字节（约 176 MB），哈希来源：LFS 文件为 HuggingFace 仓库 git-lfs oid（上游权威 sha256），小文件为镜像实测；任何源返回内容与哈希不符即丢弃 .part 自动换下一源。
+
 ## 自动检查
 
 - `flutter analyze --no-pub`：通过，无问题。
@@ -25,7 +35,7 @@
 
 命令行首次验证误载了系统 ONNX Runtime 1.17.1，出现 `The requested API version [28] is not available` 并导致原生崩溃。验证脚本预载 Windows 构建产物随附的 `onnxruntime.dll` 后，两次合成都通过。Flutter Windows 构建会将该库与应用一起分发。
 
-官方 GitHub 下载在本机发生连接重置和超时；真实合成验证所用文件从相同模型仓库的镜像取得。应用运行时仍使用官方 GitHub Release 下载地址及官方资产 API 备用地址，整包校验使用已核对的 SHA-256。
+官方 GitHub 下载在本机发生连接重置和超时，因此本记录中的真实合成验证文件从镜像取得；后续下载链路已整体切换为「hf-mirror 镜像优先 + HuggingFace 官方兑底」的散文件方案（见顶部增量记录），不再依赖 GitHub。
 
 ## 验证边界
 
@@ -34,4 +44,6 @@
 - Web、macOS 和 iOS 本轮不启用本地 TTS。
 - pi-lens 的主动 Dart 检查超时，未提供有效结论；静态检查结论来自实际执行的 `flutter analyze`。
 
-模型与映射存放于应用支持目录的 `voice_packs`，独立于剧情缓存。删除模型保留角色映射；安装和启动时检查完整性。默认包下载大小为 147,052,523 字节。
+模型与映射存放于应用支持目录的 `voice_packs`，独立于剧情缓存。删除模型保留角色映射；安装和启动时检查完整性。默认包8 个文件合计 176,285,027 字节（原 tar.bz2 整包 147,052,523 字节的方案已移除）。
+
+> AI生成
