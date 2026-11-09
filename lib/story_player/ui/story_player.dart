@@ -339,9 +339,13 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
 
   void _updateFineScrub(DragUpdateDetails details, double width) {
     if (width <= 0 || _scrubPosition == null) return;
-    if (details.delta.dy < 0) {
-      // 上滑退出精细模式，并以当前手柄位置重新建立粗扫基准，避免跳点。
-      _finePull = 0;
+
+    // 精细深度随累积纵向位移变化：下拉加深、上滑回拉变浅。
+    // 只有在回拉把深度拉回 0 时才退出精细模式；横向滑动因 dy≈0 不会
+    // 误触退出（修复移动端"左右扫一下即恢复非精细"的问题）。退出时
+    // 以当前手柄位置重新建立粗扫基准，避免跳点。
+    _finePull = (_finePull + details.delta.dy).clamp(0.0, 110.0);
+    if (_finePull <= 0) {
       _fineScrubbing = false;
       _scrubStartPosition = _scrubPosition!;
       _scrubDragOriginX = details.localPosition.dx;
@@ -350,7 +354,6 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
       return;
     }
 
-    _finePull = (_finePull + details.delta.dy).clamp(0.0, 110.0);
     final depth = (_finePull / 110).clamp(0.0, 1.0);
     final eased = 1 - math.pow(1 - depth, 3).toDouble();
     final sensitivity = 1 - .82 * eased;

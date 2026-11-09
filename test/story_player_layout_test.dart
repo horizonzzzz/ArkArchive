@@ -393,10 +393,19 @@ void main() {
     final full = tester.getRect(progress);
     expect(full.top - before.top, closeTo(36, 1));
     expect(find.textContaining('×0.18'), findsOneWidget);
-    // C1 回归：上滑退出后小幅度下移不会立即重入。
-    await gesture.moveBy(const Offset(0, -2));
+    // C1 回归 + 误触修复：精细态下横向左右滑动不得退出（原 bug：单帧
+    // 负 dy 即恢复非精细，移动端左右扫动即误触）。
+    await gesture.moveBy(const Offset(60, 0));
+    await tester.pump();
+    expect(find.byKey(const Key('story-fine-tag')), findsOneWidget);
+    await gesture.moveBy(const Offset(-60, 0));
+    await tester.pump();
+    expect(find.byKey(const Key('story-fine-tag')), findsOneWidget);
+    // 上滑回拉把深度拉回 0 才退出精细。
+    await gesture.moveBy(const Offset(0, -110));
     await tester.pump();
     expect(find.byKey(const Key('story-fine-tag')), findsNothing);
+    // 退出后小幅度下移不会立即重入。
     await gesture.moveBy(const Offset(0, 5));
     await tester.pump();
     expect(find.byKey(const Key('story-fine-tag')), findsNothing);
