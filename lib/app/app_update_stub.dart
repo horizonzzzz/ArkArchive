@@ -1,5 +1,7 @@
 /// Web 等无 dart:io 平台的更新文件后端；应用内下载不可用，
 /// 更新包由浏览器或发布页获取。接口形状与 app_update_io.dart 保持一致。
+Future<String?> detectAndroidAbi() async => null;
+
 class UpdateFileStore {
   const UpdateFileStore();
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../story_player/data/media_catalog.dart';
 import '../story_player/data/playback_settings.dart';
 import '../story_player/data/story_repository.dart';
@@ -48,6 +50,7 @@ class SettingsPage extends StatefulWidget {
     this.appVersion,
     this.update,
     this.onOpenLink,
+    this.androidAbi,
   });
   final bool concurrencyBusy;
   final bool active;
@@ -78,6 +81,9 @@ class SettingsPage extends StatefulWidget {
 
   /// 打开外部链接（项目主页、发布页与浏览器下载更新包）。
   final void Function(Uri uri)? onOpenLink;
+
+  /// 设备 Android 架构（如 `arm64-v8a`）；为 null 时关于页自动探测。
+  final String? androidAbi;
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
@@ -91,6 +97,15 @@ class _SettingsPageState extends State<SettingsPage> {
   AppUpdate? _update;
   String? _updateError;
   final Map<String, _AssetDownload> _downloads = {};
+
+  /// 探测到的 Android 架构；null 表示未知或非 Android。
+  String? _androidAbi;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.androidAbi == null) unawaited(_detectAndroidAbi());
+  }
 
   /// 网络与节点分类在 categories 中的下标。
   static const _networkCategory = 3;
@@ -667,7 +682,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ],
         const SizedBox(height: 14),
-        ..._updateAssets(update),
+        ..._updateDownloadArea(update),
       ],
     );
   }
@@ -683,53 +698,79 @@ class _SettingsPageState extends State<SettingsPage> {
     };
   }
 
-  List<Widget> _updateAssets(AppUpdate update) {
-    Widget openPageButton() => OutlinedButton.icon(
-      key: const ValueKey('about-update-page'),
-      onPressed: widget.onOpenLink == null
-          ? null
-          : () => widget.onOpenLink!(update.pageUri),
-      icon: const Icon(Icons.open_in_new, size: 16),
-      label: const Text('打开发布页面'),
-    );
-    final token = _assetPlatformToken();
-    if (token == null) {
+  /// 更新下载区域：Web 展示全部资产，其余平台只给本设备应下载的那一个安装包。
+  List<Widget> _updateDownloadArea(AppUpdate update) {
+    if (kIsWeb) {
       return [
-        const Text(
-          '当前平台没有对应的安装包，可在发布页面查看全部文件。',
-          style: TextStyle(fontSize: 12, color: AppColors.subtext),
-        ),
-        const SizedBox(height: 12),
-        openPageButton(),
+        for (final asset in update.assets) ...[
+          _updateAssetRow(asset),
+          const SizedBox(height: 8),
+        ],
       ];
     }
-    final assets = update.assets
-        .where((asset) => token.isEmpty || asset.name.contains(token))
-        .toList();
-    if (assets.isEmpty) {
+    final asset = _preferredUpdateAsset(update);
+    if (asset == null) {
       return [
         const Text(
-          '本次发布没有当前平台的安装包，可在发布页面查看全部文件。',
+          '当前平台没有可自动匹配的安装包，请在发布页面查看全部文件。',
           style: TextStyle(fontSize: 12, color: AppColors.subtext),
         ),
         const SizedBox(height: 12),
-        openPageButton(),
+        OutlinedButton.icon(
+          key: const ValueKey('about-update-page'),
+          onPressed: widget.onOpenLink == null
+              ? null
+              : () => widget.onOpenLink!(update.pageUri),
+          icon: const Icon(Icons.open_in_new, size: 16),
+          label: const Text('打开发布页面'),
+        ),
       ];
     }
     return [
-      if (token == '-android-')
-        const Padding(
-          padding: EdgeInsets.only(bottom: 10),
-          child: Text(
-            'Android 请选择与设备匹配的架构；不确定时选择 universal。',
-            style: TextStyle(fontSize: 11, color: AppColors.muted),
-          ),
+      if (defaultTargetPlatform == TargetPlatform.android) ...[
+        const Text(
+          '已自动匹配设备架构，直接下载安装即可。',
+          style: TextStyle(fontSize: 11, color: AppColors.muted),
         ),
-      for (final asset in assets) ...[
-        _updateAssetRow(asset),
         const SizedBox(height: 8),
       ],
+      _updateAssetRow(asset),
     ];
+  }
+
+  /// 从发布资产中挑出本设备应下载的那一个安装包。
+  ///
+  /// Android 优先精确匹配设备 ABI，其次 universal，最后唯一候选；
+  /// 其他平台只有唯一候选时给出下载入口，否则交回发布页面。
+  AppUpdateAsset? _preferredUpdateAsset(AppUpdate update) {
+    final token = _assetPlatformToken();
+    if (token == null) return null;
+    final matching = update.assets
+        .where((asset) => asset.name.contains(token))
+        .toList();
+    if (matching.isEmpty) return null;
+    if (token != '-android-') {
+      return matching.length == 1 ? matching.single : null;
+    }
+    final abi = widget.androidAbi ?? _androidAbi;
+    if (abi != null) {
+      final exact = matching
+          .where((asset) => asset.name.contains('-$abi.'))
+          .toList();
+      if (exact.isNotEmpty) return exact.first;
+    }
+    final universal = matching
+        .where((asset) => asset.name.contains('universal'))
+        .toList();
+    if (universal.isNotEmpty) return universal.first;
+    if (matching.length == 1) return matching.single;
+    return null;
+  }
+
+  Future<void> _detectAndroidAbi() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    final abi = await detectAndroidAbi();
+    if (mounted) setState(() => _androidAbi = abi);
   }
 
   Widget _updateAssetRow(AppUpdateAsset asset) {
@@ -755,8 +796,6 @@ class _SettingsPageState extends State<SettingsPage> {
               Expanded(
                 child: Text(
                   asset.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12),
                 ),
               ),

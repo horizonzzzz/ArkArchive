@@ -8,13 +8,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-String _releaseBody({String tag = 'v0.5.0'}) => jsonEncode({
+String _releaseBody({
+  String tag = 'v0.5.0',
+  List<Map<String, Object>>? assets,
+}) => jsonEncode({
   'tag_name': tag,
   'name': tag,
   'body': '修复若干问题。',
   'html_url':
       'https://github.com/horizonzzzz/ArkArchive/releases/tag/$tag',
-  'assets': [
+  'assets': assets ?? [
     {
       'name': 'arknights_story_player-v0.5.0-windows-x64-setup.exe',
       'browser_download_url': 'https://example.com/setup.exe',
@@ -38,7 +41,10 @@ class _TestStore extends UpdateFileStore {
   Future<String?> downloadDirectory() async => directory.path;
 }
 
-http.Client _releaseClient({String tag = 'v0.5.0'}) => MockClient.streaming((
+http.Client _releaseClient({
+  String tag = 'v0.5.0',
+  List<Map<String, Object>>? assets,
+}) => MockClient.streaming((
   request,
   bodyStream,
 ) async {
@@ -50,10 +56,29 @@ http.Client _releaseClient({String tag = 'v0.5.0'}) => MockClient.streaming((
     );
   }
   return http.StreamedResponse(
-    Stream.value(utf8.encode(_releaseBody(tag: tag))),
+    Stream.value(utf8.encode(_releaseBody(tag: tag, assets: assets))),
     200,
   );
 });
+
+/// 同一次发布包含多个 Android 架构包时的资产清单。
+List<Map<String, Object>> _androidAssets() => [
+  {
+    'name': 'arknights_story_player-v0.5.0-android-arm64-v8a.apk',
+    'browser_download_url': 'https://example.com/arm64.apk',
+    'size': 2048,
+  },
+  {
+    'name': 'arknights_story_player-v0.5.0-android-x86_64.apk',
+    'browser_download_url': 'https://example.com/x86_64.apk',
+    'size': 2048,
+  },
+  {
+    'name': 'arknights_story_player-v0.5.0-android-universal.apk',
+    'browser_download_url': 'https://example.com/universal.apk',
+    'size': 4096,
+  },
+];
 
 Widget _host(SettingsPage page) =>
     MaterialApp(home: Scaffold(body: page));
@@ -159,7 +184,7 @@ void main() {
           expect(opened.single, Uri.parse('https://example.com/arm64.apk'));
         case TargetPlatform.iOS:
           expect(
-            find.text('当前平台没有对应的安装包，可在发布页面查看全部文件。'),
+            find.text('当前平台没有可自动匹配的安装包，请在发布页面查看全部文件。'),
             findsOneWidget,
           );
           await tester.ensureVisible(find.text('打开发布页面'));
@@ -174,6 +199,117 @@ void main() {
       expect(tester.takeException(), isNull);
     }, variant: TargetPlatformVariant({platform}));
   }
+
+  testWidgets('Android 自动按设备架构只提供一个下载按钮', (tester) async {
+    final opened = <Uri>[];
+    final client = AppUpdateClient(
+      client: _releaseClient(assets: _androidAssets()),
+      currentVersion: '0.4.0',
+    );
+    addTearDown(client.close);
+    await tester.pumpWidget(
+      _host(
+        SettingsPage(
+          concurrency: 4,
+          onConcurrencyChanged: (_) {},
+          isMobile: true,
+          isDesktop: false,
+          caching: false,
+          directoryBusy: false,
+          onOpenDirectory: () {},
+          onClearCache: () {},
+          onMoveDirectory: () {},
+          appVersion: '0.4.0',
+          update: client,
+          androidAbi: 'arm64-v8a',
+          onOpenLink: opened.add,
+        ),
+      ),
+    );
+    await tester.tap(find.text('关于'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('检查更新'));
+    await tester.pumpAndSettle();
+    // 只出现匹配设备架构的那一个下载按钮，其余架构与 universal 均不展示。
+    expect(find.text('已自动匹配设备架构，直接下载安装即可。'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey(
+        'about-download-arknights_story_player-v0.5.0-android-arm64-v8a.apk',
+      )),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey(
+        'about-download-arknights_story_player-v0.5.0-android-x86_64.apk',
+      )),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey(
+        'about-download-arknights_story_player-v0.5.0-android-universal.apk',
+      )),
+      findsNothing,
+    );
+    // 安装包名完整展示，不再被省略号截断。
+    expect(
+      find.text('arknights_story_player-v0.5.0-android-arm64-v8a.apk'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey(
+      'about-download-arknights_story_player-v0.5.0-android-arm64-v8a.apk',
+    )));
+    expect(opened.single, Uri.parse('https://example.com/arm64.apk'));
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant({TargetPlatform.android}));
+
+  testWidgets('Android 无法探测架构时回退 universal 并只给一个按钮', (tester) async {
+    final opened = <Uri>[];
+    final client = AppUpdateClient(
+      client: _releaseClient(assets: _androidAssets()),
+      currentVersion: '0.4.0',
+    );
+    addTearDown(client.close);
+    await tester.pumpWidget(
+      _host(
+        SettingsPage(
+          concurrency: 4,
+          onConcurrencyChanged: (_) {},
+          isMobile: true,
+          isDesktop: false,
+          caching: false,
+          directoryBusy: false,
+          onOpenDirectory: () {},
+          onClearCache: () {},
+          onMoveDirectory: () {},
+          appVersion: '0.4.0',
+          update: client,
+          onOpenLink: opened.add,
+        ),
+      ),
+    );
+    await tester.tap(find.text('关于'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('检查更新'));
+    await tester.pumpAndSettle();
+    // 未注入架构且本机探测不到时，取 universal 兜底，仍只给一个按钮。
+    expect(
+      find.byKey(const ValueKey(
+        'about-download-arknights_story_player-v0.5.0-android-universal.apk',
+      )),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey(
+        'about-download-arknights_story_player-v0.5.0-android-arm64-v8a.apk',
+      )),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const ValueKey(
+      'about-download-arknights_story_player-v0.5.0-android-universal.apk',
+    )));
+    expect(opened.single, Uri.parse('https://example.com/universal.apk'));
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant({TargetPlatform.android}));
 
   testWidgets('已是最新版本时提示且不展示安装包列表', (tester) async {
     final client = AppUpdateClient(

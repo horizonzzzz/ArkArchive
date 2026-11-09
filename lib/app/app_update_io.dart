@@ -3,6 +3,25 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+/// 读取当前设备的 Android ABI（如 `arm64-v8a`、`x86_64`）；
+/// 非 Android 或无法读取时返回 null。
+Future<String?> detectAndroidAbi() async {
+  if (!Platform.isAndroid) return null;
+  try {
+    final result = await Process.run('getprop', ['ro.product.cpu.abilist']);
+    if (result.exitCode != 0) return null;
+    for (final token in result.stdout.toString().trim().split(',')) {
+      final abi = token.trim();
+      if (const ['arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'].contains(abi)) {
+        return abi;
+      }
+    }
+  } catch (_) {
+    // 读取失败时由调用方回退到 universal。
+  }
+  return null;
+}
+
 /// 应用内更新下载的文件系统后端；仅在提供 dart:io 的平台上可用。
 /// Web 平台使用同名实现 app_update_stub.dart，接口形状保持一致。
 class UpdateFileStore {

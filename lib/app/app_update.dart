@@ -7,10 +7,13 @@ import 'app_update_stub.dart' if (dart.library.io) 'app_update_io.dart';
 
 export 'app_update_stub.dart'
     if (dart.library.io) 'app_update_io.dart'
-    show UpdateFileStore;
+    show UpdateFileStore, detectAndroidAbi;
 
 /// 更新源仓库；项目主页、Issues 与发布页链接由它派生。
 const String updateRepository = 'horizonzzzz/ArkArchive';
+
+/// Android 安装包文件名上常见的架构标识，按设备主架构匹配。
+const List<String> androidAbis = ['arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'];
 
 abstract final class AppUpdateLinks {
   static final Uri project = Uri.parse('https://github.com/$updateRepository');
