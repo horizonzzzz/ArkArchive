@@ -208,6 +208,8 @@ void main() {
       'master': .3,
       'bgm': .4,
       'sfx': .5,
+      'voice': 0.0,
+      'speedLevel': 0.0,
       'autoDelay': 3.0,
       'typingMs': 60.0,
     });

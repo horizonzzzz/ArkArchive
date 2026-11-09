@@ -75,8 +75,10 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump();
     expect(saved.length, 4);
-    expect(engine.paused, isFalse);
+    expect(engine.paused, isTrue);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(engine.paused, isFalse);
 
     await engine.advance();
     await engine.advance();

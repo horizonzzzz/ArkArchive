@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../data/media_catalog.dart';
 import '../runtime/story_engine.dart';
+import '../runtime/dialogue_voice.dart';
 import '../stage_state.dart';
 import 'stage_painter.dart';
 import 'story_text.dart';
@@ -141,6 +142,21 @@ class StoryStage extends StatelessWidget {
                                 fontSize: nameSize,
                                 color: const Color(0xff929292),
                               ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 344, top: 629,
+                            child: ValueListenableBuilder<VoiceStatus>(
+                              valueListenable: engine.voice.status,
+                              builder: (context, status, _) {
+                                if (status == VoiceStatus.unavailable) return const SizedBox.shrink();
+                                final muted = engine.fastForwarding || engine.autoMode == 'quick_play';
+                                final speaking = status == VoiceStatus.speaking;
+                                final label = muted ? '快进中，语音静音' : speaking ? '正在朗读' : status == VoiceStatus.failed ? '语音暂不可用' : '语音待机';
+                                return Tooltip(message: label, child: Semantics(label: label,
+                                  child: Icon(muted ? Icons.volume_off_outlined : speaking ? Icons.graphic_eq : Icons.volume_up_outlined,
+                                    size: 22, color: speaking ? const Color(0xffe9d995) : const Color(0xff929292))));
+                              },
                             ),
                           ),
                           Positioned(

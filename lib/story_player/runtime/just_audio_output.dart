@@ -14,6 +14,7 @@ class _Track {
   StreamSubscription<int?>? indexSubscription;
   StreamSubscription<PlayerState>? stateSubscription;
   int fade = 0;
+  double gain = 0;
   bool released = false;
 }
 
@@ -30,7 +31,7 @@ class JustAudioOutput implements StoryAudio {
   final MediaCatalog catalog;
   final AssetStore assets;
   final void Function(String) onWarning;
-  final double masterVolume, bgmVolume, sfxVolume;
+  double masterVolume, bgmVolume, sfxVolume;
   final Set<_Track> _tracks = {};
   final Map<String, _Track> _channels = {};
   final Map<String, int> _requests = {};
@@ -161,11 +162,8 @@ class JustAudioOutput implements StoryAudio {
     bool release = false,
   }) async {
     final token = ++track.fade;
-    final from = track.player.volume;
-    target =
-        target.clamp(0.0, 1.0) *
-        masterVolume *
-        (track.channel == 'music' ? bgmVolume : sfxVolume);
+    final from = track.gain;
+    target = target.clamp(0.0, 1.0);
     final steps = (seconds * 50).round().clamp(1, 10000);
     try {
       for (var i = 1; i <= steps; i++) {
@@ -174,9 +172,8 @@ class JustAudioOutput implements StoryAudio {
           await Future<void>.delayed(const Duration(milliseconds: 20));
         }
         if (track.released || token != track.fade) return;
-        await track.player.setVolume(
-          (from + (target.clamp(0.0, 1.0) - from) * i / steps).clamp(0.0, 1.0),
-        );
+        track.gain = (from + (target - from) * i / steps).clamp(0.0, 1.0);
+        await track.player.setVolume(_mixedVolume(track));
       }
       if (release) await _release(track);
     } catch (e) {
@@ -184,6 +181,17 @@ class JustAudioOutput implements StoryAudio {
     }
   }
 
+  double _mixedVolume(_Track track) => (track.gain * masterVolume *
+      (track.channel == 'music' ? bgmVolume : sfxVolume)).clamp(0.0, 1.0);
+
+  Future<void> updateVolumes({required double master, required double bgm, required double sfx}) async {
+    masterVolume = master;
+    bgmVolume = bgm;
+    sfxVolume = sfx;
+    for (final track in _tracks.toList()) {
+      if (!track.released) await track.player.setVolume(_mixedVolume(track));
+    }
+  }
   Future<void> _release(_Track track) async {
     if (track.released) return;
     track.released = true;

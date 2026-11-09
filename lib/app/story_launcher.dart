@@ -99,6 +99,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
 
   int? _cacheBytes;
   String? _cacheLocation;
+  List<String> _playbackDiagnostics = const [];
   static const _categories = ['全部', '主线篇章', '支线活动', '微型故事集', '玩法衍生篇', '其他档案'];
   static const _navigation = [
     (Icons.library_books_outlined, '剧情馆', '01'),
@@ -695,6 +696,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
           builder: (_) => StoryPlayer(
             story: prepared,
             settings: _repository.store.playbackSettings,
+            onSettingsChanged: _changePlaybackSettings,
+            onDiagnostics: (messages) { _playbackDiagnostics = messages; },
             resumable: saved,
             onProgress: (position) {
               progressWrite = position == null
@@ -852,6 +855,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                     settings:
                                         _repository.store.playbackSettings,
                                     onSettingsChanged: _changePlaybackSettings,
+                                    diagnostics: _playbackDiagnostics,
                                     probe: _repository.store.probe,
                                     concurrency: _repository.store.concurrency,
                                     onConcurrencyChanged: _changeConcurrency,

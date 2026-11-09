@@ -2,6 +2,8 @@ import 'dart:async';
 
 import '../story_player/data/media_catalog.dart';
 import '../story_player/data/playback_settings.dart';
+import '../story_player/ui/voice_pack_panel.dart';
+import 'package:flutter/services.dart';
 import '../story_player/data/story_repository.dart';
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
@@ -44,6 +46,7 @@ class SettingsPage extends StatefulWidget {
     this.active = true,
     this.settings = const PlaybackSettings(),
     this.onSettingsChanged,
+    this.diagnostics = const [],
     this.probe,
     this.mobileDataPrompt = true,
     this.onMobileDataPromptChanged,
@@ -56,6 +59,7 @@ class SettingsPage extends StatefulWidget {
   final bool active;
   final PlaybackSettings settings;
   final ValueChanged<PlaybackSettings>? onSettingsChanged;
+  final List<String> diagnostics;
   final Future<bool> Function(Uri)? probe;
   final int concurrency;
   final ValueChanged<int> onConcurrencyChanged;
@@ -291,6 +295,11 @@ class _SettingsPageState extends State<SettingsPage> {
       (v) => _changeSettings(_settings.copyWith(sfx: v / 100)),
       divisions: 100,
     ),
+    _slider('对白语音', _settings.voice * 100, 0, 100, '${(_settings.voice * 100).round()}%',
+      (v) => _changeSettings(_settings.copyWith(voice: v / 100)), divisions: 100),
+    const Divider(height: 24),
+    VoicePackPanel(enabled: _settings.voice > 0, previewVolume: _settings.master * .9,
+      onEnabledChanged: (enabled) => _changeSettings(_settings.copyWith(voice: enabled ? .9 : 0))),
   ]);
 
   Widget _playback() => _section([
@@ -403,6 +412,18 @@ class _SettingsPageState extends State<SettingsPage> {
       icon: const Icon(Icons.network_check, size: 18),
       label: const Text('重新检测'),
     ),
+    const Divider(height: 28),
+    ExpansionTile(tilePadding: EdgeInsets.zero, title: const Text('最近播放的资源与指令诊断'),
+      subtitle: Text(widget.diagnostics.isEmpty ? '暂无诊断信息' : '${widget.diagnostics.length} 条诊断'),
+      children: [
+        if (widget.diagnostics.isNotEmpty) TextButton.icon(
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: widget.diagnostics.join('\n')));
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制全部诊断')));
+          }, icon: const Icon(Icons.copy), label: const Text('复制全部')),
+        for (final message in widget.diagnostics) Padding(
+          padding: const EdgeInsets.only(bottom: 12), child: SelectableText(message, key: PageStorageKey('playback-diagnostic-$message'))),
+      ]),
   ]);
 
   // ------------------------------------------------------------

@@ -11,6 +11,9 @@ import '../data/media_catalog.dart';
 import '../data/playback_progress.dart';
 import '../data/story_repository.dart';
 import '../data/playback_settings.dart';
+import '../runtime/dialogue_voice.dart';
+import '../runtime/local_dialogue_voice.dart';
+import 'control_hub_sheet.dart';
 import '../runtime/just_audio_output.dart';
 import '../runtime/story_audio.dart';
 import '../runtime/story_engine.dart';
@@ -29,10 +32,14 @@ class StoryPlayer extends StatefulWidget {
     this.settings = const PlaybackSettings(),
     this.resumable,
     this.onProgress,
+    this.onSettingsChanged,
+    this.onDiagnostics,
   });
   final PreparedStory story;
   final StoryAudio? audio;
   final PlaybackSettings settings;
+  final ValueChanged<PlaybackSettings>? onSettingsChanged;
+  final ValueChanged<List<String>>? onDiagnostics;
 
   /// 可选恢复点：存在时开始画面额外提供「从上次继续」入口，
   /// 点击后才校验并恢复；不传入或进度失效时仅可从头播放。
@@ -44,6 +51,11 @@ class StoryPlayer extends StatefulWidget {
 
 class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   late final StoryEngine engine;
+  late final DialogueVoice _voice;
+  late final StoryAudio _audioOutput;
+  late PlaybackSettings _settings = widget.settings;
+  bool _hubOpen = false;
+  bool _lifecyclePaused = false;
   final Map<Uri, ui.Image> textures = {};
   final Map<String, ui.Image> sprites = {};
   ui.FragmentShader? slideMaskShader;
@@ -101,26 +113,19 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     unawaited(
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
     );
+    _voice = createDialogueVoice(volume: _settings.master * _settings.voice);
+    _audioOutput = widget.audio ?? JustAudioOutput(
+      widget.story.catalog, widget.story.assets,
+      masterVolume: _settings.master, bgmVolume: _settings.bgm, sfxVolume: _settings.sfx,
+      onWarning: (message) { if (mounted) { engine.warn(message); setState(() {}); } },
+    );
     engine = StoryEngine(
       widget.story.document.script,
       variables: widget.story.catalog.variables,
       typingInterval: Duration(milliseconds: widget.settings.typingMs.round()),
       autoWaitSeconds: widget.settings.autoDelay,
-      audio:
-          widget.audio ??
-          JustAudioOutput(
-            widget.story.catalog,
-            widget.story.assets,
-            masterVolume: widget.settings.master,
-            bgmVolume: widget.settings.bgm,
-            sfxVolume: widget.settings.sfx,
-            onWarning: (message) {
-              if (mounted) {
-                engine.warn(message);
-                setState(() {});
-              }
-            },
-          ),
+      audio: _audioOutput,
+      voice: _voice,
       characterArtSize: (name) {
         final art = widget.story.catalog.character(name);
         return art == null ? null : Offset(art.size.width, art.size.height);
@@ -131,6 +136,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
       },
     );
     engine.warnings.addAll(widget.story.warnings);
+    engine.setSpeedLevel(_settings.speedLevel);
     engine.addListener(_progressChanged);
     unawaited(_prepare());
   }
@@ -236,6 +242,13 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     _progressHideTimer?.cancel();
     if (state != AppLifecycleState.resumed) {
       unawaited(_saveProgress(force: true));
+      if (!_lifecyclePaused && !engine.paused) {
+        _lifecyclePaused = true;
+        unawaited(engine.setPaused(true));
+      }
+    } else if (_lifecyclePaused) {
+      _lifecyclePaused = false;
+      if (!_hubOpen) unawaited(engine.setPaused(false));
     }
   }
 
@@ -1029,79 +1042,58 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _showLog({bool diagnostics = false}) async {
+  Future<void> _applyPlaybackSettings(PlaybackSettings value) async {
+    final wasEnabled = _settings.voice > 0 && _settings.master > 0;
+    setState(() => _settings = value);
+    engine.configurePlayback(typing: Duration(milliseconds: value.typingMs.round()), autoDelay: value.autoDelay);
+    widget.onSettingsChanged?.call(value);
+    final output = _audioOutput;
+    if (output is JustAudioOutput) {
+      unawaited(output.updateVolumes(master: value.master, bgm: value.bgm, sfx: value.sfx));
+    }
+    await _voice.setVolume(value.master * value.voice);
+    if (mounted && !wasEnabled && value.voice > 0 && value.master > 0) engine.speakCurrentDialogue();
+  }
+
+  Future<void> _showControlHub() async {
+    if (_hubOpen || !mounted) return;
+    _hubOpen = true;
     _fastForwardEnd();
+    final wasPaused = engine.paused;
+    if (!wasPaused) await engine.setPaused(true);
     if (!mounted) return;
-    if (diagnostics) {
-      var copyStatus = '复制全部';
-      await showModalBottomSheet<void>(
+    try {
+      await showGeneralDialog<void>(
         context: context,
-        isScrollControlled: true,
-        builder: (context) => SafeArea(
-          child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * .8,
-            child: Column(
-              children: [
-                StatefulBuilder(
-                  builder: (context, setCopyState) => ListTile(
-                    title: const Text('资源与指令诊断'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          tooltip: copyStatus,
-                          onPressed: engine.warnings.isEmpty
-                              ? null
-                              : () async {
-                                  try {
-                                    await Clipboard.setData(
-                                      ClipboardData(
-                                        text: engine.warnings.join('\n'),
-                                      ),
-                                    );
-                                    if (context.mounted) {
-                                      setCopyState(() => copyStatus = '已复制全部');
-                                    }
-                                  } catch (_) {
-                                    if (context.mounted) {
-                                      setCopyState(
-                                        () => copyStatus = '复制失败，请重试',
-                                      );
-                                    }
-                                  }
-                                },
-                          icon: Icon(
-                            copyStatus == '已复制全部' ? Icons.check : Icons.copy,
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: '关闭',
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      for (final message in engine.warnings)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: SelectableText(message),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+        barrierDismissible: true,
+        barrierLabel: '关闭控制中心',
+        barrierColor: const Color(0x99000000),
+        transitionDuration: const Duration(milliseconds: 220),
+        pageBuilder: (context, _, _) => Align(
+          alignment: Alignment.centerRight,
+          child: ControlHubSheet(
+            engine: engine, settings: _settings,
+            onSettingsChanged: (value) => unawaited(_applyPlaybackSettings(value)),
+            speakers: {for (final command in widget.story.document.script.commands)
+              if (command.tag == 'dialogue' || command.tag == 'multiline')
+                engine.translate(command.value('name'))}.toList(),
           ),
         ),
+        transitionBuilder: (context, animation, _, child) => SlideTransition(
+          position: Tween(begin: const Offset(1, 0), end: Offset.zero).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+          child: child,
+        ),
       );
-    } else {
-      setState(() => _showingHistory = true);
+    } finally {
+      _hubOpen = false;
+      if (mounted && !wasPaused) await engine.setPaused(false);
+    }
+  }
+
+  Future<void> _showLog() async {
+    _fastForwardEnd();
+    if (!mounted) return;
+    setState(() => _showingHistory = true);
       await showGeneralDialog<void>(
         context: context,
         barrierColor: const Color(0xc9000000),
@@ -1119,7 +1111,6 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
         ),
       );
       if (mounted) setState(() => _showingHistory = false);
-    }
   }
 
   void _setFastForward(int multiplier) {
@@ -1356,10 +1347,9 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                                 onPressed: () => _showLog(),
                               ),
                               _overlayButton(
-                                tooltip: '资源与指令诊断',
-                                icon: Icons.info_outline,
-                                onPressed: () => _showLog(diagnostics: true),
-                                badge: engine.warnings.isNotEmpty,
+                                tooltip: '控制中心',
+                                icon: Icons.tune,
+                                onPressed: _showControlHub,
                               ),
                               _overlayButton(
                                 tooltip: engine.autoMode != 'default'
@@ -1406,6 +1396,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
       texture.dispose();
     }
     WidgetsBinding.instance.removeObserver(this);
+    widget.onDiagnostics?.call(List.of(engine.warnings));
     engine.dispose();
     for (final texture in textures.values) {
       texture.dispose();

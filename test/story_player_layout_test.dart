@@ -11,6 +11,7 @@ import 'package:arknights_story_player/story_player/stage_state.dart';
 import 'package:arknights_story_player/story_player/ui/story_player.dart';
 import 'package:arknights_story_player/story_player/ui/story_stage.dart';
 import 'package:arknights_story_player/story_player/ui/stage_painter.dart';
+import 'package:arknights_story_player/app/settings_page.dart';
 
 Future<StoryStage> openPlayer(
   WidgetTester tester, {
@@ -59,7 +60,7 @@ void main() {
     expect(find.byTooltip('手动播放：开启'), findsOneWidget);
     expect(find.byTooltip('退出播放器'), findsOneWidget);
     expect(find.byTooltip('对话记录'), findsOneWidget);
-    expect(find.byTooltip('资源与指令诊断'), findsOneWidget);
+    expect(find.byTooltip('控制中心'), findsOneWidget);
     expect(find.byTooltip('速度'), findsNothing);
     expect(find.byTooltip('快速模式'), findsNothing);
     expect(find.byTooltip('暂停'), findsNothing);
@@ -130,8 +131,8 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('空记录和诊断面板不暂停剧情', (tester) async {
-    final stage = await openPlayer(tester);
+  testWidgets('空记录不中断剧情，控制中心关闭后恢复自动播放', (tester) async {
+    final stage = await openPlayer(tester, autoable: true);
     stage.engine.state.history.clear();
 
     await tester.tap(find.byTooltip('对话记录'));
@@ -141,52 +142,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(stage.engine.paused, isFalse);
 
-    stage.engine.warn('诊断测试信息');
-    await tester.tap(find.byTooltip('资源与指令诊断'));
+    stage.engine.setAutoMode('button_auto');
+    await tester.runAsync(() async {
+      await tester.tap(find.byTooltip('控制中心'));
+      await tester.pump();
+    });
     await tester.pumpAndSettle();
-    expect(find.text('资源与指令诊断'), findsOneWidget);
-    expect(find.text('诊断测试信息'), findsOneWidget);
-    await tester.tap(find.byTooltip('关闭'));
+    expect(find.text('控制中心'), findsOneWidget);
+    expect(stage.engine.paused, isTrue);
+    await tester.runAsync(() async {
+      await tester.tap(find.byTooltip('关闭控制中心'));
+      await tester.pump();
+    });
     await tester.pumpAndSettle();
     expect(stage.engine.paused, isFalse);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('诊断面板可按顺序复制全部信息', (tester) async {
-    final stage = await openPlayer(tester);
-    stage.engine.warnings.clear();
-    await tester.tap(find.byTooltip('资源与指令诊断'));
-    await tester.pumpAndSettle();
-    final copyButton = find.byWidgetPredicate(
-      (widget) => widget is IconButton && widget.tooltip == '复制全部',
-    );
-    expect(tester.widget<IconButton>(copyButton).onPressed, isNull);
-    await tester.tap(find.byTooltip('关闭'));
-    await tester.pumpAndSettle();
-
-    stage.engine.warnings.addAll(['第一条\n详细信息', '第二条']);
-    await tester.tap(find.byTooltip('资源与指令诊断'));
-    await tester.pumpAndSettle();
+  testWidgets('设置的网络与节点可复制最近播放诊断', (tester) async {
     String? copiedText;
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      if (call.method == 'Clipboard.setData') {
-        copiedText = (call.arguments as Map)['text'] as String?;
-      }
+      if (call.method == 'Clipboard.setData') copiedText = (call.arguments as Map)['text'] as String?;
       return null;
     });
-    addTearDown(
-      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
-    );
-    await tester.tap(find.byTooltip('复制全部'));
-    await tester.pumpAndSettle();
+    addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SettingsPage(
+      concurrency: 3, onConcurrencyChanged: (_) {}, isMobile: false, isDesktop: true,
+      caching: false, onOpenDirectory: () {}, onMoveDirectory: () {}, directoryBusy: false,
+      onClearCache: () {}, diagnostics: const ['第一条\n详细信息', '第二条'],
+    ))));
+    await tester.tap(find.text('网络与节点')); await tester.pumpAndSettle();
+    final tile = find.text('最近播放的资源与指令诊断');
+    await tester.ensureVisible(tile); await tester.tap(tile); await tester.pumpAndSettle();
+    final copy = find.text('复制全部');
+    await tester.ensureVisible(copy); await tester.tap(copy); await tester.pump();
     expect(copiedText, '第一条\n详细信息\n第二条');
-    expect(find.byTooltip('已复制全部'), findsOneWidget);
-    expect(find.text('第一条\n详细信息'), findsOneWidget);
-    expect(find.text('第二条'), findsOneWidget);
-    await tester.tap(find.byTooltip('关闭'));
-    await tester.pumpAndSettle();
+    expect(find.text('已复制全部诊断'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
   testWidgets('手动和自动显示不同图标并可来回切换', (tester) async {
@@ -307,7 +299,7 @@ void main() {
 
   testWidgets('长按顶部功能图标不触发舞台二倍速', (tester) async {
     final stage = await openPlayer(tester, autoable: true);
-    for (final tooltip in ['对话记录', '资源与指令诊断', '手动播放：开启']) {
+    for (final tooltip in ['对话记录', '控制中心', '手动播放：开启']) {
       final hold = await tester.startGesture(
         tester.getCenter(find.byTooltip(tooltip)),
       );

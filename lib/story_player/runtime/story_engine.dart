@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../script.dart';
 import '../stage_state.dart';
 import 'story_audio.dart';
+import 'dialogue_voice.dart';
 import 'playback_checkpoint.dart';
 
 typedef CommandHandler = Future<void> Function(StoryCommand command);
@@ -360,6 +361,7 @@ class StoryEngine extends ChangeNotifier {
   StoryEngine(
     this.script, {
     StoryAudio? audio,
+    DialogueVoice? voice,
     this.elapsed,
     this.variables = const {},
     this.typingInterval = const Duration(milliseconds: 40),
@@ -367,7 +369,8 @@ class StoryEngine extends ChangeNotifier {
     this.firstRead = true,
     this.characterArtSize,
     this.imageNaturalWidth,
-  }) : audio = audio ?? SilentStoryAudio() {
+  }) : audio = audio ?? SilentStoryAudio(),
+       voice = voice ?? SilentDialogueVoice() {
     defaultSpeed = PlaySpeed(
       typingMs: typingInterval.inMicroseconds / 1000,
       animateRatio: 1,
@@ -383,9 +386,42 @@ class StoryEngine extends ChangeNotifier {
 
   final StoryScript script;
   final StoryAudio audio;
+  final DialogueVoice voice;
+  int _voiceRequestId = 0;
+  bool _voicePending = false;
+
+  void _stopVoice() {
+    _voiceRequestId++;
+    _voicePending = false;
+    unawaited(voice.stop().catchError((Object e) => warn('对白语音停止失败：$e')));
+  }
+
+  void speakCurrentDialogue() {
+    if (_disposed || _rebuilding || !state.dialogueVisible ||
+        autoMode == 'quick_play' || _fastForwarding > 0 ||
+        (_multilineText.isNotEmpty && !_multilineEnd)) {
+      return;
+    }
+    final text = plainText(state.text).trim();
+    if (text.isEmpty) return;
+    final request = ++_voiceRequestId;
+    _voicePending = true;
+    unawaited(() async {
+      try {
+        await voice.speak(speaker: state.speaker, text: text, requestId: request);
+      } catch (e) {
+        warn('对白语音：$e');
+      } finally {
+        if (request == _voiceRequestId) {
+          _voicePending = false;
+          _changed();
+        }
+      }
+    }());
+  }
   final Map<String, dynamic> variables;
-  final Duration typingInterval;
-  final double? autoWaitSeconds;
+   Duration typingInterval;
+  double? autoWaitSeconds;
   final Duration Function()? elapsed;
   final bool firstRead;
 
@@ -399,7 +435,7 @@ class StoryEngine extends ChangeNotifier {
   final Map<String, _Animation> _animations = {};
   final Stopwatch _clock = Stopwatch();
   late final Timer _ticker;
-  late final PlaySpeed defaultSpeed;
+  late PlaySpeed defaultSpeed;
   final math.Random _random = math.Random();
   final Map<String, _Motion> _motions = {};
   final Map<String, List<_StickerStep>> _stickerTweens = {};
@@ -505,6 +541,8 @@ class StoryEngine extends ChangeNotifier {
     // 先按旧倍率结算，避免把上次 tick 后的时间误算到新倍率。
     _lastTick = _nowUs();
     _fastForwarding = value;
+    _stopVoice();
+    if (value == 0) speakCurrentDialogue();
     if (value == 0 && autoMode == 'default') _autoClickAt = -1;
     _changed();
   }
@@ -735,7 +773,8 @@ class StoryEngine extends ChangeNotifier {
                     plainText(state.text).length *
                         currentSpeed.autoWaitPerChar) *
                 1e6;
-      } else if (now >= _autoClickAt) {
+      } else if (now >= _autoClickAt &&
+          !(autoMode == 'button_auto' && _fastForwarding == 0 && _voicePending)) {
         _autoClickAt = -1;
         unawaited(advance());
       }
@@ -1099,6 +1138,7 @@ class StoryEngine extends ChangeNotifier {
     _waitingInput = false;
     _autoClickAt = -1;
     _rebuilding = true;
+    _stopVoice();
     running = true;
     await audio.stop();
 
@@ -1151,6 +1191,7 @@ class StoryEngine extends ChangeNotifier {
       running = false;
       paused = wasPaused;
       _lastTick = _nowUs();
+      if (reached && !_disposed) speakCurrentDialogue();
       _changed();
     }
   }
@@ -1185,6 +1226,7 @@ class StoryEngine extends ChangeNotifier {
       _changed();
       return;
     }
+    _stopVoice();
     if (cursor >= script.commands.length) {
       _finishCleanup();
       finished = true;
@@ -1312,6 +1354,7 @@ class StoryEngine extends ChangeNotifier {
       await start();
       return;
     }
+    _stopVoice();
     _rebuilding = true;
     running = true;
     try {
@@ -1346,11 +1389,13 @@ class StoryEngine extends ChangeNotifier {
       for (final command in _resumeTracks.values) {
         await audio.execute(command);
       }
+      // 重放期间只重建画面；结束后仅朗读最终停顿点。
     } finally {
       _resumeTracks.clear();
       _rebuilding = false;
       running = false;
       _lastTick = _nowUs();
+      if (!_disposed && _waitingInput) speakCurrentDialogue();
       _changed();
     }
   }
@@ -1432,6 +1477,7 @@ class StoryEngine extends ChangeNotifier {
       );
     }
     _waitingInput = true;
+    if (log) speakCurrentDialogue();
     _changed();
   }
 
@@ -1459,6 +1505,7 @@ class StoryEngine extends ChangeNotifier {
     );
     _multilineShownChars = totalCharacters;
     if (_multilineEnd) {
+      speakCurrentDialogue();
       state.history.add(
         DialogueLine(
           translate(_multilineName),
@@ -1514,6 +1561,7 @@ class StoryEngine extends ChangeNotifier {
 
   Future<void> choose(String value) async {
     if (!_applyChoice(value)) return;
+    _stopVoice();
     _changed();
     await advance();
   }
@@ -1538,6 +1586,7 @@ class StoryEngine extends ChangeNotifier {
     } else {
       cursor = script.commands.length;
     }
+    _stopVoice();
     if (cursor >= script.commands.length) {
       // 参考端 resetItemSlot：跳到结尾时立即清除 showitem 槽位。
       _itemSlotInUse = false;
@@ -1563,6 +1612,7 @@ class StoryEngine extends ChangeNotifier {
 
   /// 播放结束清理：参考端 finishPlayback 清 animtext/avgdisplay 并重置 showitem 槽位。
   void _finishCleanup() {
+    _stopVoice();
     state.stamps.clear();
     state.avgDisplays.clear();
     _itemSlotInUse = false;
@@ -1581,6 +1631,7 @@ class StoryEngine extends ChangeNotifier {
   }
 
   Future<void> restart() async {
+    _stopVoice();
     _epoch++;
     _cancelAnimations();
     _cancelShake();
@@ -1613,8 +1664,10 @@ class StoryEngine extends ChangeNotifier {
   Future<void> setPaused(bool value) async {
     paused = value;
     if (value) {
+      await voice.pause();
       await audio.pause();
     } else {
+      await voice.resume();
       await audio.resume();
     }
     _changed();
@@ -1627,6 +1680,8 @@ class StoryEngine extends ChangeNotifier {
   void setAutoMode(String mode) {
     if (mode != 'default' && !state.metadata.isAutoable && !theaterMode) return;
     autoMode = mode;
+    _stopVoice();
+    speakCurrentDialogue();
     _autoClickAt = -1;
     _changed();
   }
@@ -1637,6 +1692,18 @@ class StoryEngine extends ChangeNotifier {
     _changed();
   }
 
+  void configurePlayback({required Duration typing, required double autoDelay}) {
+    typingInterval = typing;
+    autoWaitSeconds = autoDelay;
+    defaultSpeed = PlaySpeed(typingMs: typing.inMicroseconds / 1000, animateRatio: 1, autoWaitBase: 1.5, autoWaitPerChar: .03);
+    _autoClickAt = -1;
+    _changed();
+  }
+
+  void setTheaterMode(bool value) {
+    theaterMode = value;
+    _changed();
+  }
   void _registerBuiltins() {
     register('header', (_) async {});
     register('delay', (c) async {
@@ -3706,6 +3773,8 @@ class StoryEngine extends ChangeNotifier {
     _cancelShake();
     _clock.stop();
     unawaited(audio.dispose());
+    _voiceRequestId++;
+    unawaited(voice.dispose());
     super.dispose();
   }
 }
