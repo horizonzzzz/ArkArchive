@@ -29,6 +29,9 @@ class StoryPlayer extends StatefulWidget {
     this.settings = const PlaybackSettings(),
     this.resumable,
     this.onProgress,
+    this.archiveMode = false,
+    this.initialCommandIndex,
+    this.archiveNotice,
   });
   final PreparedStory story;
   final StoryAudio? audio;
@@ -38,6 +41,11 @@ class StoryPlayer extends StatefulWidget {
   /// 点击后才校验并恢复；不传入或进度失效时仅可从头播放。
   final PlaybackProgress? resumable;
   final Future<void> Function(PlaybackCheckpoint?)? onProgress;
+
+  /// 档案回放在用户明确继续观看前，不产生任何观看进度写入。
+  final bool archiveMode;
+  final int? initialCommandIndex;
+  final String? archiveNotice;
   @override
   State<StoryPlayer> createState() => _StoryPlayerState();
 }
@@ -54,6 +62,8 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   int _fastForwarding = 0;
   bool _resumeFailed = false, _progressErrorReported = false;
 
+  late bool _archiveMode;
+  String? _archiveNotice;
   Future<void>? _seekQueue;
   int _savedRevision = 0;
   bool _scrubbing = false;
@@ -91,6 +101,8 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _archiveMode = widget.archiveMode;
+    _archiveNotice = widget.archiveNotice;
     WidgetsBinding.instance.addObserver(this);
     unawaited(
       SystemChrome.setPreferredOrientations([
@@ -187,6 +199,15 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
       )..addFont(rootBundle.load(MediaCatalog.fontAsset))).load();
     } catch (e) {
       engine.warn('字体加载失败：$e');
+    }
+    if (!mounted) return;
+    if (_archiveMode && widget.initialCommandIndex != null) {
+      final reached = await engine.seekToCommand(widget.initialCommandIndex!);
+      if (!mounted) return;
+      if (!reached) {
+        await engine.restart();
+        _archiveNotice = '所选台词无法在默认分支中定位，已回到剧情开头。';
+      }
     }
     if (!mounted) return;
     setState(() => ready = true);
@@ -1004,7 +1025,32 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     },
   );
 
+  Future<void> _continueFromArchive() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('从这里继续观看？'),
+        content: const Text('继续后会保存当前观看进度，并替换本篇原有的观看断点。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('继续观看'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    setState(() => _archiveMode = false);
+    _savedRevision = -2;
+    await _saveProgress(force: true);
+  }
+
   Future<void> _saveProgress({bool force = false}) async {
+    if (_archiveMode) return;
     if (!ready ||
         _resumeFailed ||
         widget.onProgress == null ||
@@ -1229,6 +1275,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                   return const SizedBox.shrink();
                 }
                 final canResume =
+                    !_archiveMode &&
                     widget.resumable != null &&
                     engine.cursor == 0 &&
                     !engine.finished;
@@ -1386,6 +1433,42 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
               ),
             ),
           ),
+          if (_archiveMode && ready)
+            Positioned(
+              left: 16,
+              right: 16,
+              top: MediaQuery.paddingOf(context).top + 104,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 640),
+                  child: Material(
+                    color: const Color(0xE6222529),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '档案回放 · 不保存进度\n${_archiveNotice ?? ''}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: _continueFromArchive,
+                            child: const Text('继续观看'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     ),

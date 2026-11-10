@@ -15,6 +15,8 @@ import 'app_update.dart';
 import 'archive_motion.dart';
 import 'archive_widgets.dart';
 import 'character_archive_page.dart';
+import 'character_archive_data.dart';
+import 'character_replay.dart';
 import 'cache_page.dart';
 import 'cache_job.dart';
 import '../story_player/data/cache_control.dart';
@@ -653,7 +655,20 @@ class _StoryLauncherState extends State<StoryLauncher> {
     }
   }
 
-  Future<void> _open(StoryEntry entry) async {
+  Future<void> _openCharacterReplay(
+    CharacterStory story,
+    CharacterSnippet snippet,
+  ) => _open(
+    StoryEntry(story.title, story.path),
+    archiveStory: story,
+    snippet: snippet,
+  );
+  Future<void> _open(
+    StoryEntry entry, {
+    CharacterStory? archiveStory,
+    CharacterSnippet? snippet,
+  }) async {
+    final archive = archiveStory != null && snippet != null;
     if (_busy || _deletingCache || _movingDirectory) return;
     // 下载任务在后台继续执行，播放已缓存剧情不再被缓存中拦截。
     setState(() {
@@ -675,6 +690,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
       )) {
         throw const FormatException('脚本中没有可播放内容');
       }
+      final location = archive
+          ? locateCharacterReplay(document, archiveStory, snippet)
+          : null;
       final scriptHash = PlaybackProgress.fingerprint(document.script);
       // 有保存进度时作为可选恢复点传入播放器，是否失效由「从上次继续」点击时校验。
       final saved = _repository.store.getPlaybackProgress(entry.path);
@@ -697,7 +715,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
           builder: (_) => StoryPlayer(
             story: prepared,
             settings: _repository.store.playbackSettings,
-            resumable: saved,
+            resumable: archive ? null : saved,
+            archiveMode: archive,
+            initialCommandIndex: location?.commandIndex,
+            archiveNotice: location?.notice,
             onProgress: (position) {
               progressWrite = position == null
                   ? _repository.store.removePlaybackProgress(entry.path)
@@ -718,7 +739,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
     } catch (e) {
       if (mounted) {
         setState(() => _playError = '加载失败：$e');
-        if (_page == 2) {
+        if (_page == 2 || archive) {
           ScaffoldMessenger.of(context)
               .showSnackBar(SnackBar(content: Text('加载失败：$e')));
         }
@@ -813,6 +834,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                   CharacterArchivePage(
                                     store: _repository.store,
                                     active: _page == 1,
+                                    onReplay: _openCharacterReplay,
                                     onBrowse: () => setState(() => _page = 0),
                                   ),
                                   CachePage(

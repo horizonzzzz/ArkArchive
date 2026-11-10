@@ -33,7 +33,9 @@ enum CharacterOrder { appearances, firstAppearance, name, rarity }
 class CharacterForm {
   CharacterForm.fromJson(Map<String, dynamic> json)
     : id = _text(json, 'id'),
-      name = _text(json, 'name'),
+      name = _text(json, 'label').isNotEmpty
+          ? _text(json, 'label')
+          : _text(json, 'name'),
       profession = _text(json, 'class'),
       rarity = _integer(json, 'rarity');
   final String id, name, profession;

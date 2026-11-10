@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:html/parser.dart' as html;
 import 'package:http/http.dart' as http;
 
@@ -30,9 +31,16 @@ const _gameplayIds = <String, String>{
 };
 
 class StoryDocument {
-  const StoryDocument({required this.title, required this.script});
+  const StoryDocument({
+    required this.title,
+    required this.script,
+    this.sourceHash,
+  });
   final String title;
   final StoryScript script;
+
+  /// 原始脚本字节的 SHA-256；不同于观看断点使用的指令指纹。
+  final String? sourceHash;
 }
 
 class StoryEntry {
@@ -232,7 +240,8 @@ class StoryRepository {
     story: entry.path,
   );
   Future<StoryDocument> load(Uri uri, {String? title}) async {
-    final text = utf8.decode(await store.load(uri));
+    final bytes = await store.load(uri);
+    final text = utf8.decode(bytes);
     if (uri.host == 'prts.wiki' || uri.host == 'www.prts.wiki') {
       final page = html.parse(
         uri.path == '/api.php' ? _wikiApiHtml(text) : text,
@@ -255,6 +264,7 @@ class StoryRepository {
     return StoryDocument(
       title: title ?? uri.pathSegments.last,
       script: StoryScript.parse(text),
+      sourceHash: sha256.convert(bytes).toString(),
     );
   }
 

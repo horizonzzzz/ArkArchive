@@ -422,7 +422,7 @@ void main() {
         await tester.tap(find.text('离线与缓存').last);
         await tester.pumpAndSettle();
         final offline = find.byKey(const PageStorageKey('offline-groups'));
-        expect(tester.widget<NavigationBar>(navigation).selectedIndex, 1);
+        expect(tester.widget<NavigationBar>(navigation).selectedIndex, 2);
         expect(offline, findsOneWidget);
         final offlineScroll = tester.state<ScrollableState>(
           find.descendant(of: offline, matching: find.byType(Scrollable)).first,

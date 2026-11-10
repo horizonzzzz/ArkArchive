@@ -8,6 +8,8 @@ Future<StoryEngine> _mountPlayer(
   required StoryScript script,
   PlaybackProgress? resumable,
   required List<PlaybackCheckpoint?> saved,
+  bool archiveMode = false,
+  int? initialCommandIndex,
 }) async {
   final assets = AssetStore();
   addTearDown(assets.close);
@@ -24,6 +26,8 @@ Future<StoryEngine> _mountPlayer(
           story: story,
           audio: SilentStoryAudio(),
           resumable: resumable,
+          archiveMode: archiveMode,
+          initialCommandIndex: initialCommandIndex,
           onProgress: (value) async {
             saved.add(value);
           },
@@ -146,6 +150,92 @@ void main() {
     expect(find.text('观看断点已失效，无法恢复原观看位置。'), findsOneWidget);
     expect(find.text('从头观看'), findsOneWidget);
     expect(engine.cursor, 0);
+    expect(saved, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  testWidgets('档案回放自动定位且推进、后台和退出都不写进度', (tester) async {
+    final saved = <PlaybackCheckpoint?>[];
+    final engine = await _mountPlayer(
+      tester,
+      script: StoryScript.parse('第一句\n第二句\n第三句'),
+      saved: saved,
+      archiveMode: true,
+      initialCommandIndex: 1,
+    );
+    expect(engine.cursor, 2);
+    expect(engine.state.text, '第二句');
+    expect(find.textContaining('档案回放 · 不保存进度'), findsOneWidget);
+    expect(saved, isEmpty);
+    await engine.advance();
+    await engine.advance();
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    expect(saved, isEmpty);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(saved, isEmpty);
+  });
+
+  testWidgets('档案回放明确确认继续观看才允许覆盖断点', (tester) async {
+    final saved = <PlaybackCheckpoint?>[];
+    final engine = await _mountPlayer(
+      tester,
+      script: StoryScript.parse('第一句\n第二句\n第三句'),
+      saved: saved,
+      archiveMode: true,
+      initialCommandIndex: 1,
+    );
+    await tester.tap(find.text('继续观看'));
+    await tester.pumpAndSettle();
+    expect(saved, isEmpty);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(saved, isEmpty);
+    await tester.tap(find.text('继续观看'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '继续观看'));
+    await tester.pumpAndSettle();
+    expect(saved, isNotEmpty);
+    expect(saved.last!.cursor, engine.cursor);
+    expect(find.textContaining('档案回放 · 不保存进度'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('档案回放无法到达目标时退到开头并保留只读状态', (tester) async {
+    final saved = <PlaybackCheckpoint?>[];
+    final engine = await _mountPlayer(
+      tester,
+      script: StoryScript.parse('第一句\n第二句'),
+      saved: saved,
+      archiveMode: true,
+      initialCommandIndex: 99,
+    );
+    expect(engine.cursor, 1);
+    expect(find.textContaining('已回到剧情开头'), findsOneWidget);
+    expect(saved, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  testWidgets('非默认分支台词不会伪装为精准回放', (tester) async {
+    final saved = <PlaybackCheckpoint?>[];
+    final engine = await _mountPlayer(
+      tester,
+      script: StoryScript.parse('''
+[name="甲"]开头
+[Decision(options="左;右",values="1;2")]
+[Predicate(references="1")]
+[name="甲"]左分支
+[Predicate(references="2")]
+[name="乙"]右分支
+[Predicate]
+[name="甲"]结尾
+'''),
+      saved: saved,
+      archiveMode: true,
+      initialCommandIndex: 5,
+    );
+    expect(engine.state.text, '开头');
+    expect(find.textContaining('无法在默认分支中定位'), findsOneWidget);
     expect(saved, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
   });

@@ -28,10 +28,10 @@ Map<String, dynamic> personJson({
   'faction': '罗德岛',
   'forms': kind == 'operator'
       ? [
-          {'id': 'char_002_amiya', 'name': '阿米娅', 'class': '术师', 'rarity': 5},
+          {'id': 'char_002_amiya', 'label': '阿米娅', 'class': '术师', 'rarity': 5},
           {
             'id': 'char_1037_amiya3',
-            'name': '阿米娅（医疗）',
+            'label': '阿米娅（医疗）',
             'class': '医疗',
             'rarity': 6,
           },
@@ -210,6 +210,10 @@ void main() {
     expect(index.people.length, 1055);
     final person = index.people.singleWhere((p) => p.id == 'op:char_002_amiya');
     expect(person.forms.length, 3);
+    expect(person.forms.map((f) => f.name), ['阿米娅', '阿米娅(近卫)', '阿米娅(医疗)']);
+    expect(index.search(query: '阿米娅(近卫)').single.id, person.id);
+    expect(index.search(query: '恩希欧迪斯').single.name, '银灰');
+    expect(index.search(query: '维什戴尔').single.name, 'W');
     expect((await repository.loadDetail(person)).profile, isNotEmpty);
   });
 
