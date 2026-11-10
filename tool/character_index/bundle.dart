@@ -28,8 +28,9 @@ Future<String> bundleArchive(Directory source, Directory destination) async {
       throw FormatException('详情引用不安全：${person['detailFile']}');
     }
     final detail = await read('details/$filename');
-    if (detail['id'] != person['id'])
+    if (detail['id'] != person['id']) {
       throw FormatException('详情人物不匹配：$filename');
+    }
     details[filename] = jsonEncode(detail);
     hashes[filename] = sha256
         .convert(utf8.encode(details[filename]!))

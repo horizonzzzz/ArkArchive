@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html;
 
+import 'package:arknights_story_player/app/character_archive_paths.dart';
 import 'package:arknights_story_player/story_player/script.dart';
 
 const professions = <String, String>{
@@ -32,12 +33,7 @@ List<dynamic> array(Object? value, String context) {
 String normalizedName(String value) =>
     value.trim().replaceAll('（', '(').replaceAll('）', ')');
 
-String detailFilename(String id) {
-  if (!RegExp(r'^(op:char_[a-zA-Z0-9_]+|npc:[a-zA-Z0-9_%.-]+)$').hasMatch(id)) {
-    throw FormatException('不安全的人物 ID：$id');
-  }
-  return '${id.replaceFirst(':', '_')}.json';
-}
+String detailFilename(String id) => characterDetailFilename(id);
 
 Uri mediaUri(String filename, {int? width}) {
   final hash = md5.convert(utf8.encode(filename)).toString();

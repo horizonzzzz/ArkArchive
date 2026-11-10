@@ -14,6 +14,7 @@ import 'app_theme.dart';
 import 'app_update.dart';
 import 'archive_motion.dart';
 import 'archive_widgets.dart';
+import 'character_archive_page.dart';
 import 'cache_page.dart';
 import 'cache_job.dart';
 import '../story_player/data/cache_control.dart';
@@ -102,8 +103,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
   static const _categories = ['全部', '主线篇章', '支线活动', '微型故事集', '玩法衍生篇', '其他档案'];
   static const _navigation = [
     (Icons.library_books_outlined, '剧情馆', '01'),
-    (Icons.download_outlined, '离线与缓存', '02'),
-    (Icons.tune, '系统设置', '03'),
+    (Icons.people_outline, '人物档案', '02'),
+    (Icons.download_outlined, '离线与缓存', '03'),
+    (Icons.tune, '系统设置', '04'),
   ];
 
   @override
@@ -716,7 +718,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
     } catch (e) {
       if (mounted) {
         setState(() => _playError = '加载失败：$e');
-        if (_page == 1) {
+        if (_page == 2) {
           ScaffoldMessenger.of(context)
               .showSnackBar(SnackBar(content: Text('加载失败：$e')));
         }
@@ -808,9 +810,14 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                 index: _page,
                                 children: [
                                   _library(),
+                                  CharacterArchivePage(
+                                    store: _repository.store,
+                                    active: _page == 1,
+                                    onBrowse: () => setState(() => _page = 0),
+                                  ),
                                   CachePage(
                                     groups: _groups ?? const [],
-                                    active: _page == 1,
+                                    active: _page == 2,
                                     cached: [
                                       for (final group
                                           in _groups ?? <StoryGroup>[])
@@ -848,7 +855,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                     }),
                                   ),
                                   SettingsPage(
-                                    active: _page == 2,
+                                    active: _page == 3,
                                     settings:
                                         _repository.store.playbackSettings,
                                     onSettingsChanged: _changePlaybackSettings,

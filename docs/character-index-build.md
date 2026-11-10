@@ -65,7 +65,7 @@ dart run tool/character_index/build.dart --help
 
 首版采用包内完整文本快照：搜索和档案阅读不依赖未部署的数据服务，详情仍按需读取，图片复用应用的共享缓存。当前详情文本约 10.2 MB，逐文件 gzip 约 4.3 MB；这只是文本压缩测量，不是各平台安装包增量。远程 manifest 更新、完整图片离线包和按需下载机制留作后续功能。
 
-干员 ID 为 `op:char_...`；NPC ID 来自规范化名称的 URI 编码。必须使用 `detailFile`，不能直接将带冒号的 ID 当文件名。打包时会验证详情引用及人物 ID。NPC 更名可能改变 ID；首版不保存基于人物 ID 的收藏或外部链接，未来加入这些功能时须补迁移映射。
+干员 ID 为 `op:char_...`；NPC ID 来自规范化名称的 URI 编码。NPC 详情文件名使用该 ID 的完整 SHA-256（`npc_<hash>.json`），避免名称经 Flutter 再次转义后超过 Windows 文件名限制；干员沿用 `op_char_....json`。客户端与构建器共用路径规则，必须使用 `detailFile`。打包时会验证详情引用及人物 ID。NPC 更名可能改变 ID；首版不保存基于人物 ID 的收藏或外部链接，未来加入这些功能时须补迁移映射。
 
 `coverage.complete` 只表示 `story_review_table` 中全部脚本扫描成功，不代表全部人物被识别，也不包括目录外脚本。样本有 `sample: true`。`namedLineCoverage` 的分母为全部非空、具名的 dialogue 指令，排除称呼也计入分母；`top200NamedLineCoverage` 按称呼台词量选出前 200 个称呼，再计算它们的台词匹配率。
 

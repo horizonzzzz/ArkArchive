@@ -81,6 +81,8 @@ flutter:
     - assets/images/logo_babel.png
     - assets/images/app_icon.png
     - assets/images/prts_ui/
+    - assets/characters/
+    - assets/characters/details/
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
   shaders:
