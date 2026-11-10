@@ -115,4 +115,4 @@ dart analyze tool/character_index test/character_index_test.dart test/character_
 dart format --output=none --set-exit-if-changed tool/character_index test/character_index_test.dart test/character_index_build_test.dart test/character_index_assets_test.dart
 ```
 
-数据工具和客户端已在 Windows 运行测试，全量 Web release 构建通过。客户端交付范围、回放保护与平台验证结果见[首版实现记录](character-archive-implementation.md)。
+数据工具和客户端已在 Windows 运行测试，Web 与 Windows release 构建通过。客户端交付范围、回放保护与平台验证结果见[首版实现记录](character-archive-implementation.md)。
