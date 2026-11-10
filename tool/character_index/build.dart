@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 import 'catalog.dart';
+import 'artwork.dart';
 
 const _help = '''人物档案 P0 数据构建（不发布生产 manifest）
 dart run tool/character_index/build.dart [选项]
@@ -17,6 +18,7 @@ dart run tool/character_index/build.dart [选项]
   --concurrency N       下载并发 1–16，默认 8
   --offline             仅用缓存，缓存缺失时失败
   --refresh             重新获取上游数据，不与 --offline 同用
+  --verify-art          校验头像和立绘，离线模式复用校验缓存
   --help                显示帮助
 ''';
 
@@ -24,7 +26,7 @@ class BuildOptions {
   BuildOptions(List<String> args) {
     for (var i = 0; i < args.length; i++) {
       final key = args[i];
-      if (['--help', '--offline', '--refresh'].contains(key)) {
+      if (['--help', '--offline', '--refresh', '--verify-art'].contains(key)) {
         flags.add(key);
       } else if ([
         '--cache',
@@ -302,6 +304,7 @@ Future<int> buildArchive(BuildOptions options, http.Client client) async {
     patches: await loader.excel('char_patch_table.json'),
     handbook: await loader.excel('handbook_info_table.json'),
     merges: array(await config('form_merge.json'), 'form_merge'),
+    teams: await loader.excel('handbook_team_table.json'),
   );
   catalog.loadNpcs(await loader.npcPage());
   final aliases = object(
@@ -356,7 +359,20 @@ Future<int> buildArchive(BuildOptions options, http.Client client) async {
     }
   }
   catalog.sortAppearances();
+  final artwork = options.flags.contains('--verify-art')
+      ? await ArtworkVerifier(
+          client,
+          File('${options.cache}/artwork.json'),
+          offline: options.offline,
+          refresh: options.refresh,
+        ).enrich(
+          catalog,
+          concurrency: options.concurrency,
+          onProgress: (done, total) => stdout.writeln('校验图片 $done/$total'),
+        )
+      : null;
   final statistics = catalog.statistics();
+  if (artwork != null) statistics['artVerification'] = artwork;
   final complete = failures.isEmpty && paths.length == catalog.stories.length;
   final generatedAt = DateTime.now().toUtc().toIso8601String();
   final coverage = {
@@ -367,6 +383,15 @@ Future<int> buildArchive(BuildOptions options, http.Client client) async {
     'scannedStories': statistics['scannedStories'],
     'failedStories': failures.length,
   };
+  final remainingGates = [
+    if (!complete) '剧情目录扫描尚未完整完成',
+    if ((statistics['namedLineCoverage'] as num) < 0.70) '全量带名台词覆盖率尚未达到 70%',
+    if ((statistics['top200NamedLineCoverage'] as num) < 0.90)
+      'Top 200 带名台词覆盖率尚未达到 90%',
+    if (artwork == null || (artwork['operatorPortraitCoverage'] as num) < 0.95)
+      '干员立绘有效覆盖率尚未达到 95%',
+    if (catalog.mergeCandidates.isNotEmpty) '仍有异格候选未人工复核',
+  ];
   final report = {
     'schema': 1,
     'stage': 'p0',
@@ -379,13 +404,8 @@ Future<int> buildArchive(BuildOptions options, http.Client client) async {
     'excludedNpcs': catalog.excludedNpcs,
     'npcOperatorOverlaps': catalog.npcOperatorOverlaps,
     'mergeCandidates': catalog.mergeCandidates,
-    'releaseReady': false,
-    'remainingGates': [
-      '人工复核 Top 200 未归属说话人与全部异格候选',
-      '全量带名台词覆盖率 ≥ 70%，Top 200 带名台词覆盖率 ≥ 90%',
-      '立绘有效性探测及干员立绘覆盖率 ≥ 95%',
-      '干员剧情 AVG 形象归属、中文阵营标签与发布 manifest',
-    ],
+    'releaseReady': remainingGates.isEmpty,
+    'remainingGates': remainingGates,
   };
   final outputPath = failures.isEmpty ? options.out : '${options.out}-failed';
   await writeOutput(Directory(outputPath), (directory) async {

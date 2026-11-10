@@ -76,6 +76,14 @@ class ArchivePerson {
     (sum, appearance) => sum + (appearance['lineCount'] as int),
   );
 
+  Map<String, dynamic>? get portrait => artCandidates
+      .where(
+        (art) =>
+            art['verified'] == true &&
+            (art['kind'] == 'elite0' || art['kind'] == 'avg'),
+      )
+      .firstOrNull;
+
   Map<String, dynamic> toIndex() => {
     'id': id,
     'kind': kind,
@@ -83,6 +91,8 @@ class ArchivePerson {
     'appellation': appellation,
     'aliases': aliases.toList()..sort(),
     'faction': faction,
+    'portraitUrl': portrait?['url'],
+    'thumbnailUrl': portrait?['thumbnailUrl'],
     if (forms.isNotEmpty) 'class': forms.first['class'],
     if (forms.isNotEmpty) 'rarity': forms.first['rarity'],
     'forms': forms,
@@ -142,6 +152,7 @@ class CharacterCatalog {
     required Map<String, dynamic> patches,
     required Map<String, dynamic> handbook,
     required List<dynamic> merges,
+    Map<String, dynamic> teams = const {},
   }) {
     final units = <String, Map<String, dynamic>>{};
     for (final entry in characters.entries) {
@@ -199,8 +210,7 @@ class CharacterCatalog {
         kind: 'operator',
         name: name,
         appellation: unit['appellation'] as String? ?? '',
-        faction: (unit['teamId'] ?? unit['groupId'] ?? unit['nationId'] ?? '')
-            .toString(),
+        faction: _factionName(unit, teams),
       );
     }
     for (final entry in units.entries) {
@@ -262,6 +272,14 @@ class CharacterCatalog {
       if (index > 0) person.forms.insert(0, person.forms.removeAt(index));
     }
     _findMergeCandidates(units, parents);
+  }
+
+  String _factionName(Map<String, dynamic> unit, Map<String, dynamic> teams) {
+    final id = unit['teamId'] ?? unit['groupId'] ?? unit['nationId'] ?? '';
+    final entry = teams[id];
+    return entry is Map
+        ? entry['powerName'] as String? ?? id.toString()
+        : id.toString();
   }
 
   void _loadProfile(

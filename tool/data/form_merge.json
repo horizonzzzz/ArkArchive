@@ -1,7 +1,192 @@
 [
   {
+    "base": "char_123_fang",
+    "alt": "char_1036_fang2",
+    "altName": "历阵锐枪芬"
+  },
+  {
+    "base": "char_500_noirc",
+    "alt": "char_1030_noirc2",
+    "altName": "火龙S黑角"
+  },
+  {
+    "base": "char_282_catap",
+    "alt": "char_1049_catap2",
+    "altName": "雷狼龙S空爆"
+  },
+  {
+    "base": "char_124_kroos",
+    "alt": "char_1021_kroos2",
+    "altName": "寒芒克洛丝"
+  },
+  {
+    "base": "char_121_lava",
+    "alt": "char_1011_lava2",
+    "altName": "炎狱炎熔"
+  },
+  {
+    "base": "char_120_hibisc",
+    "alt": "char_1024_hbisc2",
+    "altName": "濯尘芙蓉"
+  },
+  {
+    "base": "char_253_greyy",
+    "alt": "char_1027_greyy2",
+    "altName": "承曦格雷伊"
+  },
+  {
+    "base": "char_181_flower",
+    "alt": "char_1022_flwr2",
+    "altName": "撷英调香师"
+  },
+  {
+    "base": "char_278_orchid",
+    "alt": "char_1048_orchd2",
+    "altName": "焰狐龙梓兰"
+  },
+  {
     "base": "char_113_cqbw",
     "alt": "char_1035_wisdel",
     "altName": "维什戴尔"
+  },
+  {
+    "base": "char_010_chen",
+    "alt": "char_1013_chen2",
+    "altName": "假日威龙陈"
+  },
+  {
+    "base": "char_172_svrash",
+    "alt": "char_1045_svash2",
+    "altName": "凛御银灰"
+  },
+  {
+    "base": "char_174_slbell",
+    "alt": "char_1046_sbell2",
+    "altName": "圣聆初雪"
+  },
+  {
+    "base": "char_140_whitew",
+    "alt": "char_1038_whitw2",
+    "altName": "荒芜拉普兰德"
+  },
+  {
+    "base": "char_017_huang",
+    "alt": "char_1040_blaze2",
+    "altName": "烛煌"
+  },
+  {
+    "base": "char_135_halo",
+    "alt": "char_1047_halo2",
+    "altName": "溯光星源"
+  },
+  {
+    "base": "char_263_skadi",
+    "alt": "char_1012_skadi2",
+    "altName": "浊心斯卡蒂"
+  },
+  {
+    "base": "char_108_silent",
+    "alt": "char_1031_slent2",
+    "altName": "淬羽赫默"
+  },
+  {
+    "base": "char_250_phatom",
+    "alt": "char_1042_phatm2",
+    "altName": "酒神"
+  },
+  {
+    "base": "char_102_texas",
+    "alt": "char_1028_texas2",
+    "altName": "缄默德克萨斯"
+  },
+  {
+    "base": "char_502_nblade",
+    "alt": "char_1029_yato2",
+    "altName": "麒麟R夜刀"
+  },
+  {
+    "base": "char_308_swire",
+    "alt": "char_1033_swire2",
+    "altName": "琳琅诗怀雅"
+  },
+  {
+    "base": "char_103_angel",
+    "alt": "char_1041_angel2",
+    "altName": "新约能天使"
+  },
+  {
+    "base": "char_143_ghost",
+    "alt": "char_1023_ghost2",
+    "altName": "归溟幽灵鲨"
+  },
+  {
+    "base": "char_293_thorns",
+    "alt": "char_1039_thorn2",
+    "altName": "引星棘刺"
+  },
+  {
+    "base": "char_291_aglina",
+    "alt": "char_1015_aglna2",
+    "altName": "予愿安洁莉娜"
+  },
+  {
+    "base": "char_180_amgoat",
+    "alt": "char_1016_agoat2",
+    "altName": "纯烬艾雅法拉"
+  },
+  {
+    "base": "char_261_sddrag",
+    "alt": "char_1020_reed2",
+    "altName": "焰影苇草"
+  },
+  {
+    "base": "char_003_kalts",
+    "alt": "char_1052_kalts2",
+    "altName": "凯尔希·思衡托"
+  },
+  {
+    "base": "char_235_jesica",
+    "alt": "char_1034_jesca2",
+    "altName": "涤火杰西卡"
+  },
+  {
+    "base": "char_136_hsguma",
+    "alt": "char_1044_hsgma2",
+    "altName": "斩业星熊"
+  },
+  {
+    "base": "char_115_headbr",
+    "alt": "char_1051_headb2",
+    "altName": "怒潮凛冬"
+  },
+  {
+    "base": "char_187_ccheal",
+    "alt": "char_1026_gvial2",
+    "altName": "百炼嘉维尔"
+  },
+  {
+    "base": "char_112_siege",
+    "alt": "char_1019_siege2",
+    "altName": "维娜·维多利亚"
+  },
+  {
+    "base": "char_010_chen",
+    "alt": "char_1050_chen3",
+    "altName": "赤刃明霄陈"
+  },
+  {
+    "base": "char_148_nearl",
+    "alt": "char_1014_nearl2",
+    "altName": "耀骑士临光"
+  },
+  {
+    "base": "char_279_excu",
+    "alt": "char_1032_excu2",
+    "altName": "圣约送葬人"
+  },
+  {
+    "base": "char_306_leizi",
+    "alt": "char_1043_leizi2",
+    "altName": "司霆惊蛰"
   }
 ]

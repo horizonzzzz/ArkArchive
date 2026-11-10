@@ -1,120 +1,118 @@
 # 人物档案数据构建
 
-本文记录人物档案第一阶段 P0.1 的构建工具、验证结果和后续工作。工具已能生成可复现的全量数据报告，但人物归属和图片质量尚未通过产品验收。当前没有新增客户端入口，也没有发布生产 manifest。
+本文记录人物档案 P0.1 构建工具和 P0.2 数据验收。2026-11-10 快照已通过完整扫描、台词覆盖率和干员立绘覆盖率门槛；仍有未归属台词，不能把出场统计解释为游戏中的全部出场。客户端页面与剧情回放在后续阶段接入。
 
-产品定义见 [人物档案设计](character-archive-design.md)，交互参考见 [HTML 原型](prototypes/character-archive.html)。原型中的出场数据只覆盖 41 篇样本，不作为全量统计依据。
+产品定义见 [人物档案设计](character-archive-design.md)，交互参考见 [HTML 原型](prototypes/character-archive.html)。原型只扫描了 41 篇样本，不作为全量统计依据。
 
-## 运行方式
+## 构建与打包
 
-在项目根目录执行，使用项目现有 Flutter/Dart 环境与依赖，不需要安装 Python 或新增 Dart 依赖。
+在项目根目录执行，使用项目现有 Flutter/Dart 环境与依赖，无需安装额外依赖。
 
 ```sh
-# 首次验证：扫描目录中的前 8 篇，默认写入 build/characters-sample
-# 首次运行会下载元数据、NPC 页面和这 8 篇脚本。
+# 小样本，默认写入 build/characters-sample
 dart run tool/character_index/build.dart --limit 8
 
-# 全量构建：复用已有缓存，默认写入 build/characters
-dart run tool/character_index/build.dart
+# 全量扫描并验证图片，默认写入 build/characters
+dart run tool/character_index/build.dart --verify-art
 
-# 使用相同输入缓存离线复现到独立目录
-dart run tool/character_index/build.dart --offline --out build/characters-repro
+# 使用相同下载缓存和图片校验缓存离线复现
+dart run tool/character_index/build.dart --offline --verify-art --out build/characters-repro
 
-# 查看全部参数
+# 只允许完整、通过验收且索引与报告属于同一批次的数据进入应用
+dart run tool/character_index/bundle.dart build/characters assets/characters
+
+# 查看全部构建参数
 dart run tool/character_index/build.dart --help
 ```
 
-可通过 `--cache` 指定元数据缓存目录，通过 `--stories-cache` 指定剧情缓存目录；默认分别为 `.cache/character-archive` 和其下的 `stories/`。`--npc-page` 可接收本地 PRTS HTML 或 MediaWiki API JSON 快照。`--concurrency` 为 1–16，默认 8。`--refresh` 重新获取上游数据，不能与 `--offline` 同用。
+`--cache` 指定元数据缓存目录，默认 `.cache/character-archive`；`--stories-cache` 默认是其下的 `stories/`。`--npc-page` 可接收本地 PRTS HTML 或 MediaWiki API JSON 快照。`--concurrency` 为 1–16，默认 8。
 
-`.cache/` 与 `build/` 不提交到 Git。缓存保留响应原字节，报告记录输入校验和；脚本目录层次与 `storyTxt` 一致。缓存不按内容自动更新，需要刷新时显式使用 `--refresh`。
+`--refresh` 重新获取上游数据；同时指定 `--verify-art` 时也重新检查图片，不复用旧的成功或 404 记录。它不能与 `--offline` 同用。图片校验只接受 PRTS 媒体站的 HTTPS 图片响应，临时网络失败不永久缓存。离线校验使用最近一次实际联网验证结果，并不代表图片服务此刻仍可访问。
 
-## 输入与维护文件
+`.cache/` 与 `build/` 不提交到 Git。缓存保留响应原字节，报告记录输入校验和；脚本目录层次与 `storyTxt` 一致。`assets/characters/` 是经过验收、供应用读取的文本快照，应随功能提交。
+
+## 输入与人工维护
 
 | 输入 | 用途 |
 | --- | --- |
-| `character_table.json` | 可获取干员的稳定 ID、名称、职业、星级及阵营原始代码 |
-| `char_patch_table.json` | 官方明确的干员形态关系，包括阿米娅的近卫与医疗形态 |
-| `handbook_info_table.json` | 档案正文、解锁类型及适用形态 |
+| `character_table.json` | 可获取干员 ID、名称、职业、星级与阵营代码 |
+| `char_patch_table.json` | 官方明确的形态关系，包括阿米娅的近卫与医疗形态 |
+| `handbook_info_table.json` | 档案正文、解锁类型与适用形态 |
+| `handbook_team_table.json` | 国家、地区和组织的中文名称 |
 | `story_review_table.json` | 与剧情馆一致的剧情目录及顺序 |
 | PRTS「剧情角色一览」 | NPC 名称、简介、出处与剧情立绘候选 |
-| `tool/data/form_merge.json` | 人工确认的异格同体关系；当前种子仅含 W/维什戴尔 |
-| `tool/data/character_aliases.json` | 显示名到人物 ID 的人工别名映射；当前为 3 条种子 |
-| `tool/data/character_blocklist.txt` | 不创建人物卡的占位名与群体称呼，一行一个，支持 `#` 注释 |
+| `tool/data/form_merge.json` | 38 组人工确认的异格同体关系 |
+| `tool/data/character_aliases.json` | 138 条人工确认的真名、英文名及简称映射 |
+| `tool/data/character_blocklist.txt` | 占位名与群体称呼，一行一个，支持 `#` 注释 |
 
-元数据来自 `torappu.prts.wiki`。剧情脚本主源不可用时，按现有剧情仓库的顺序回退到同一资源仓库的 jsDelivr 与 GitHub raw 地址。NPC 页面通过 PRTS 的 MediaWiki API 获取。具体请求地址与输入 SHA-256 写入报告。
+元数据来自 `torappu.prts.wiki`。剧情脚本主源不可用时，按现有剧情仓库顺序回退到同一资源仓库的 jsDelivr 与 GitHub raw 地址。NPC 页面使用 PRTS 的 MediaWiki API。具体请求地址与输入 SHA-256 写入报告。
 
-官方 patch 关系可以直接归并，其他异格同体必须进入人工表。英文名的 `the` 模式仅生成候选，不改变人物归属，候选表也不是全部异格关系的完整清单。别名冲突、缺失目标、重复关系、链式关系或循环关系会导致构建失败，不能用后写入的值静默覆盖。
+人工关系参考 PRTS「角色真名」「异格干员」页面及对应角色资料。官方 patch 关系可以直接归并；其他异格同体必须进入人工表。英文名的 `the` 模式只生成候选，不能自动改变归属，也不是异格关系的穷举检测。别名冲突、缺失目标、重复关系、链式关系或循环关系均导致构建失败。未知身份继续保留在未归属报告中，不能为了提高匹配率而猜测归属。
 
-## 输出契约
+## 输出与客户端契约
 
-这是 P0 调试数据，`schema: 1`、`stage: p0`。它不等同于设计文档中的最终客户端发布契约。
+构建目录保留 `schema: 1`、`stage: p0`，用于审查和复现。
 
 | 文件 | 内容 |
 | --- | --- |
-| `index.json` | 轻量人物导航信息、详情文件名、剧情目录、脚本校验和及扫描范围 |
-| `details/*.json` | 形态、档案、未验证图片候选和每幕出场节选 |
-| `report.json` | 数据源校验和、匹配覆盖率、失败脚本、未归属说话人、异格候选及剩余验收项 |
-| `unmatched_speakers.csv` | 按台词量排序的未归属称呼、样本及留空的人工确认列；包含 CSV 转义和公式注入防护 |
+| `index.json` | 人物导航、形态、已验证图片引用、详情文件名、剧情目录与扫描范围 |
+| `details/*.json` | 档案、图片候选及验证状态、每幕出场节选 |
+| `report.json` | 输入校验和、覆盖率、失败脚本、未归属称呼、异格候选与剩余门槛 |
+| `unmatched_speakers.csv` | 按台词量排序的未归属称呼及人工确认列，包含 CSV 转义与公式注入防护 |
 | `.character-index-output` | 专用产物目录标记，防止误覆盖其他非空目录 |
 
-干员 ID 为 `op:char_...`；NPC ID 为规范化名称的 URI 编码。详情文件名由 `detailFile` 给出，客户端不能自行拼接带冒号的人物 ID。NPC 以后改名会影响当前 ID，生产发布前需确定迁移规则。
+打包工具移除索引中的阶段标记，加入质量摘要和内容版本，压缩 JSON 排版，并生成 `manifest.json`。manifest 含索引与逐个详情文件的 SHA-256；版本由内容决定，不随生成时间改变。客户端只使用 `index.json`、`details/` 和 `manifest.json`，不包含调试报告、CSV、剧情源脚本或图片文件。
 
-`coverage.complete` 只表示 `story_review_table` 中全部脚本扫描成功，不表示所有人物已识别，也不覆盖目录之外的脚本。样本有 `sample: true`；不能把样本统计当成全部出场。
+首版采用包内完整文本快照：搜索和档案阅读不依赖未部署的数据服务，详情仍按需读取，图片复用应用的共享缓存。当前详情文本约 10.2 MB，逐文件 gzip 约 4.3 MB；这只是文本压缩测量，不是各平台安装包增量。远程 manifest 更新、完整图片离线包和按需下载机制留作后续功能。
 
-`namedLineCoverage` 的分母是所有非空、具名的 dialogue 指令，分子是成功归属到人物的指令数；排除称呼仍在分母中，并单独计入 `blockedLines`。`top200NamedLineCoverage` 先按称呼台词量选前 200 个称呼，再在这些称呼的台词上计算相同指标，不是前 200 个人物的比例。
+干员 ID 为 `op:char_...`；NPC ID 来自规范化名称的 URI 编码。必须使用 `detailFile`，不能直接将带冒号的 ID 当文件名。打包时会验证详情引用及人物 ID。NPC 更名可能改变 ID；首版不保存基于人物 ID 的收藏或外部链接，未来加入这些功能时须补迁移映射。
 
-台词扫描直接复用播放器的 `StoryScript.parse`。节选保存 `commandIndex`、原始行号、显示名和文本；脚本 SHA-256 来自原始字节。每幕保留首句、末句和中间最长句，长度相同取靠后一句，最终按剧情顺序排列；不足三句时不重复。未来回放应校验脚本版本，再使用指令位置，不能把原始行号当指令序号。
+`coverage.complete` 只表示 `story_review_table` 中全部脚本扫描成功，不代表全部人物被识别，也不包括目录外脚本。样本有 `sample: true`。`namedLineCoverage` 的分母为全部非空、具名的 dialogue 指令，排除称呼也计入分母；`top200NamedLineCoverage` 按称呼台词量选出前 200 个称呼，再计算它们的台词匹配率。
+
+扫描复用播放器的 `StoryScript.parse`。节选保留 `commandIndex`、1 起始原始行号、说话人和文本，脚本 SHA-256 来自原始字节。每幕保留首句、末句和中间最长句，同长取靠后一句，按剧情顺序排列；不足三句不重复。回放必须校验脚本版本，不能把行号当指令序号。
 
 ## 剧透与缺失数据
 
-- 导航索引不写入档案正文或台词节选。
-- 干员非 `DIRECT` 档案带剧透标记，并保留适用形态；NPC 简介可能直接透露身份和结局，因此全部默认标记为剧透内容。
-- 当前图片只有 `artCandidates`，均为 `verified: false`，不生成已经验证过的 `card`、`hero` 或生产 `arts`。
-- 有档案但零出场的人物仍保留。当前匹配不完整，客户端应说明“已识别的出场”，不能断言人物从未登场。
-- `releaseReady` 固定为 `false`，防止把阶段产物误当成可直接发布的数据。
+- 导航索引不包含档案正文或台词节选。
+- 非 `DIRECT` 干员档案默认标记为剧透，并保留适用形态；NPC 简介全部默认标记为剧透。
+- 图片只有校验成功后才提供给客户端；缺图使用占位，不把网络失败误报为人物没有立绘。
+- 有档案但零条已识别出场的人物仍保留，页面应写“已识别出场”。
+- `releaseReady` 要求完整扫描、整体匹配率 ≥70%、高频称呼匹配率 ≥90%、干员立绘覆盖率 ≥95%，且没有未复核的异格候选。它不是对每个别名或全部 NPC 图像归属的保证。
 
-## 失败和重复构建
+## 失败与重复构建
 
-元数据结构异常会直接失败。个别脚本下载或解析失败时，工具继续收集错误，将不完整结果写入 `<out>-failed` 并返回退出码 1，上次成功的 `<out>` 不变。离线模式不会联网，缺失或损坏的缓存必须显式报错。
+元数据结构异常会直接失败。个别脚本失败时继续收集错误，将结果写入 `<out>-failed` 并返回退出码 1，上次成功的 `<out>` 不变。离线模式不联网，缺失或损坏的缓存必须报错。
 
-生成器先完整写入临时目录；已有产物先备份，再逐文件替换，失败时恢复旧文件。输出根目录保持不动，以兼容 Windows 中被监听、不能整体重命名的目录。如果恢复本身失败，错误信息会给出保留的备份目录。
+生成器先写临时目录，备份已有产物，再逐文件替换；失败时恢复旧文件。输出根目录保持不动，兼容 Windows 目录监听。恢复失败时保留备份并报告路径。这不是并发读取事务：同一缓存或输出目录不能同时构建，也不能把正在构建的目录直接作为线上数据源。应用只读取提交并随包发布的快照。
 
-这不是面向并发读取的事务发布机制。同一缓存或输出目录不要同时构建，也不要把正在构建的目录直接提供给客户端；正式 manifest 的版本切换和发布流程属于 P0.2。
+## 2026-11-10 验收结果
 
-## 2026-11-10 的验证结果
+以本地下载快照及 `build/characters/report.json` 为准，上游更新会改变数量。
 
-本次以下载到本地的真实数据快照为准，报告保存在 `build/characters/report.json`，后续上游更新可能改变数量。
+| 指标 | P0.1 | P0.2 |
+| --- | ---: | ---: |
+| 成功扫描 / 失败 | 2,061 / 0 | 2,061 / 0 |
+| 人物 / 干员 / NPC | 1,092 / 437 / 655 | 1,055 / 400 / 655 |
+| 干员形态 | 440 | 440 |
+| 具名台词 | 375,432 | 375,432 |
+| 已归属台词 | 216,004 | 269,865 |
+| 排除 / 未归属台词 | 5,844 / 153,584 | 5,844 / 99,723 |
+| 未归属称呼 | 6,374 | 6,241 |
+| 整体匹配率 | 57.53% | 71.88% |
+| 高频称呼匹配率 | 76.74% | 94.30% |
+| 待复核异格候选 | 29 | 0 |
+| 有效基础立绘的干员 | 未验证 | 400 / 400 |
+| 图片 URL 有效 / 已检查 | 未验证 | 1,901 / 1,937 |
+| 台词节选 | 26,930 | 33,448 |
 
-| 指标 | 结果 |
-| --- | ---: |
-| 剧情目录条目 / 成功扫描 / 失败 | 2,061 / 2,061 / 0 |
-| 人物记录 | 1,092 |
-| 干员人物 / NPC 人物 | 437 / 655 |
-| 干员形态 | 440 |
-| 具名台词指令 | 375,432 |
-| 已归属 / 排除 / 未归属台词 | 216,004 / 5,844 / 153,584 |
-| 未归属称呼 | 6,374 |
-| 带名台词匹配率 | 57.53%（目标 ≥ 70%） |
-| 高频前 200 个称呼的台词匹配率 | 76.74%（目标 ≥ 90%） |
-| 待人工复核的异格候选 | 29 |
-| 生成的台词节选 | 26,930 |
+人物数减少来自已确认的异格归并，并非删除形态。验收通过后仍保留 99,723 条未归属台词及对应审查报告。
 
-两次全量离线构建生成 1,096 个文件；除 `index.json` 和 `report.json` 的生成时间外，内容完全一致。全部 2,061 个脚本校验和、1,092 个详情引用及 26,930 条节选的结构与位置顺序检查通过。模拟缺少两篇缓存时，退出码为 1，失败报告明确标记为不完整，既有成功样本的索引校验和不变。
-
-23 项回归测试覆盖形态归并、别名冲突、NPC 页面解析、剧透标记、解析器位置、节选、缓存、下载回退、目录监听、失败回滚和路径安全。复现命令：
+回归测试覆盖归并、别名冲突、NPC 解析、剧透标记、解析器位置、节选、下载回退、图片响应与刷新缓存、输出回滚、详情路径安全和打包版本稳定性。
 
 ```sh
-flutter test test/character_index_test.dart test/character_index_build_test.dart
-dart analyze tool/character_index test/character_index_test.dart test/character_index_build_test.dart
-dart format --output=none --set-exit-if-changed tool/character_index test/character_index_test.dart test/character_index_build_test.dart
+flutter test test/character_index_test.dart test/character_index_build_test.dart test/character_index_assets_test.dart
+dart analyze tool/character_index test/character_index_test.dart test/character_index_build_test.dart test/character_index_assets_test.dart
+dart format --output=none --set-exit-if-changed tool/character_index test/character_index_test.dart test/character_index_build_test.dart test/character_index_assets_test.dart
 ```
 
-验证环境为本地 Windows；本阶段未改客户端，也未验证各平台应用打包。图片连通性、干员立绘覆盖率、全部人工身份关系及生产发布尚未验证。
-
-## 后续阶段
-
-1. **P0.2 数据验收**：先复核高频未归属称呼与全部异格关系，避免为了提高比例而错误归并；补充干员剧情形象归属、图片有效性探测、中文阵营映射、稳定 ID 与生产 manifest，再重新核对覆盖率。
-2. **P1.1 人物列表**：接入可版本化的数据仓库、搜索与筛选、详情按需缓存、无图及离线状态。完成数据验收前不能把当前报告当成完整人物出场数据。
-3. **P1.2 人物详情**：实现形态切换、画廊、档案分区、出场章节和节选，默认保护 NPC 简介及未观看剧情的内容。
-4. **P1.3 档案回放**：校验脚本版本并跳转对应指令，复用播放器但不写正常观看进度；验证退出回放后的原进度不变。
-
-本阶段还同步消除了设计文档前后关于“只合并同名形态”和“人工合并异格”的冲突。下一阶段优先处理真实报告暴露的数据缺口，再落地客户端界面。
+本阶段在 Windows 验证数据工具，不代表已完成各平台应用打包验证。后续依次接入人物列表与详情、保护正常观看进度的档案回放，并验证窄屏与桌面布局。
