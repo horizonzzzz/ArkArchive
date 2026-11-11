@@ -1258,4 +1258,71 @@ void main() {
       catalog.image('snow'),
     });
   });
+  test('旧离线索引从本地目录恢复元数据并保留未匹配路径', () async {
+    final cache = MemoryCache();
+    final store = AssetStore(cache: cache);
+    addTearDown(store.close);
+    final repo = StoryRepository(store);
+    final index = Uri.parse('https://local.invalid/offline-stories-v1');
+    await store.writeCache(
+      index,
+      Uint8List.fromList(
+        utf8.encode(jsonEncode(['test/known', 'test/unknown'])),
+      ),
+    );
+    await store.writeCache(
+      StoryRepository.indexUri,
+      Uint8List.fromList(
+        utf8.encode(
+          jsonEncode({
+            'chapter': {
+              'id': 'chapter',
+              'name': '测试章节',
+              'entryType': 'MAINLINE',
+              'infoUnlockDatas': [
+                {
+                  'storyTxt': 'test/known',
+                  'storyCode': 'A-1',
+                  'storyName': '标题',
+                },
+              ],
+            },
+          }),
+        ),
+      ),
+    );
+    final groups = await repo.loadLocalIndex();
+    await repo.restoreCachedMetadata(groups);
+    final records = await repo.cachedStoryDetails();
+    expect(records.first.entry.title, 'A-1 标题');
+    expect(records.first.groupName, '测试章节');
+    expect(records.last.entry.title, 'test/unknown');
+    expect(await repo.cachedStories(), {'test/known', 'test/unknown'});
+  });
+
+  test('离线播放优先读取缓存的镜像脚本，不请求主源', () async {
+    final cache = MemoryCache();
+    var requests = 0;
+    final store = AssetStore(
+      cache: cache,
+      client: MockClient((request) async {
+        requests++;
+        throw http.ClientException('离线');
+      }),
+    );
+    addTearDown(store.close);
+    const entry = StoryEntry('镜像剧情', 'test/mirror');
+    final mirror = Uri.parse(
+      'https://cdn.jsdelivr.net/gh/yuanyan3060/ArknightsGameResource@main/gamedata/story/test/mirror.txt',
+    );
+    await cache.write(
+      mirror,
+      Uint8List.fromList(utf8.encode('测试台词')),
+      story: entry.path,
+    );
+    store.playbackScope = entry.path;
+    final document = await StoryRepository(store).loadEntry(entry);
+    expect(document.title, entry.title);
+    expect(requests, 0);
+  });
 }

@@ -52,6 +52,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
   bool _busy = false;
   int _done = 0, _total = 0;
   Set<String> _cached = {};
+  final Map<String, CachedStory> _cachedDetails = {};
+  bool _loadingCached = true;
   String? _cacheMessage;
   final Map<String, CacheJob> _cacheJobs = {};
   bool _networkPaused = false;
@@ -147,15 +149,78 @@ class _StoryLauncherState extends State<StoryLauncher> {
     await _repository.store.loadSettings();
     unawaited(_refreshCacheInfo());
     try {
-      final cached = await _repository.cachedStories();
-      if (mounted) setState(() => _cached = cached);
+      final details = await _repository.cachedStoryDetails();
+      if (mounted) {
+        setState(() {
+          _cachedDetails.addAll({
+            for (final item in details) item.entry.path: item,
+          });
+          _cached = _cachedDetails.keys.toSet();
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _cacheMessage = '无法读取离线记录，请检查存储权限或空间。');
+    } finally {
+      if (mounted) setState(() => _loadingCached = false);
     }
     if (mounted) {
-      setState(() {});
-      await _loadIndex();
+      List<StoryGroup> localGroups;
+      try {
+        localGroups = await _repository.loadLocalIndex();
+      } catch (_) {
+        localGroups = [];
+      }
+      if (!mounted) return;
+      setState(() {
+        if (localGroups.isNotEmpty) _groups = localGroups;
+        _restoreCachedDetails(localGroups);
+      });
+      unawaited(
+        _repository.restoreCachedMetadata(localGroups).catchError((_) {}),
+      );
+      unawaited(_loadIndex());
     }
+  }
+
+  void _restoreCachedDetails(List<StoryGroup> groups) {
+    for (final group in groups) {
+      for (final entry in group.entries) {
+        final item = _cachedDetails[entry.path];
+        if (item != null &&
+            (item.entry.title == entry.path || item.groupName.isEmpty)) {
+          _cachedDetails[entry.path] = CachedStory(
+            entry,
+            groupName: group.name,
+            groupId: group.id,
+            entryType: group.entryType,
+          );
+        }
+      }
+    }
+  }
+
+  List<StoryGroup> get _offlineGroups {
+    final groups = <String, List<CachedStory>>{};
+    for (final item in _cachedDetails.values.where(
+      (item) => _cached.contains(item.entry.path),
+    )) {
+      if (item.groupName.isEmpty) continue;
+      groups
+          .putIfAbsent(
+            '${item.entryType}\u0000${item.groupId}\u0000${item.groupName}',
+            () => [],
+          )
+          .add(item);
+    }
+    return [
+      for (final items in groups.values)
+        StoryGroup(
+          items.first.groupName,
+          items.map((item) => item.entry).toList(),
+          id: items.first.groupId,
+          entryType: items.first.entryType,
+        ),
+    ];
   }
 
   Future<void> _refreshCacheInfo() async {
@@ -422,10 +487,17 @@ class _StoryLauncherState extends State<StoryLauncher> {
     try {
       await job.control.checkpoint();
       job.started = true;
+      final group = (_groups ?? const <StoryGroup>[])
+          .where(
+            (group) =>
+                group.entries.any((entry) => entry.path == job.entry.path),
+          )
+          .firstOrNull;
       job.status = CacheJobStatus.downloading;
       if (mounted) setState(() {});
       final errors = await _repository.cacheEntry(
         job.entry,
+        group: group,
         control: job.control,
         onProgress: (done, total) {
           job.done = done;
@@ -437,6 +509,12 @@ class _StoryLauncherState extends State<StoryLauncher> {
       if (errors.isEmpty) {
         job.status = CacheJobStatus.completed;
         _cached.add(job.entry.path);
+        _cachedDetails[job.entry.path] = CachedStory(
+          job.entry,
+          groupName: group?.name ?? '',
+          groupId: group?.id ?? '',
+          entryType: group?.entryType ?? 'NONE',
+        );
       } else {
         job.status = CacheJobStatus.failed;
         job.error = errors.join('；');
@@ -643,12 +721,13 @@ class _StoryLauncherState extends State<StoryLauncher> {
   Future<void> _loadIndex() async {
     setState(() => _indexError = null);
     try {
-      final groups = await _repository.loadIndex();
+      final groups = await _repository.refreshIndex();
       if (!mounted) return;
       setState(() {
         _groups = groups;
-        _activeGroup = null;
+        _restoreCachedDetails(groups);
       });
+      unawaited(_repository.restoreCachedMetadata(groups).catchError((_) {}));
       unawaited(_refreshCacheInfo());
     } catch (e) {
       if (mounted) setState(() => _indexError = '剧情目录加载失败：$e');
@@ -838,28 +917,21 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                     onBrowse: () => setState(() => _page = 0),
                                   ),
                                   CachePage(
-                                    groups: _groups ?? const [],
+                                    groups: _offlineGroups,
+                                    loading: _loadingCached,
                                     active: _page == 2,
                                     cached: [
-                                      for (final group
-                                          in _groups ?? <StoryGroup>[])
-                                        ...group.entries.where(
-                                          (entry) =>
-                                              _cached.contains(entry.path),
-                                        ),
+                                      for (final item in _cachedDetails.values)
+                                        if (_cached.contains(item.entry.path))
+                                          item.entry,
                                     ],
                                     caching: _hasActiveJobs,
                                     progressPaths: {
-                                      for (final group
-                                          in _groups ?? <StoryGroup>[])
-                                        for (final entry in group.entries)
-                                          if (_cached.contains(entry.path) &&
-                                              _repository.store
-                                                      .getPlaybackProgress(
-                                                        entry.path,
-                                                      ) !=
-                                                  null)
-                                            entry.path,
+                                      for (final path in _cached)
+                                        if (_repository.store
+                                                .getPlaybackProgress(path) !=
+                                            null)
+                                          path,
                                     },
                                     done: _cachedDone,
                                     total: _cachedTotal,

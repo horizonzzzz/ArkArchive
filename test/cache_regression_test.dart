@@ -54,10 +54,18 @@ class QueueRepository extends StoryRepository {
   @override
   Future<List<StoryGroup>> loadIndex() async => [StoryGroup('测试章节', entries)];
   @override
+  Future<List<StoryGroup>> refreshIndex() => loadIndex();
+  @override
+  Future<List<CachedStory>> cachedStoryDetails() async => [
+    for (final entry in entries)
+      if (offline.contains(entry.path)) CachedStory(entry),
+  ];
+  @override
   Future<Set<String>> cachedStories() async => offline.toSet();
   @override
   Future<List<String>> cacheEntry(
     StoryEntry entry, {
+    StoryGroup? group,
     CacheControl? control,
     void Function(int, int)? onProgress,
   }) async {
@@ -106,6 +114,13 @@ class PlayQueueRepository extends QueueRepository {
       const [],
     );
   }
+}
+
+class SlowCatalogRepository extends PlayQueueRepository {
+  SlowCatalogRepository(super.store);
+  final pendingIndex = Completer<List<StoryGroup>>();
+  @override
+  Future<List<StoryGroup>> refreshIndex() => pendingIndex.future;
 }
 
 CachePage page({
@@ -167,6 +182,33 @@ Future<void> finishQueue(
 }
 
 void main() {
+  testWidgets('目录请求未完成时仍可显示并播放离线剧情', (tester) async {
+    final store = DesktopStore();
+    addTearDown(store.close);
+    final repository = SlowCatalogRepository(store);
+    repository.offline.add(repository.entries.first.path);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: StoryLauncher(repository: repository),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.pendingIndex.isCompleted, isFalse);
+    final cachePage = tester.widget<CachePage>(
+      find.byType(CachePage, skipOffstage: false),
+    );
+    expect(cachePage.cached.single.title, '剧情 0');
+    await tester.tap(find.text('离线与缓存').last);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.text('其他离线剧情'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.byTooltip('播放 剧情 0'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.loaded, [repository.entries.first.path]);
+    repository.pendingIndex.complete([]);
+    await tester.pump();
+  });
   testWidgets('缓存任务进度与总进度随资源更新，不显示分类与底部缓存按钮', (tester) async {
     const entry = StoryEntry('进度测试', 'progress');
     final job = CacheJob(entry)
@@ -354,16 +396,16 @@ void main() {
     expect(cache.caching, isTrue);
     // 两个任务并行下载，剧情馆行内都出现「缓存中」标识。
     expect(
-      cache.jobs.values
-          .where((job) => job.status == CacheJobStatus.downloading),
+      cache.jobs.values.where(
+        (job) => job.status == CacheJobStatus.downloading,
+      ),
       hasLength(2),
     );
     expect(find.text('缓存中'), findsNWidgets(2));
     await finishQueue(tester, repository);
     expect(repository.offline, hasLength(2));
     expect(
-      cache.jobs.values
-          .every((job) => job.status == CacheJobStatus.completed),
+      cache.jobs.values.every((job) => job.status == CacheJobStatus.completed),
       isTrue,
     );
     expect(
@@ -583,9 +625,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('存储与缓存'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('setting-移动数据缓存提示')),
-    );
+    await tester.ensureVisible(find.byKey(const ValueKey('setting-移动数据缓存提示')));
     await tester.tap(find.byKey(const ValueKey('setting-移动数据缓存提示')));
     await tester.pump();
     expect(store.mobileDataApproved, isTrue);

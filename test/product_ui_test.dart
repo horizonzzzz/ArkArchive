@@ -119,6 +119,8 @@ class _Repository extends StoryRepository {
   }
 
   @override
+  Future<List<StoryGroup>> refreshIndex() => loadIndex();
+  @override
   Future<StoryDocument> loadEntry(StoryEntry entry) {
     entryCalls++;
     return (pending = Completer<StoryDocument>()).future;
@@ -147,6 +149,7 @@ class _Repository extends StoryRepository {
   @override
   Future<List<String>> cacheEntry(
     StoryEntry entry, {
+    StoryGroup? group,
     CacheControl? control,
     void Function(int, int)? onProgress,
   }) async {

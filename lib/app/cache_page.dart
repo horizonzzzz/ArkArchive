@@ -12,6 +12,7 @@ class CachePage extends StatefulWidget {
     this.groups = const [],
     this.active = true,
     required this.cached,
+    this.loading = false,
     this.progressPaths = const <String>{},
     required this.onBrowse,
     required this.onRetry,
@@ -29,6 +30,7 @@ class CachePage extends StatefulWidget {
   final List<StoryGroup> groups;
   final bool active;
   final List<StoryEntry> cached;
+  final bool loading;
 
   /// 存有观看进度的条目路径，行内以「继续观看」标识提示。
   final Set<String> progressPaths;
@@ -247,8 +249,10 @@ class _CachePageState extends State<CachePage> {
                       hasScrollBody: false,
                       child: ArchiveEmpty(
                         icon: Icons.download_for_offline_outlined,
-                        title: '暂无离线档案',
-                        message: _activity == null
+                        title: widget.loading ? '正在读取离线档案' : '暂无离线档案',
+                        message: widget.loading
+                            ? '正在读取本地缓存记录。'
+                            : _activity == null
                             ? '在剧情馆进入篇章，选择需要离线阅读的剧情。'
                             : '这个篇章的缓存已全部删除。',
                         action: _activity != null
@@ -436,9 +440,7 @@ class _CachePageState extends State<CachePage> {
             IconButton(
               tooltip: '播放 ${entry.title}',
               // 下载任务在后台继续执行，已缓存剧情随时可以播放。
-              onPressed: widget.deleting
-                  ? null
-                  : () => widget.onOpen(entry),
+              onPressed: widget.deleting ? null : () => widget.onOpen(entry),
               icon: const Icon(Icons.play_arrow),
             ),
             IconButton(

@@ -71,6 +71,49 @@ class StoryGroup {
   final String id;
 }
 
+class CachedStory {
+  const CachedStory(
+    this.entry, {
+    this.groupName = '',
+    this.groupId = '',
+    this.entryType = 'NONE',
+  });
+
+  final StoryEntry entry;
+  final String groupName;
+  final String groupId;
+  final String entryType;
+
+  Map<String, String> toJson() => {
+    'path': entry.path,
+    'title': entry.title,
+    'code': entry.code,
+    'name': entry.name,
+    'tag': entry.tag,
+    'groupName': groupName,
+    'groupId': groupId,
+    'entryType': entryType,
+  };
+
+  static CachedStory fromJson(dynamic value) {
+    if (value is String) return CachedStory(StoryEntry(value, value));
+    final map = value as Map<String, dynamic>;
+    final path = map['path'] as String;
+    return CachedStory(
+      StoryEntry(
+        map['title'] as String? ?? path,
+        path,
+        code: map['code'] as String? ?? '',
+        name: map['name'] as String? ?? '',
+        tag: map['tag'] as String? ?? '',
+      ),
+      groupName: map['groupName'] as String? ?? '',
+      groupId: map['groupId'] as String? ?? '',
+      entryType: map['entryType'] as String? ?? 'NONE',
+    );
+  }
+}
+
 class StoryRepository {
   StoryRepository(this.store);
   final AssetStore store;
@@ -125,23 +168,58 @@ class StoryRepository {
   Future<MediaCatalog> _loadCacheCatalog() async =>
       _cacheCatalog ??= await MediaCatalog.load(store);
 
-  Future<void> _changeCachedStories(void Function(Set<String>) change) {
+  Future<void> _changeCachedStories(
+    void Function(Map<String, CachedStory>) change,
+  ) {
     final write = _indexWrite.catchError((_) {}).then((_) async {
-      final entries = await cachedStories();
+      final entries = {
+        for (final item in await cachedStoryDetails()) item.entry.path: item,
+      };
       change(entries);
       await store.writeCache(
         _offlineIndexUri,
-        utf8.encode(jsonEncode(entries.toList())),
+        utf8.encode(
+          jsonEncode(entries.values.map((item) => item.toJson()).toList()),
+        ),
       );
     });
     _indexWrite = write;
     return write;
   }
 
-  Future<Set<String>> cachedStories() async {
+  Future<List<CachedStory>> cachedStoryDetails() async {
     final data = await store.readCache(_offlineIndexUri);
-    if (data == null) return {};
-    return (jsonDecode(utf8.decode(data)) as List).cast<String>().toSet();
+    if (data == null) return [];
+    return (jsonDecode(utf8.decode(data)) as List)
+        .map(CachedStory.fromJson)
+        .toList();
+  }
+
+  Future<Set<String>> cachedStories() async =>
+      (await cachedStoryDetails()).map((item) => item.entry.path).toSet();
+
+  Future<void> restoreCachedMetadata(List<StoryGroup> groups) async {
+    final lookup = <String, CachedStory>{
+      for (final group in groups)
+        for (final entry in group.entries)
+          entry.path: CachedStory(
+            entry,
+            groupName: group.name,
+            groupId: group.id,
+            entryType: group.entryType,
+          ),
+    };
+    if (lookup.isEmpty) return;
+    await _changeCachedStories((items) {
+      for (final path in items.keys.toList()) {
+        final existing = items[path]!;
+        final replacement = lookup[path];
+        if ((existing.entry.title == path || existing.groupName.isEmpty) &&
+            replacement != null) {
+          items[path] = replacement;
+        }
+      }
+    });
   }
 
   Future<void> clearCache() async {
@@ -158,11 +236,15 @@ class StoryRepository {
   /// 目录内素材只属于这一幕剧情，无需考虑其他剧情共用。
   Future<void> deleteCachedStory(StoryEntry entry) {
     final deletion = _indexWrite.catchError((_) {}).then((_) async {
-      final entries = await cachedStories();
-      if (entries.remove(entry.path)) {
+      final entries = {
+        for (final item in await cachedStoryDetails()) item.entry.path: item,
+      };
+      if (entries.remove(entry.path) != null) {
         await store.writeCache(
           _offlineIndexUri,
-          utf8.encode(jsonEncode(entries.toList())),
+          utf8.encode(
+            jsonEncode(entries.values.map((item) => item.toJson()).toList()),
+          ),
         );
       }
       await store.deleteStoryAssets(entry.path);
@@ -176,6 +258,7 @@ class StoryRepository {
 
   Future<List<String>> cacheEntry(
     StoryEntry entry, {
+    StoryGroup? group,
     CacheControl? control,
     void Function(int, int)? onProgress,
   }) => store.runCacheDownload(
@@ -219,7 +302,14 @@ class StoryRepository {
         if (errors.isEmpty) {
           await control?.checkpoint();
           await _changeCachedStories((entries) {
-            if (control?.cancelled != true) entries.add(entry.path);
+            if (control?.cancelled != true) {
+              entries[entry.path] = CachedStory(
+                entry,
+                groupName: group?.name ?? '',
+                groupId: group?.id ?? '',
+                entryType: group?.entryType ?? 'NONE',
+              );
+            }
           });
           if (control?.cancelled == true) {
             await _changeCachedStories((entries) => entries.remove(entry.path));
@@ -241,6 +331,10 @@ class StoryRepository {
   );
   Future<StoryDocument> load(Uri uri, {String? title}) async {
     final bytes = await store.load(uri);
+    return _parseDocument(uri, bytes, title: title);
+  }
+
+  StoryDocument _parseDocument(Uri uri, List<int> bytes, {String? title}) {
     final text = utf8.decode(bytes);
     if (uri.host == 'prts.wiki' || uri.host == 'www.prts.wiki') {
       final page = html.parse(
@@ -297,6 +391,15 @@ class StoryRepository {
   }
 
   Future<StoryDocument> loadEntry(StoryEntry entry) async {
+    if (store.playbackScope == entry.path) {
+      for (final uri in _entryUriCandidates(entry)) {
+        final bytes = await store.readStoryCache(uri, entry.path);
+        if (bytes != null && bytes.isNotEmpty) {
+          return _parseDocument(uri, bytes, title: entry.title);
+        }
+      }
+      throw const FormatException('离线剧情脚本缺失，请重新缓存该剧情');
+    }
     final (_, document) = await _loadEntryDocument(entry);
     return document;
   }
@@ -397,9 +500,36 @@ class StoryRepository {
 
   /// 目录来自 PRTS 的剧情索引表；播放器组件不关心它的来源。
   Future<List<StoryGroup>> loadIndex() async {
-    final groups = jsonDecode(
-      utf8.decode(await store.loadShared(indexUri)),
-    ) as Map<String, dynamic>;
+    final result = _parseMainIndex(await store.loadShared(indexUri));
+    return [...result, ...await _loadGameplayIndex()];
+  }
+
+  Future<List<StoryGroup>> refreshIndex() async {
+    final bytes = await store.fetchRemote(indexUri);
+    final groups = _parseMainIndex(bytes);
+    await store.writeCache(indexUri, bytes);
+    return [...groups, ...await _loadGameplayIndex()];
+  }
+
+  Future<List<StoryGroup>> loadLocalIndex() async {
+    final result = <StoryGroup>[];
+    final main = await store.readCache(indexUri);
+    if (main != null) {
+      try {
+        result.addAll(_parseMainIndex(main));
+      } catch (_) {}
+    }
+    final gameplay = await store.readCache(gameplayIndexUri);
+    if (gameplay != null) {
+      try {
+        result.addAll(_parseGameplayIndex(_wikiApiHtml(utf8.decode(gameplay))));
+      } catch (_) {}
+    }
+    return result;
+  }
+
+  List<StoryGroup> _parseMainIndex(List<int> bytes) {
+    final groups = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
     final result = <StoryGroup>[];
     for (final group in groups.values) {
       final entries = <StoryEntry>[];
@@ -434,7 +564,7 @@ class StoryRepository {
         );
       }
     }
-    return [...result, ...await _loadGameplayIndex()];
+    return result;
   }
 
   Future<PreparedStory> prepare(

@@ -336,6 +336,11 @@ class AssetStore {
     return _cache.read(uri);
   }
 
+  Future<Uint8List?> readStoryCache(Uri uri, String story) async {
+    if (_movingCache) throw StateError('缓存目录迁移中');
+    return _cache.read(uri, story: story, allowShared: false);
+  }
+
   Future<void> writeCache(Uri uri, Uint8List bytes) async {
     if (_movingCache) throw StateError('缓存目录迁移中');
     return _cache.write(uri, bytes);
