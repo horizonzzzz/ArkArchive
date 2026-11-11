@@ -312,7 +312,7 @@ Future<int> buildArchive(BuildOptions options, http.Client client) async {
     'character_aliases',
   );
   catalog.loadAliases(aliases);
-  // 人工收录表：边缘人物建卡与伪装/归属合并，见 docs/character-index-build.md。
+  // 人工收录表：边缘人物建卡与伪装/归属合并，见 docs/character-archive.md。
   final groupPatterns =
       (await File.fromUri(dataDirectory.resolve('npc_group_patterns.txt'))
               .readAsLines())
