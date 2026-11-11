@@ -37,6 +37,10 @@ class AssetStore {
     'https://local.invalid/story-mobile-data-approved-v1',
   );
   final Map<String, PlaybackProgress> playbackProgresses = {};
+  static final _completedStoriesUri = Uri.parse(
+    'https://local.invalid/story-completed-v1',
+  );
+  final Set<String> completedStories = {};
 
   /// 用户已批准在移动数据网络下缓存；为 true 时不再弹确认框。
   bool mobileDataApproved = false;
@@ -95,6 +99,7 @@ class AssetStore {
           _settingsUri,
           _playbackSettingsUri,
           _playbackProgressUri,
+          _completedStoriesUri,
           _mobileDataApprovedUri,
           ...keep,
         },
@@ -232,6 +237,18 @@ class AssetStore {
       // 损坏的观看记录不影响目录和播放设置加载。
       playbackProgresses.clear();
     }
+    try {
+      final data = await _cache.read(_completedStoriesUri);
+      completedStories.clear();
+      if (data != null) {
+        final saved = jsonDecode(utf8.decode(data)) as List<dynamic>;
+        completedStories.addAll(
+          saved.whereType<String>().where((path) => path.isNotEmpty),
+        );
+      }
+    } catch (_) {
+      completedStories.clear();
+    }
   }
 
   Future<void> setConcurrency(int value) async {
@@ -272,6 +289,21 @@ class AssetStore {
     final write = _settingsWrite
         .catchError((_) {})
         .then((_) => _cache.write(_playbackSettingsUri, bytes));
+    _settingsWrite = write;
+    await write;
+  }
+
+  Future<void> markStoryCompleted(String path) async {
+    if (_movingCache) throw StateError('缓存目录迁移中');
+    final write = _settingsWrite.catchError((_) {}).then((_) async {
+      if (completedStories.contains(path)) return;
+      final updated = {...completedStories, path};
+      await _cache.write(
+        _completedStoriesUri,
+        Uint8List.fromList(utf8.encode(jsonEncode(updated.toList()))),
+      );
+      completedStories.add(path);
+    });
     _settingsWrite = write;
     await write;
   }

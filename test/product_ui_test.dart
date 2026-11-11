@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:arknights_story_player/app/app_theme.dart';
 import 'package:arknights_story_player/app/story_launcher.dart';
 import 'package:arknights_story_player/story_player/story_player.dart';
+import 'package:arknights_story_player/story_player/ui/story_stage.dart';
 import 'package:arknights_story_player/story_player/data/file_cache.dart';
 import 'package:arknights_story_player/story_player/data/cache_control.dart';
 
@@ -291,6 +292,51 @@ void main() {
     });
   }
 
+  testWidgets('播完返回后显示已看完，重看中优先显示继续观看', (tester) async {
+    final repo = _Repository()..allowPrepare = true;
+    await _mount(tester, repository: repo);
+    await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('播放 ${_main.title}'));
+    await tester.pump();
+    repo.pending!.complete(
+      StoryDocument(title: _main.title, script: StoryScript.parse('正文')),
+    );
+    await tester.runAsync(() async {
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (find.text('开始播放').evaluate().isEmpty &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
+      }
+    });
+    await tester.tap(find.text('开始播放'));
+    await tester.pump();
+    final engine = tester.widget<StoryStage>(find.byType(StoryStage)).engine;
+    await engine.advance();
+    await engine.advance();
+    await tester.pump();
+    expect(find.text('重新播放'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(repo.store.completedStories, contains(_main.path));
+    expect(repo.store.getPlaybackProgress(_main.path), isNull);
+    expect(find.byKey(ValueKey('completed-${_main.path}')), findsOneWidget);
+    await repo.store.setPlaybackProgress(
+      PlaybackProgress(
+        path: _main.path,
+        scriptHash: 'a' * 64,
+        checkpoint: PlaybackCheckpoint(cursor: 1, trace: [0]),
+      ),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _mount(tester, repository: repo);
+    await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('continue-${_main.path}')), findsOneWidget);
+    expect(find.byKey(ValueKey('completed-${_main.path}')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('普通播放从头开始，不触发旧断点的恢复提示', (tester) async {
     final repo = _Repository()..allowPrepare = true;
     await repo.store.setPlaybackProgress(
@@ -871,7 +917,7 @@ void main() {
     expect(repo.entryCalls, 2);
     await tester.tap(find.text('剧情馆').last);
     await tester.pumpAndSettle();
-    expect(find.text('已缓存'), findsOneWidget);
+    expect(find.byTooltip('已缓存'), findsOneWidget);
     await tester.tap(find.byTooltip('${_main.title}的更多操作'));
     await tester.pumpAndSettle();
     expect(

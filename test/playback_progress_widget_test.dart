@@ -173,6 +173,12 @@ void main() {
     await tester.pump();
     expect(saved, isEmpty);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await engine.advance();
+    await engine.advance();
+    await tester.pump();
+    expect(engine.finished, isTrue);
+    expect(find.text('重新播放'), findsOneWidget);
+    expect(saved, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
     expect(saved, isEmpty);
   });

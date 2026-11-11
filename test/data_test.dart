@@ -134,6 +134,25 @@ void main() {
     expect(restored.getPlaybackProgress('activity/1-1')!.checkpoint.cursor, 2);
   });
 
+  test('看完记录按路径保存，清除缓存后保留，写入失败不更新内存', () async {
+    final cache = MemoryCache();
+    final store = AssetStore(cache: cache);
+    final restored = AssetStore(cache: cache);
+    final failing = AssetStore(cache: FailingCache());
+    addTearDown(store.close);
+    addTearDown(restored.close);
+    addTearDown(failing.close);
+    await Future.wait([
+      store.markStoryCompleted('main/0-1'),
+      store.markStoryCompleted('activity/1-1'),
+    ]);
+    await store.deleteStoryAssets('main/0-1');
+    await store.clearCache();
+    await restored.loadSettings();
+    expect(restored.completedStories, {'main/0-1', 'activity/1-1'});
+    await expectLater(failing.markStoryCompleted('main/0-1'), throwsStateError);
+    expect(failing.completedStories, isEmpty);
+  });
   test('迁移旧版单篇断点格式且保留原进度', () async {
     final cache = MemoryCache();
     final script = StoryScript.parse('正文');

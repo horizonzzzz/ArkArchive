@@ -799,15 +799,20 @@ class _StoryLauncherState extends State<StoryLauncher> {
             initialCommandIndex: location?.commandIndex,
             archiveNotice: location?.notice,
             onProgress: (position) {
-              progressWrite = position == null
-                  ? _repository.store.removePlaybackProgress(entry.path)
-                  : _repository.store.setPlaybackProgress(
-                      PlaybackProgress(
-                        path: entry.path,
-                        scriptHash: scriptHash,
-                        checkpoint: position,
-                      ),
-                    );
+              progressWrite = progressWrite.catchError((_) {}).then((_) async {
+                if (position == null) {
+                  await _repository.store.markStoryCompleted(entry.path);
+                  await _repository.store.removePlaybackProgress(entry.path);
+                } else {
+                  await _repository.store.setPlaybackProgress(
+                    PlaybackProgress(
+                      path: entry.path,
+                      scriptHash: scriptHash,
+                      checkpoint: position,
+                    ),
+                  );
+                }
+              });
               return progressWrite;
             },
           ),
@@ -933,6 +938,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                             null)
                                           path,
                                     },
+                                    completedPaths:
+                                        _repository.store.completedStories,
                                     done: _cachedDone,
                                     total: _cachedTotal,
                                     message: _cacheMessage,
@@ -1568,10 +1575,12 @@ class _StoryLauncherState extends State<StoryLauncher> {
   Widget _stageRow(StoryEntry entry) {
     final hasProgress =
         _repository.store.getPlaybackProgress(entry.path) != null;
+    final completed = _repository.store.completedStories.contains(entry.path);
     final job = _cacheJobs[entry.path];
     final activeJob = job != null && _isJobActive(job);
     final hasMeta =
         hasProgress ||
+        completed ||
         activeJob ||
         entry.code.isNotEmpty ||
         entry.tag.isNotEmpty ||
@@ -1601,6 +1610,12 @@ class _StoryLauncherState extends State<StoryLauncher> {
                               key: ValueKey('continue-${entry.path}'),
                               color: AppColors.yellow,
                             ),
+                          if (!hasProgress && completed)
+                            ArchiveTag(
+                              '已看完',
+                              key: ValueKey('completed-${entry.path}'),
+                              color: AppColors.green,
+                            ),
                           if (entry.code.isNotEmpty)
                             Text(
                               entry.code,
@@ -1612,9 +1627,23 @@ class _StoryLauncherState extends State<StoryLauncher> {
                           if (entry.tag.isNotEmpty)
                             ArchiveTag(entry.tag, color: AppColors.subtext),
                           if (activeJob)
-                            const ArchiveTag('缓存中', color: AppColors.green),
-                          if (_cached.contains(entry.path))
-                            const ArchiveTag('已缓存', color: AppColors.indicator),
+                            const Tooltip(
+                              message: '缓存中',
+                              child: Icon(
+                                Icons.downloading,
+                                size: 16,
+                                color: AppColors.green,
+                              ),
+                            )
+                          else if (_cached.contains(entry.path))
+                            const Tooltip(
+                              message: '已缓存',
+                              child: Icon(
+                                Icons.offline_pin_outlined,
+                                size: 16,
+                                color: AppColors.indicator,
+                              ),
+                            ),
                         ],
                       ),
                       const SizedBox(height: 8),

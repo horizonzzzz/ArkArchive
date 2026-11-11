@@ -87,6 +87,7 @@ void main() {
             ],
             cached: const [first, second],
             progressPaths: const {'a/1'},
+            completedPaths: const {'a/1', 'b/1'},
             jobs: const {},
             onBrowse: () {},
             onRetry: (_) {},
@@ -105,11 +106,13 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('offline-活动甲')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('continue-a/1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('completed-a/1')), findsNothing);
     await tester.tap(find.byTooltip('返回离线与缓存'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('offline-活动乙')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('continue-b/1')), findsNothing);
+    expect(find.byKey(const ValueKey('completed-b/1')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

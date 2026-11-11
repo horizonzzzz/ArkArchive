@@ -14,6 +14,7 @@ class CachePage extends StatefulWidget {
     required this.cached,
     this.loading = false,
     this.progressPaths = const <String>{},
+    this.completedPaths = const <String>{},
     required this.onBrowse,
     required this.onRetry,
     required this.onOpen,
@@ -34,6 +35,7 @@ class CachePage extends StatefulWidget {
 
   /// 存有观看进度的条目路径，行内以「继续观看」标识提示。
   final Set<String> progressPaths;
+  final Set<String> completedPaths;
   final VoidCallback onBrowse;
   final ValueChanged<CacheJob> onRetry;
   final ValueChanged<StoryEntry> onOpen;
@@ -425,6 +427,13 @@ class _CachePageState extends State<CachePage> {
                       '继续观看',
                       key: ValueKey('continue-${entry.path}'),
                       color: AppColors.yellow,
+                    ),
+                    const SizedBox(height: 8),
+                  ] else if (widget.completedPaths.contains(entry.path)) ...[
+                    ArchiveTag(
+                      '已看完',
+                      key: ValueKey('completed-${entry.path}'),
+                      color: AppColors.green,
                     ),
                     const SizedBox(height: 8),
                   ],
