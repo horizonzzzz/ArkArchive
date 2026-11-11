@@ -112,6 +112,269 @@ void main() {
     expect(person.lineCount, 3);
   });
 
+  test('卡片头像跟随标准形态，不因立绘候选插入顺序漂移', () {
+    // character_table 的键序不保证标准形态在前，异格键序在前是常态。
+    final value = CharacterCatalog()
+      ..loadOperators(
+        characters: {
+          'char_902_altfirst': unit('异格甲', english: 'Alpha the Second'),
+          'char_901_base': unit('甲', english: 'Alpha'),
+        },
+        patches: {
+          'patchChars': <String, dynamic>{},
+          'infos': <String, dynamic>{},
+        },
+        handbook: {'handbookDict': <String, dynamic>{}},
+        merges: [
+          {'base': 'char_901_base', 'alt': 'char_902_altfirst'},
+        ],
+      );
+    final person = value.people['op:char_901_base']!;
+    expect(person.forms.first['id'], 'char_901_base');
+    for (final art in person.artCandidates) {
+      art['verified'] = true;
+    }
+    expect(person.portrait?['formId'], 'char_901_base');
+    expect(person.portrait?['kind'], 'elite0');
+    expect(
+      Uri.decodeFull(person.toIndex()['portraitUrl'] as String),
+      contains('立绘_甲_1'),
+    );
+    // 画廊候选同样对齐 forms 顺序，避免详情页立绘序列漂移。
+    expect(
+      person.artCandidates.take(3).map((a) => a['formId']),
+      everyElement('char_901_base'),
+    );
+  });
+
+  test('标准形态立绘缺失时退回其它形态，有图仍好过占位', () {
+    final value = CharacterCatalog()
+      ..loadOperators(
+        characters: {
+          'char_902_altfirst': unit('异格甲'),
+          'char_901_base': unit('甲'),
+        },
+        patches: {
+          'patchChars': <String, dynamic>{},
+          'infos': <String, dynamic>{},
+        },
+        handbook: {'handbookDict': <String, dynamic>{}},
+        merges: [
+          {'base': 'char_901_base', 'alt': 'char_902_altfirst'},
+        ],
+      );
+    final person = value.people['op:char_901_base']!;
+    for (final art in person.artCandidates) {
+      art['verified'] =
+          art['formId'] != 'char_901_base' || art['kind'] != 'elite0';
+    }
+    expect(person.portrait?['formId'], 'char_902_altfirst');
+    final statistics = value.statistics();
+    expect(statistics['baseFormPortraitCoverage'], 0);
+    expect(statistics['operatorsWithFallbackPortrait'], 1);
+  });
+
+  test('基准形态立绘覆盖率按干员标准形态统计', () {
+    final value = catalog(
+      merges: [
+        {'base': 'char_001_base', 'alt': 'char_002_alt'},
+      ],
+    );
+    for (final person in value.people.values) {
+      for (final art in person.artCandidates) {
+        art['verified'] = art['formId'] != 'char_002_alt';
+      }
+    }
+    // char_003_other 标准形态有图，甲的标准形态也有图，覆盖率应为 1。
+    expect(value.statistics()['baseFormPortraitCoverage'], 1);
+    expect(value.statistics()['operatorsWithFallbackPortrait'], 0);
+  });
+
+  test('npc_extra：边缘人物建卡、伪装归并不暴露假名', () {
+    final value = catalog()..loadNpcs(npcTable([npcRow('已知人物')]));
+    value.loadAliases({'真实姓名': 'op:char_001_base'});
+    value.loadNpcExtras({
+      '边缘人物': {
+        'faction': '维多利亚',
+        'avg': 'avg_npc_777_1',
+        'aliases': ['“军官”'],
+      },
+      '“甲”': {'mergeInto': 'op:char_001_base'},
+      '已知人物': {'avg': 'avg_npc_888_1'},
+    });
+    final person = value.people['npc:%E8%BE%B9%E7%BC%98%E4%BA%BA%E7%89%A9']!;
+    expect(person.kind, 'npc');
+    expect(person.faction, '维多利亚');
+    expect(person.aliases, contains('“军官”'));
+    // 皮肤索引枚举 _1.._4，交给图片校验淘汰，构建期不做网络请求。
+    expect(
+      person.artCandidates.map((a) => Uri.decodeFull(a['url'] as String)),
+      everyElement(contains('Avg_avg_npc_777_')),
+    );
+    expect(person.artCandidates.length, 4);
+    expect(person.artCandidates.first['spoiler'], isTrue);
+    // 已有卡片只补充候选，不重建。
+    final known = value.people['npc:%E5%B7%B2%E7%9F%A5%E4%BA%BA%E7%89%A9']!;
+    expect(
+      known.artCandidates.any(
+        (a) => (a['url'] as String).contains('Avg_avg_npc_888'),
+      ),
+      isTrue,
+    );
+    // 伪装归并：说话时归真身，但假名不进公开别名与搜索。
+    final op = value.people['op:char_001_base']!;
+    addStories(value, ['activities/demo/one']);
+    value.scanStory('activities/demo/one', utf8.encode('[name=“甲”]一句伪装台词'));
+    expect(op.lineCount, 1);
+    expect(op.aliases, isNot(contains('“甲”')));
+    expect(op.toIndex()['searchText'] as String, isNot(contains('“甲”')));
+  });
+
+  test('npc_extra：拒绝伪装目标缺失、阻塞名单与称呼冲突', () {
+    final value = catalog()..blocklist.add('？？？');
+    expect(
+      () => value.loadNpcExtras({
+        '甲': {'mergeInto': 'op:char_missing'},
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => value.loadNpcExtras({
+        '？？？': {'mergeInto': 'op:char_001_base'},
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => value.loadNpcExtras({
+        '乙': {'mergeInto': '甲卡'},
+      }),
+      throwsFormatException,
+    );
+    value.loadAliases({'冲突名': 'op:char_003_other'});
+    expect(
+      () => value.loadNpcExtras({
+        '冲突名': {'mergeInto': 'op:char_001_base'},
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('未归属说话人记录立绘共现证据与篇目数', () {
+    final value = catalog();
+    addStories(value, ['activities/demo/one', 'activities/demo/two']);
+    value.scanStory(
+      'activities/demo/one',
+      utf8.encode(
+        '[Character(name="char_a_1",name2="char_b_1")]\n[name=边缘人物]你好',
+      ),
+    );
+    value.scanStory(
+      'activities/demo/two',
+      utf8.encode('[Character(name="char_a_1")]\n[name=边缘人物]又见面了'),
+    );
+    final item = value.unmatched['边缘人物']!;
+    expect(item['lineCount'], 2);
+    expect((item['stories'] as Set).length, 2);
+    expect(item['avgKeys'], {'char_a_1': 2, 'char_b_1': 1});
+    final row = unmatchedCsv(value.unmatchedSpeakers);
+    expect(row, contains('char_a_1x2'));
+    // 报告直接 jsonEncode，Set 等内部结构必须在输出层转换。
+    expect(
+      jsonEncode(value.unmatchedSpeakers),
+      contains('activities/demo/one'),
+    );
+  });
+
+  test('npc_extra：群体称呼模式拒绝建卡，伪装归并不受影响', () {
+    final value = catalog();
+    const patterns = {r'(干员|成员|战士)$', '^萨卡兹'};
+    expect(
+      () => value.loadNpcExtras({'罗德岛干员': {}}, groupPatterns: patterns),
+      throwsFormatException,
+    );
+    expect(
+      () => value.loadNpcExtras({
+        '萨卡兹战士': {'avg': 'avg_npc_001_1'},
+      }, groupPatterns: patterns),
+      throwsFormatException,
+    );
+    // 伪装归并非建卡，允许群体化称呼归入真身。
+    value.loadNpcExtras({
+      '“医疗干员”': {'mergeInto': 'op:char_001_base'},
+    }, groupPatterns: patterns);
+    expect(
+      value.people['op:char_001_base']!.aliases,
+      isNot(contains('“医疗干员”')),
+    );
+  });
+
+  test('avg 资源使用统计覆盖全部舞台登场与说话人共现', () {
+    final value = catalog()..loadNpcs(npcTable([npcRow('已知人物')]));
+    addStories(value, ['activities/demo/one', 'activities/demo/two']);
+    value.scanStory(
+      'activities/demo/one',
+      utf8.encode(
+        '[Character(name="avg_npc_111#1",name2="char_001_base")]\n'
+        '[name=甲]第一句\n[name=边缘人物]第二句',
+      ),
+    );
+    value.scanStory(
+      'activities/demo/two',
+      utf8.encode(
+        '[Character(name="avg_npc_111#1")]\n[name=边缘人物]第三句\n'
+        '[Character(name="char_empty")]\n[name=乙]清台后说话',
+      ),
+    );
+    final key = value.avgKeyUsage['avg_npc_111#1']!;
+    expect((key['stories'] as Set).length, 2);
+    expect(key['speakers'], {'甲': 1, '边缘人物': 2});
+    // 干员形态 key 同样入表；char_empty 清台占位不构成资源。
+    expect(value.avgKeyUsage.containsKey('char_001_base'), isTrue);
+    expect(value.avgKeyUsage.containsKey('char_empty'), isFalse);
+  });
+
+  test('人物与 avg 资源对照表可直接用于人工查询', () {
+    final value = catalog()
+      ..loadNpcs(
+        npcTable([
+          npcRow(
+            '已知人物',
+            image:
+                '<img src="https://media.prts.wiki/thumb/1/11/'
+                'Avg_avg_npc_099_1.png/240px-Avg_avg_npc_099_1.png">',
+          ),
+        ]),
+      )
+      ..loadAliases({'真实姓名': 'op:char_001_base'})
+      ..loadNpcExtras({
+        '边缘人物': {'avg': 'avg_npc_777_1'},
+      });
+    addStories(value, ['activities/demo/one']);
+    value.scanStory(
+      'activities/demo/one',
+      utf8.encode('[Character(name="avg_npc_777_1")]\n[name=边缘人物]你好'),
+    );
+    final people = peopleLookupCsv(value);
+    // 人工对照表用名字可查到 mergeInto 需要的完整 ID，Excel 友好带 BOM。
+    expect(people, startsWith('\uFEFF'));
+    expect(people, contains('"甲","op:char_001_base","operator"'));
+    expect(
+      people,
+      contains('"已知人物","npc:%E5%B7%B2%E7%9F%A5%E4%BA%BA%E7%89%A9","npc"'),
+    );
+    expect(
+      people,
+      contains('"边缘人物","npc:%E8%BE%B9%E7%BC%98%E4%BA%BA%E7%89%A9","npc"'),
+    );
+    // avg 对照表给出绑定状态：777 已绑定边缘人物，099 绑定一览页人物，复用度可见。
+    final avg = avgKeysCsv(value);
+    expect(avg, startsWith('\uFEFF'));
+    expect(avg, contains('avg_npc_777_1'));
+    expect(avg, contains('边缘人物'));
+    expect(avg, contains('avg_npc_099_1'));
+    expect(avg, contains('已知人物'));
+  });
+
   test('拒绝缺失、重叠、成链和成环的人工映射', () {
     for (final merges in [
       [

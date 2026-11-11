@@ -42,6 +42,7 @@ Future<String> bundleArchive(Directory source, Directory destination) async {
   index['quality'] = {
     'namedLineCoverage': statistics['namedLineCoverage'],
     'top200NamedLineCoverage': statistics['top200NamedLineCoverage'],
+    'baseFormPortraitCoverage': statistics['baseFormPortraitCoverage'],
     'operatorPortraitCoverage': artwork is Map
         ? artwork['operatorPortraitCoverage']
         : null,

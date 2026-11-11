@@ -207,13 +207,15 @@ void main() {
   test('真实随包资源可以离线读取索引和阿米娅三形态', () async {
     final repository = CharacterRepository();
     final index = await repository.loadIndex();
-    expect(index.people.length, 1055);
+    // 快照人数随数据批次变化；下限防止意外打包成空数据或样本数据。
+    expect(index.people.length, greaterThan(1000));
     final person = index.people.singleWhere((p) => p.id == 'op:char_002_amiya');
     expect(person.forms.length, 3);
     expect(person.forms.map((f) => f.name), ['阿米娅', '阿米娅(近卫)', '阿米娅(医疗)']);
     expect(index.search(query: '阿米娅(近卫)').single.id, person.id);
     expect(index.search(query: '恩希欧迪斯').single.name, '银灰');
     expect(index.search(query: '维什戴尔').single.name, 'W');
+    expect(index.search(query: '米拉娜').single.kind, 'npc');
     expect((await repository.loadDetail(person)).profile, isNotEmpty);
   });
 

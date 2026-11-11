@@ -312,12 +312,25 @@ Future<int> buildArchive(BuildOptions options, http.Client client) async {
     'character_aliases',
   );
   catalog.loadAliases(aliases);
+  // 人工收录表：边缘人物建卡与伪装/归属合并，见 docs/character-index-build.md。
+  final groupPatterns =
+      (await File.fromUri(dataDirectory.resolve('npc_group_patterns.txt'))
+              .readAsLines())
+          .map((line) => line.trim())
+          .where((line) => line.isNotEmpty && !line.startsWith('#'))
+          .toSet();
+  catalog.loadNpcExtras(
+    object(await config('npc_extra.json'), 'npc_extra'),
+    groupPatterns: groupPatterns,
+  );
   catalog.loadStories(await loader.excel('story_review_table.json'));
   // 人工归属表也属于构建输入，修改后必须能从报告追溯。
   for (final name in [
     'form_merge.json',
     'character_aliases.json',
+    'npc_extra.json',
     'character_blocklist.txt',
+    'npc_group_patterns.txt',
   ]) {
     loader.sources[name] = {
       'sha256': sha256
@@ -388,8 +401,12 @@ Future<int> buildArchive(BuildOptions options, http.Client client) async {
     if ((statistics['namedLineCoverage'] as num) < 0.70) '全量带名台词覆盖率尚未达到 70%',
     if ((statistics['top200NamedLineCoverage'] as num) < 0.90)
       'Top 200 带名台词覆盖率尚未达到 90%',
-    if (artwork == null || (artwork['operatorPortraitCoverage'] as num) < 0.95)
-      '干员立绘有效覆盖率尚未达到 95%',
+    if (artwork != null &&
+        ((statistics['baseFormPortraitCoverage'] as num?) ?? 0) < 0.95)
+      '干员标准形态立绘覆盖率尚未达到 95%',
+    if (artwork != null &&
+        ((statistics['operatorsWithFallbackPortrait'] as int?) ?? 0) > 0)
+      '存在靠异格立绘兜底的标准形态（见 report.statistics）',
     if (catalog.mergeCandidates.isNotEmpty) '仍有异格候选未人工复核',
   ];
   final report = {
@@ -434,6 +451,11 @@ Future<int> buildArchive(BuildOptions options, http.Client client) async {
     await writeJson(File('${directory.path}/report.json'), report);
     await File('${directory.path}/unmatched_speakers.csv')
         .writeAsString(unmatchedCsv(catalog.unmatchedSpeakers));
+    // 人工对照表：人物 ID 查询与 avg 资源使用统计，供 npc_extra.json 人工维护。
+    await File('${directory.path}/people_lookup.csv')
+        .writeAsString(peopleLookupCsv(catalog));
+    await File('${directory.path}/avg_keys.csv')
+        .writeAsString(avgKeysCsv(catalog));
   });
   stdout.writeln(
     jsonEncode({
