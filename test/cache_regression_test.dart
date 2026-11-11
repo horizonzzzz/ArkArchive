@@ -301,7 +301,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('chapter-测试章节')));
     await tester.pumpAndSettle();
-    expect(find.text('已缓存'), findsOneWidget);
+    expect(find.byTooltip('已缓存'), findsOneWidget);
     await tester.tap(find.byTooltip('${repository.entries.first.title}的更多操作'));
     await tester.pumpAndSettle();
     expect(
@@ -394,14 +394,14 @@ void main() {
     );
     expect(cache.jobs, hasLength(2));
     expect(cache.caching, isTrue);
-    // 两个任务并行下载，剧情馆行内都出现「缓存中」标识。
+    // 两个任务并行下载，剧情馆行内都出现「缓存中」图标。
     expect(
       cache.jobs.values.where(
         (job) => job.status == CacheJobStatus.downloading,
       ),
       hasLength(2),
     );
-    expect(find.text('缓存中'), findsNWidgets(2));
+    expect(find.byTooltip('缓存中'), findsNWidgets(2));
     await finishQueue(tester, repository);
     expect(repository.offline, hasLength(2));
     expect(
