@@ -468,10 +468,10 @@ void main() {
           matching: find.byType(SafeArea),
         );
         expect(tester.getSize(stageInset).height, barRect.height);
-        await tester.tap(find.text('离线与缓存').last);
+        await tester.tap(find.byTooltip('离线与缓存'));
         await tester.pumpAndSettle();
         final offline = find.byKey(const PageStorageKey('offline-groups'));
-        expect(tester.widget<NavigationBar>(navigation).selectedIndex, 2);
+        expect(tester.widget<NavigationBar>(navigation).selectedIndex, 0);
         expect(offline, findsOneWidget);
         final offlineScroll = tester.state<ScrollableState>(
           find.descendant(of: offline, matching: find.byType(Scrollable)).first,
@@ -636,7 +636,9 @@ void main() {
       await tester.tap(find.text('音频通道'));
       await tester.pump(const Duration(milliseconds: 40));
       expect(find.byTooltip('返回设置分类'), findsOneWidget);
-      await tester.tap(find.text('离线与缓存').last);
+      await tester.tap(find.text('剧情馆').last);
+      await tester.pump();
+      await tester.tap(find.byTooltip('离线与缓存'));
       await tester.pump();
       await tester.tap(find.text('剧情馆').last);
       await tester.pumpAndSettle();
@@ -662,6 +664,46 @@ void main() {
     });
   }
 
+  for (final size in [const Size(390, 844), const Size(1440, 900)]) {
+    testWidgets('缓存入口和返回路径：$size', (tester) async {
+      await _mount(tester, size: size);
+      final nav = find.byType(NavigationBar);
+      if (size.width < 1100) {
+        expect(tester.widget<NavigationBar>(nav).destinations, hasLength(3));
+      }
+      await tester.enterText(find.byKey(const Key('story-search')), '行动后');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('离线与缓存'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('cache-header')), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('chapter-header')), findsOneWidget);
+      await tester.tap(find.byTooltip('返回剧情馆'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('story-search')))
+            .controller!
+            .text,
+        '行动后',
+      );
+      await tester.tap(find.text('系统设置').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('存储与缓存'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('离线与缓存'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('cache-header')), findsOneWidget);
+      await tester.tap(find.byTooltip('返回'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('settings-header')), findsOneWidget);
+      expect(find.text('音频通道'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
   for (final size in [
     const Size(1440, 900),
     const Size(1100, 700),
@@ -687,7 +729,10 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('story-search')), findsOneWidget);
-      for (final label in ['离线与缓存', '系统设置', '剧情馆']) {
+      await tester.tap(find.byTooltip('离线与缓存'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      for (final label in ['系统设置', '剧情馆']) {
         await tester.tap(find.text(label).last);
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
@@ -908,7 +953,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.entryCalls, 1);
     // 失败任务在缓存页展示并可直接重试。
-    await tester.tap(find.text('离线与缓存').last);
+    await tester.tap(find.byTooltip('离线与缓存'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('重试失败任务'), findsOneWidget);
     repo.failCache = false;

@@ -47,6 +47,7 @@ class SettingsPage extends StatefulWidget {
     this.probe,
     this.mobileDataPrompt = true,
     this.onMobileDataPromptChanged,
+    this.onOpenCache,
     this.appVersion,
     this.update,
     this.onOpenLink,
@@ -68,6 +69,7 @@ class SettingsPage extends StatefulWidget {
   final VoidCallback onMoveDirectory;
   final bool directoryBusy;
   final VoidCallback onClearCache;
+  final VoidCallback? onOpenCache;
 
   /// 移动端非 Wi-Fi 缓存前是否提示确认；关闭后不再弹确认框。
   final bool mobileDataPrompt;
@@ -315,6 +317,16 @@ class _SettingsPageState extends State<SettingsPage> {
   ]);
 
   Widget _storage(bool wide) => _section([
+    if (widget.onOpenCache != null) ...[
+      ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.download_outlined),
+        title: const Text('离线与缓存'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: widget.onOpenCache,
+      ),
+      const Divider(height: 20),
+    ],
     if (widget.isMobile) ...[
       SwitchListTile(
         key: const ValueKey('setting-移动数据缓存提示'),

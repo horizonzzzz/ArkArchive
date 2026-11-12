@@ -11,6 +11,7 @@ class CachePage extends StatefulWidget {
     super.key,
     this.groups = const [],
     this.active = true,
+    this.onBack,
     required this.cached,
     this.loading = false,
     this.progressPaths = const <String>{},
@@ -30,6 +31,7 @@ class CachePage extends StatefulWidget {
   });
   final List<StoryGroup> groups;
   final bool active;
+  final VoidCallback? onBack;
   final List<StoryEntry> cached;
   final bool loading;
 
@@ -118,9 +120,14 @@ class _CachePageState extends State<CachePage> {
               : job.done / job.total),
     );
     return PopScope(
-      canPop: !widget.active || _activity == null,
+      canPop: !widget.active || (_activity == null && widget.onBack == null),
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && widget.active && _activity != null) _leaveActivity();
+        if (didPop || !widget.active) return;
+        if (_activity != null) {
+          _leaveActivity();
+        } else {
+          widget.onBack?.call();
+        }
       },
       child: ArchivePageTransition(
         transitionKey: (_activity?.name, _activity?.entryType),
@@ -134,7 +141,13 @@ class _CachePageState extends State<CachePage> {
                   ? '${widget.cached.length} 幕已缓存${pending.isEmpty ? '' : ' · ${pending.length} 项下载任务'}'
                   : '已缓存 ${entries.length} 幕',
               leading: _activity == null
-                  ? null
+                  ? widget.onBack == null
+                        ? null
+                        : IconButton(
+                            tooltip: '返回',
+                            onPressed: widget.onBack,
+                            icon: const Icon(Icons.arrow_back, size: 22),
+                          )
                   : IconButton(
                       tooltip: '返回离线与缓存',
                       onPressed: _leaveActivity,

@@ -49,6 +49,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   static const _catalogPageSize = 10;
   final Map<int, int> _catalogPages = {};
   int _page = 0;
+  int _cacheReturnPage = 0;
   bool _busy = false;
   int _done = 0, _total = 0;
   Set<String> _cached = {};
@@ -108,8 +109,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   static const _navigation = [
     (Icons.library_books_outlined, '剧情馆', '01'),
     (Icons.people_outline, '人物档案', '02'),
-    (Icons.download_outlined, '离线与缓存', '03'),
-    (Icons.tune, '系统设置', '04'),
+    (Icons.tune, '系统设置', '03'),
   ];
 
   @override
@@ -866,6 +866,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final desktop = constraints.maxWidth >= 1100;
+      final navigationPage = _page == 2 ? _cacheReturnPage : _page;
       final glassNavigation =
           !desktop &&
           _repository.store.isMobile &&
@@ -880,8 +881,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
           context,
           ArchiveMotion.stateDuration,
         ),
-        selectedIndex: _page,
-        onDestinationSelected: (value) => setState(() => _page = value),
+        selectedIndex: navigationPage == 3 ? 2 : navigationPage,
+        onDestinationSelected: (value) =>
+            setState(() => _page = value == 2 ? 3 : value),
         destinations: [
           for (final item in _navigation)
             NavigationDestination(icon: Icon(item.$1), label: item.$2),
@@ -925,6 +927,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                     groups: _offlineGroups,
                                     loading: _loadingCached,
                                     active: _page == 2,
+                                    onBack: () => setState(
+                                      () => _page = _cacheReturnPage,
+                                    ),
                                     cached: [
                                       for (final item in _cachedDetails.values)
                                         if (_cached.contains(item.entry.path))
@@ -957,6 +962,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                   ),
                                   SettingsPage(
                                     active: _page == 3,
+                                    onOpenCache: _openCache,
                                     settings:
                                         _repository.store.playbackSettings,
                                     onSettingsChanged: _changePlaybackSettings,
@@ -1120,7 +1126,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: ListTile(
-                      selected: _page == i,
+                      selected:
+                          (_page == 2 ? _cacheReturnPage : _page) ==
+                          (i == 2 ? 3 : i),
                       selectedColor: AppColors.indicator,
                       selectedTileColor: AppColors.surface,
                       textColor: AppColors.subtext,
@@ -1130,7 +1138,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                         _navigation[i].$2,
                         style: const TextStyle(fontSize: 13),
                       ),
-                      onTap: () => setState(() => _page = i),
+                      onTap: () => setState(() => _page = i == 2 ? 3 : i),
                     ),
                   ),
               ],
@@ -1148,6 +1156,21 @@ class _StoryLauncherState extends State<StoryLauncher> {
     ),
   );
 
+  void _openCache() => setState(() {
+    _cacheReturnPage = _page;
+    _page = 2;
+  });
+
+  Widget _cacheShortcut() => IconButton(
+    tooltip: '离线与缓存',
+    onPressed: _openCache,
+    icon: Badge(
+      isLabelVisible:
+          _hasActiveJobs ||
+          _cacheJobs.values.any((job) => job.status == CacheJobStatus.failed),
+      child: const Icon(Icons.download_outlined),
+    ),
+  );
   void _leaveActivity() => setState(() => _activeGroup = null);
   Widget _library() {
     final active = _activeGroup;
@@ -1156,6 +1179,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
         ArchivePageHeader(
           key: const Key('catalog-header'),
           title: '剧情馆',
+          trailing: _cacheShortcut(),
           bottom: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
@@ -1522,6 +1546,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
         ArchivePageHeader(
           key: const Key('chapter-header'),
           title: group.name,
+          trailing: _cacheShortcut(),
           leading: IconButton(
             tooltip: '返回剧情馆',
             onPressed: _leaveActivity,

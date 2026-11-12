@@ -199,7 +199,7 @@ void main() {
       find.byType(CachePage, skipOffstage: false),
     );
     expect(cachePage.cached.single.title, '剧情 0');
-    await tester.tap(find.text('离线与缓存').last);
+    await tester.tap(find.byTooltip('离线与缓存'));
     await tester.pump(const Duration(seconds: 1));
     await tester.tap(find.text('其他离线剧情'));
     await tester.pump(const Duration(seconds: 1));
@@ -422,7 +422,7 @@ void main() {
     final repository = PlayQueueRepository(store);
     repository.offline.add(repository.entries[5].path);
     await startQueue(tester, repository);
-    await tester.tap(find.text('离线与缓存').last);
+    await tester.tap(find.byTooltip('离线与缓存'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('offline-测试章节')));
     await tester.pumpAndSettle();
