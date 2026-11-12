@@ -103,11 +103,12 @@ class ArchiveBundle extends CachingAssetBundle {
   final reads = <String, int>{};
   bool fail = false;
   Map<String, dynamic> detail = detailJson();
+  Map<String, dynamic> index = indexJson();
   @override
   Future<String> loadString(String key, {bool cache = true}) async {
     reads.update(key, (v) => v + 1, ifAbsent: () => 1);
     if (fail) throw FlutterError('模拟资源缺失');
-    return jsonEncode(key.endsWith('index.json') ? indexJson() : detail);
+    return jsonEncode(key.endsWith('index.json') ? index : detail);
   }
 
   @override
@@ -222,6 +223,7 @@ void main() {
   Future<void> pumpArchive(
     WidgetTester tester, {
     double width = 375,
+    double height = 900,
     double scale = 1,
     ArchiveBundle? bundle,
     bool detail = false,
@@ -229,7 +231,7 @@ void main() {
   }) async {
     tester.view.reset();
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = Size(width, 900);
+    tester.view.physicalSize = Size(width, height);
     addTearDown(tester.view.reset);
     final store = AssetStore(cache: MemoryCache());
     addTearDown(store.close);
@@ -278,18 +280,114 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('空结果可以清除，筛选面板可提交', (tester) async {
+  testWidgets('空结果分别清除搜索和筛选，筛选面板可提交', (tester) async {
     await pumpArchive(tester);
     await tester.enterText(find.byType(TextField), '不存在');
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('清除筛选'));
-    await tester.tap(find.text('清除筛选'));
+    await tester.tap(find.byTooltip('筛选'));
     await tester.pumpAndSettle();
-    expect(find.text('阿米娅'), findsOneWidget);
-    await tester.tap(find.text('筛选'));
-    await tester.pumpAndSettle();
+    await tester.tap(find.text('医疗'));
+    await tester.ensureVisible(find.text('应用筛选'));
     await tester.tap(find.text('应用筛选'));
     await tester.pumpAndSettle();
+    expect(find.byTooltip('筛选：已选 1 项'), findsOneWidget);
+    await tester.tap(find.text('清除筛选'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '不存在',
+    );
+    await tester.tap(find.widgetWithText(TextButton, '清除搜索'));
+    await tester.pumpAndSettle();
+    expect(find.text('阿米娅'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('筛选组合、取消切换及确认切换保留正确状态', (tester) async {
+    await pumpArchive(tester);
+    await tester.tap(find.byTooltip('筛选'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('医疗'));
+    await tester.ensureVisible(find.text('6 星'));
+    await tester.tap(find.text('6 星'));
+    await tester.ensureVisible(find.text('应用筛选'));
+    await tester.tap(find.text('应用筛选'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('筛选：已选 2 项'), findsOneWidget);
+    expect(find.text('阿米娅'), findsOneWidget);
+    expect(find.text('阿米娅的朋友'), findsNothing);
+    await tester.ensureVisible(find.text('剧情角色').first);
+    await tester.tap(find.text('剧情角色').first);
+    await tester.pumpAndSettle();
+    expect(find.text('切换后将清除职业、阵营和星级筛选条件。'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('筛选：已选 2 项'), findsOneWidget);
+    await tester.tap(find.text('剧情角色').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('切换'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('筛选'), findsOneWidget);
+    expect(find.text('阿米娅的朋友'), findsOneWidget);
+  });
+
+  testWidgets('窄屏放大文字时页头和筛选仍可操作', (tester) async {
+    await pumpArchive(tester, width: 320, height: 700, scale: 1.5);
+    expect(find.byKey(const Key('character-header')), findsOneWidget);
+    expect(find.byTooltip('筛选'), findsOneWidget);
+    expect(find.byTooltip('排序：出场次数'), findsOneWidget);
+    await tester.tap(find.byTooltip('筛选'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('医疗'));
+    await tester.tap(find.text('医疗'));
+    await tester.ensureVisible(find.text('应用筛选'));
+    await tester.tap(find.text('应用筛选'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('筛选：已选 1 项'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('筛选重置仅修改草稿，关闭后保留已应用条件', (tester) async {
+    await pumpArchive(tester);
+    await tester.tap(find.byTooltip('筛选'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('医疗'));
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('罗德岛').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('应用筛选'));
+    await tester.tap(find.text('应用筛选'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('筛选：已选 2 项'), findsOneWidget);
+    await tester.tap(find.byTooltip('筛选：已选 2 项'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('重置筛选'));
+    await tester.tap(find.text('重置筛选'));
+    await tester.pumpAndSettle();
+    expect(find.text('全部阵营'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('筛选：已选 2 项'), findsOneWidget);
+  });
+
+  testWidgets('人物列表滚动时页头固定', (tester) async {
+    final bundle = ArchiveBundle();
+    bundle.index = {
+      ...indexJson(),
+      'people': [
+        for (var i = 0; i < 30; i++) personJson(id: 'op:char_$i', name: '人物$i'),
+      ],
+    };
+    await pumpArchive(tester, bundle: bundle);
+    final header = find.byKey(const Key('character-header'));
+    final before = tester.getTopLeft(header);
+    final list = find.byKey(const PageStorageKey('character-archive-list'));
+    await tester.drag(list, const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(header), before);
+    expect(find.text('人物0'), findsNothing);
+    expect(find.byType(TextField), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

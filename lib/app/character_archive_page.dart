@@ -59,13 +59,49 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
     if (_scroll.hasClients) _scroll.jumpTo(0);
   }
 
-  void _clear() => _change(() {
-    _search.clear();
+  int get _filterCount =>
+      (_profession.isNotEmpty ? 1 : 0) +
+      (_faction.isNotEmpty ? 1 : 0) +
+      (_rarity != null ? 1 : 0);
+
+  void _clearFilters() => _change(() {
     _kind = '';
     _profession = '';
     _faction = '';
     _rarity = null;
   });
+
+  Future<void> _selectKind(String value) async {
+    if (value == _kind) return;
+    if (value != 'operator' && _filterCount > 0) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('切换人物类型？'),
+          content: const Text('切换后将清除职业、阵营和星级筛选条件。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('切换'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    _change(() {
+      _kind = value;
+      if (value != 'operator') {
+        _profession = '';
+        _faction = '';
+        _rarity = null;
+      }
+    });
+  }
 
   Future<void> _toggleProtection() async {
     if (_protect && !await confirmCharacterSpoilers(context)) return;
@@ -113,20 +149,21 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 20),
-              DropdownButtonFormField<String>(
-                initialValue: profession,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: '职业（包含各形态）'),
-                items: [
-                  const DropdownMenuItem(value: '', child: Text('全部职业')),
-                  ...classes.map(
-                    (c) => DropdownMenuItem(value: c, child: Text(c)),
-                  ),
+              const Text('职业（包含各形态）'),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final c in ['', ...classes])
+                    ChoiceChip(
+                      label: Text(c.isEmpty ? '全部职业' : c),
+                      selected: profession == c,
+                      onSelected: (_) => update(() => profession = c),
+                    ),
                 ],
-                onChanged: (v) => update(() => profession = v ?? ''),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
+                key: ValueKey(faction),
                 initialValue: faction,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: '阵营'),
@@ -142,29 +179,31 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
                 onChanged: (v) => update(() => faction = v ?? ''),
               ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                initialValue: rarity ?? 0,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: '星级（包含各形态）'),
-                items: [
-                  const DropdownMenuItem(value: 0, child: Text('全部星级')),
-                  for (var i = 1; i <= 6; i++)
-                    DropdownMenuItem(value: i, child: Text('$i 星')),
+              const Text('星级（包含各形态）'),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (var i = 0; i <= 6; i++)
+                    ChoiceChip(
+                      label: Text(i == 0 ? '全部星级' : '$i 星'),
+                      selected: (rarity ?? 0) == i,
+                      onSelected: (_) =>
+                          update(() => rarity = i == 0 ? null : i),
+                    ),
                 ],
-                onChanged: (v) => update(() => rarity = v == 0 ? null : v),
               ),
+              const Text('职业和星级须由同一形态满足。'),
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
                 child: const Text('应用筛选'),
               ),
               TextButton(
-                onPressed: () {
+                onPressed: () => update(() {
                   profession = '';
                   faction = '';
                   rarity = null;
-                  Navigator.pop(context, true);
-                },
+                }),
                 child: const Text('重置筛选'),
               ),
             ],
@@ -199,136 +238,125 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
     );
   }
 
-  Widget _header(CharacterIndex index, int count) {
-    final date =
-        index.generatedAt?.toIso8601String().split('T').first ?? '随应用更新';
-    final filtered =
-        _profession.isNotEmpty || _faction.isNotEmpty || _rarity != null;
+  Widget _header(CharacterIndex index) {
+    final orderLabel = switch (_order) {
+      CharacterOrder.appearances => '出场次数',
+      CharacterOrder.firstAppearance => '首次出场',
+      CharacterOrder.name => '人物名字',
+      CharacterOrder.rarity => '星级',
+    };
     return ArchivePageHeader(
+      key: const Key('character-header'),
       title: '人物档案',
-      subtitle: '收录 ${index.people.length} 位人物 · 数据 $date',
+      subtitle: '收录 ${index.people.length} 位人物',
       maxWidth: 1440,
-      bottom: Padding(
-        padding: const EdgeInsets.only(top: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _search,
-              onChanged: (_) => _change(() {}),
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: '搜索人物、代号或英文名',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _search.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: '清除搜索',
-                        onPressed: () => _change(_search.clear),
-                        icon: const Icon(Icons.close),
-                      ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                for (final (value, label) in [
-                  ('', '全部'),
-                  ('operator', '干员'),
-                  ('npc', '剧情角色'),
-                ])
-                  ChoiceChip(
-                    label: Text(label),
-                    selected: _kind == value,
-                    onSelected: (_) => _change(() {
-                      _kind = value;
-                      if (value != 'operator') {
-                        _profession = '';
-                        _faction = '';
-                        _rarity = null;
-                      }
-                    }),
-                  ),
-                OutlinedButton.icon(
-                  onPressed: () => _filters(index),
-                  icon: Icon(
-                    filtered ? Icons.filter_alt : Icons.filter_alt_outlined,
-                    size: 18,
-                  ),
-                  label: Text(filtered ? '已筛选' : '筛选'),
-                ),
-                PopupMenuButton<CharacterOrder>(
-                  tooltip: '排序',
-                  initialValue: _order,
-                  onSelected: (value) => _change(() => _order = value),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
-                      value: CharacterOrder.appearances,
-                      child: Text('出场次数'),
-                    ),
-                    PopupMenuItem(
-                      value: CharacterOrder.firstAppearance,
-                      child: Text('首次出场'),
-                    ),
-                    PopupMenuItem(
-                      value: CharacterOrder.name,
-                      child: Text('人物名字'),
-                    ),
-                    PopupMenuItem(
-                      value: CharacterOrder.rarity,
-                      child: Text('星级'),
-                    ),
-                  ],
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.sort, size: 18),
-                        const SizedBox(width: 6),
-                        Text(switch (_order) {
-                          CharacterOrder.appearances => '出场次数',
-                          CharacterOrder.firstAppearance => '首次出场',
-                          CharacterOrder.name => '人物名字',
-                          CharacterOrder.rarity => '星级',
-                        }),
-                      ],
-                    ),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: _toggleProtection,
-                  icon: Icon(
-                    _protect
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                    size: 18,
-                  ),
-                  label: Text(_protect ? '剧透保护：开' : '剧透保护：关'),
-                ),
-              ],
-            ),
-            if (filtered)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  [
-                    _profession,
-                    _faction,
-                    if (_rarity != null) '$_rarity 星',
-                  ].where((s) => s.isNotEmpty).join(' · '),
-                ),
-              ),
-            const SizedBox(height: 8),
-            Text(
-              '显示 $count 位 · 出场统计仅包含已识别台词',
-              style: const TextStyle(color: AppColors.subtext, fontSize: 12),
-            ),
-          ],
+      trailing: TextButton.icon(
+        onPressed: _toggleProtection,
+        icon: Icon(
+          _protect ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+          size: 18,
         ),
+        label: Text(_protect ? '保护中' : '保护关闭'),
+      ),
+      bottom: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _search,
+            onChanged: (_) => _change(() {}),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: '搜索人物、代号或英文名',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _search.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: '清除搜索',
+                      onPressed: () => _change(_search.clear),
+                      icon: const Icon(Icons.close),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final (value, label) in [
+                        ('', '全部'),
+                        ('operator', '干员'),
+                        ('npc', '剧情角色'),
+                      ])
+                        Semantics(
+                          selected: _kind == value,
+                          child: TextButton(
+                            onPressed: () => _selectKind(value),
+                            style: TextButton.styleFrom(
+                              foregroundColor: _kind == value
+                                  ? AppColors.text
+                                  : AppColors.subtext,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
+                            ),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: _kind == value
+                                        ? AppColors.indicator
+                                        : Colors.transparent,
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                child: Text(label),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: _filterCount == 0 ? '筛选' : '筛选：已选 $_filterCount 项',
+                onPressed: () => _filters(index),
+                icon: Badge(
+                  isLabelVisible: _filterCount > 0,
+                  label: Text('$_filterCount'),
+                  child: const Icon(Icons.filter_alt_outlined),
+                ),
+              ),
+              PopupMenuButton<CharacterOrder>(
+                tooltip: '排序：$orderLabel',
+                initialValue: _order,
+                onSelected: (value) => _change(() => _order = value),
+                itemBuilder: (_) => [
+                  for (final (value, label) in [
+                    (CharacterOrder.appearances, '出场次数'),
+                    (CharacterOrder.firstAppearance, '首次出场'),
+                    (CharacterOrder.name, '人物名字'),
+                    (CharacterOrder.rarity, '星级'),
+                  ])
+                    CheckedPopupMenuItem(
+                      value: value,
+                      checked: _order == value,
+                      child: Text(label),
+                    ),
+                ],
+                icon: const Icon(Icons.sort),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -449,49 +477,81 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
                 final columns = width < 600 && scale <= 1.5
                     ? 2
                     : (width / (210 * scale.clamp(1, 1.6))).floor().clamp(1, 6);
-                return CustomScrollView(
-                  controller: _scroll,
-                  key: const PageStorageKey('character-archive-list'),
-                  slivers: [
-                    SliverToBoxAdapter(child: _header(index, people.length)),
-                    if (people.isEmpty)
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Text(
-                                '没有找到匹配的人物',
-                                style: TextStyle(fontSize: 18),
+                final date =
+                    index.generatedAt?.toIso8601String().split('T').first ??
+                    '随应用更新';
+                return Column(
+                  children: [
+                    _header(index),
+                    Expanded(
+                      child: CustomScrollView(
+                        controller: _scroll,
+                        key: const PageStorageKey('character-archive-list'),
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                              child: Text(
+                                '显示 ${people.length} 位 · 出场统计仅包含已识别台词 · 数据 $date',
+                                style: const TextStyle(
+                                  color: AppColors.subtext,
+                                  fontSize: 12,
+                                ),
                               ),
-                              const SizedBox(height: 12),
-                              OutlinedButton(
-                                onPressed: _clear,
-                                child: const Text('清除筛选'),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      )
-                    else
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 104),
-                        sliver: SliverGrid(
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: columns,
-                                mainAxisSpacing: 12,
-                                crossAxisSpacing: 12,
-                                mainAxisExtent: 160 + 100 * scale,
+                          if (people.isEmpty)
+                            SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Text(
+                                      '没有找到匹配的人物',
+                                      style: TextStyle(fontSize: 18),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    if (_filterCount > 0 || _kind.isNotEmpty)
+                                      OutlinedButton(
+                                        onPressed: _clearFilters,
+                                        child: const Text('清除筛选'),
+                                      ),
+                                    if (_search.text.isNotEmpty)
+                                      TextButton(
+                                        onPressed: () => _change(_search.clear),
+                                        child: const Text('清除搜索'),
+                                      ),
+                                  ],
+                                ),
                               ),
-                          delegate: SliverChildBuilderDelegate(
-                            (context, i) => _card(index, people[i]),
-                            childCount: people.length,
-                          ),
-                        ),
+                            )
+                          else
+                            SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(
+                                20,
+                                20,
+                                20,
+                                104,
+                              ),
+                              sliver: SliverGrid(
+                                gridDelegate:
+                                    SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: columns,
+                                      mainAxisSpacing: 12,
+                                      crossAxisSpacing: 12,
+                                      mainAxisExtent: 160 + 100 * scale,
+                                    ),
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, i) => _card(index, people[i]),
+                                  childCount: people.length,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
+                    ),
                   ],
                 );
               },
