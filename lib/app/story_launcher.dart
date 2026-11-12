@@ -24,8 +24,9 @@ import 'settings_page.dart';
 import '../story_player/data/playback_settings.dart';
 
 class StoryLauncher extends StatefulWidget {
-  const StoryLauncher({super.key, this.repository});
+  const StoryLauncher({super.key, this.repository, this.onThemeChanged});
   final StoryRepository? repository;
+  final ValueChanged<bool>? onThemeChanged;
 
   @override
   State<StoryLauncher> createState() => _StoryLauncherState();
@@ -147,6 +148,11 @@ class _StoryLauncherState extends State<StoryLauncher> {
   Future<void> _initialize() async {
     unawaited(_loadAppVersion());
     await _repository.store.loadSettings();
+    if (mounted) {
+      widget.onThemeChanged?.call(
+        _repository.store.playbackSettings.lightTheme,
+      );
+    }
     unawaited(_refreshCacheInfo());
     try {
       final details = await _repository.cachedStoryDetails();
@@ -323,13 +329,14 @@ class _StoryLauncherState extends State<StoryLauncher> {
   Future<void> _changePlaybackSettings(PlaybackSettings value) async {
     try {
       final write = _repository.store.setPlaybackSettings(value);
+      widget.onThemeChanged?.call(value.lightTheme);
       setState(() {});
       await write;
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('播放设置无法保存，当前值仅在本次运行中生效。')));
+        ).showSnackBar(const SnackBar(content: Text('设置无法保存，当前值仅在本次运行中生效。')));
       }
     }
   }
@@ -671,9 +678,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text(
+            child: Text(
               '清空缓存',
-              style: TextStyle(color: AppColors.danger),
+              style: TextStyle(color: AppColors.of(context).danger),
             ),
           ),
         ],
@@ -873,7 +880,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
           !MediaQuery.highContrastOf(context);
       final navigationBar = NavigationBar(
         backgroundColor: glassNavigation
-            ? AppColors.panel.withValues(alpha: .86)
+            ? AppColors.of(context).panel.withValues(alpha: .86)
             : null,
         elevation: glassNavigation ? 0 : null,
         surfaceTintColor: glassNavigation ? Colors.transparent : null,
@@ -1015,10 +1022,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.radar,
                                 size: 48,
-                                color: AppColors.muted,
+                                color: AppColors.of(context).muted,
                               ),
                               const SizedBox(height: 20),
                               const Text(
@@ -1033,9 +1040,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
                               Text(
                                 _opening?.title ?? '',
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
-                                  color: AppColors.secondary,
+                                  color: AppColors.of(context).secondary,
                                 ),
                               ),
                               const SizedBox(height: 24),
@@ -1047,8 +1054,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                 _total == 0
                                     ? '正在读取脚本与资源配置…'
                                     : '已处理 $_done / $_total 个资源',
-                                style: const TextStyle(
-                                  color: AppColors.secondary,
+                                style: TextStyle(
+                                  color: AppColors.of(context).secondary,
                                   fontSize: 12,
                                 ),
                               ),
@@ -1072,9 +1079,11 @@ class _StoryLauncherState extends State<StoryLauncher> {
                             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                             child: DecoratedBox(
                               position: DecorationPosition.foreground,
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 border: Border(
-                                  top: BorderSide(color: AppColors.borderLight),
+                                  top: BorderSide(
+                                    color: AppColors.of(context).borderLight,
+                                  ),
                                 ),
                               ),
                               child: navigationBar,
@@ -1092,8 +1101,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
     key: const Key('desktop-sidebar'),
     width: 216,
     child: Material(
-      color: AppColors.panel,
-      shape: const Border(right: BorderSide(color: AppColors.borderSubtle)),
+      color: AppColors.of(context).panel,
+      shape: Border(
+        right: BorderSide(color: AppColors.of(context).borderSubtle),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1129,10 +1140,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
                       selected:
                           (_page == 2 ? _cacheReturnPage : _page) ==
                           (i == 2 ? 3 : i),
-                      selectedColor: AppColors.indicator,
-                      selectedTileColor: AppColors.surface,
-                      textColor: AppColors.subtext,
-                      iconColor: AppColors.subtext,
+                      selectedColor: AppColors.of(context).indicator,
+                      selectedTileColor: AppColors.of(context).surface,
+                      textColor: AppColors.of(context).subtext,
+                      iconColor: AppColors.of(context).subtext,
                       leading: Icon(_navigation[i].$1, size: 20),
                       title: Text(
                         _navigation[i].$2,
@@ -1144,11 +1155,14 @@ class _StoryLauncherState extends State<StoryLauncher> {
               ],
             ),
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(20),
             child: Text(
               '剧情浏览与离线阅读',
-              style: TextStyle(fontSize: 12, color: AppColors.subtext),
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.of(context).subtext,
+              ),
             ),
           ),
         ],
@@ -1234,7 +1248,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
       children: [
         if (_playError != null)
           Container(
-            color: AppColors.danger.withValues(alpha: .08),
+            color: AppColors.of(context).danger.withValues(alpha: .08),
             padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
             child: Row(
               children: [
@@ -1243,8 +1257,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
                     _playError!,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.danger,
+                    style: TextStyle(
+                      color: AppColors.of(context).danger,
                       fontSize: 12,
                     ),
                   ),
@@ -1294,7 +1308,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
                 _groups == null
                     ? '正在读取剧情索引'
                     : '${groups.length} 个篇章 · ${groups.fold<int>(0, (sum, group) => sum + _entries(group).length)} 幕',
-                style: const TextStyle(color: AppColors.subtext, fontSize: 12),
+                style: TextStyle(
+                  color: AppColors.of(context).subtext,
+                  fontSize: 12,
+                ),
               ),
             ),
           ),
@@ -1337,11 +1354,13 @@ class _StoryLauncherState extends State<StoryLauncher> {
                           children: [
                             Text(
                               '${page + 1} / $pageCount',
-                              style: const TextStyle(color: AppColors.subtext),
+                              style: TextStyle(
+                                color: AppColors.of(context).subtext,
+                              ),
                             ),
-                            const Icon(
+                            Icon(
                               Icons.arrow_drop_down,
-                              color: AppColors.subtext,
+                              color: AppColors.of(context).subtext,
                             ),
                           ],
                         ),
@@ -1402,7 +1421,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
             border: Border(
               bottom: BorderSide(
                 color: _category == i
-                    ? AppColors.indicator
+                    ? AppColors.of(context).indicator
                     : Colors.transparent,
                 width: 2,
               ),
@@ -1413,8 +1432,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
             onPressed: () => _selectCategory(i),
             style: TextButton.styleFrom(
               foregroundColor: _category == i
-                  ? AppColors.text
-                  : AppColors.subtext,
+                  ? AppColors.of(context).text
+                  : AppColors.of(context).subtext,
               padding: const EdgeInsets.symmetric(horizontal: 14),
             ),
             child: Text(_categories[i]),
@@ -1528,7 +1547,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
               ),
               subtitle: Text(
                 '${_categories[_categoryOf(group)]} · ${_entries(group).length} 幕',
-                style: const TextStyle(fontSize: 12, color: AppColors.subtext),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.of(context).subtext,
+                ),
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => setState(() => _activeGroup = group),
@@ -1562,9 +1584,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                   child: Text(
                     '${_categories[_categoryOf(group)]} · ${entries.length} 幕',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.subtext,
+                      color: AppColors.of(context).subtext,
                     ),
                   ),
                 ),
@@ -1633,40 +1655,43 @@ class _StoryLauncherState extends State<StoryLauncher> {
                             ArchiveTag(
                               '继续观看',
                               key: ValueKey('continue-${entry.path}'),
-                              color: AppColors.yellow,
+                              color: AppColors.of(context).yellow,
                             ),
                           if (!hasProgress && completed)
                             ArchiveTag(
                               '已看完',
                               key: ValueKey('completed-${entry.path}'),
-                              color: AppColors.green,
+                              color: AppColors.of(context).green,
                             ),
                           if (entry.code.isNotEmpty)
                             Text(
                               entry.code,
                               style: AppTypography.tacticalCode.copyWith(
-                                color: AppColors.subtext,
+                                color: AppColors.of(context).subtext,
                                 fontSize: 13,
                               ),
                             ),
                           if (entry.tag.isNotEmpty)
-                            ArchiveTag(entry.tag, color: AppColors.subtext),
+                            ArchiveTag(
+                              entry.tag,
+                              color: AppColors.of(context).subtext,
+                            ),
                           if (activeJob)
-                            const Tooltip(
+                            Tooltip(
                               message: '缓存中',
                               child: Icon(
                                 Icons.downloading,
                                 size: 16,
-                                color: AppColors.green,
+                                color: AppColors.of(context).green,
                               ),
                             )
                           else if (_cached.contains(entry.path))
-                            const Tooltip(
+                            Tooltip(
                               message: '已缓存',
                               child: Icon(
                                 Icons.offline_pin_outlined,
                                 size: 16,
-                                color: AppColors.indicator,
+                                color: AppColors.of(context).indicator,
                               ),
                             ),
                         ],
@@ -1675,10 +1700,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
                     ],
                     Text(
                       entry.name.isEmpty ? entry.title : entry.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
-                        color: AppColors.text,
+                        color: AppColors.of(context).text,
                         height: 1.5,
                       ),
                       maxLines: 2,
@@ -1713,10 +1738,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.download_outlined,
                           size: 20,
-                          color: AppColors.secondary,
+                          color: AppColors.of(context).secondary,
                         ),
                         const SizedBox(width: 12),
                         Text(

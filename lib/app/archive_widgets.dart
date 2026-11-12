@@ -29,10 +29,10 @@ class ArchiveHeading extends StatelessWidget {
               title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
-                color: AppColors.text,
+                color: AppColors.of(context).text,
                 height: 1.3,
               ),
             ),
@@ -40,9 +40,9 @@ class ArchiveHeading extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 subtitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.subtext,
+                  color: AppColors.of(context).subtext,
                   height: 1.5,
                 ),
               ),
@@ -75,9 +75,11 @@ class ArchivePageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
-    decoration: const BoxDecoration(
-      color: AppColors.canvas,
-      border: Border(bottom: BorderSide(color: AppColors.borderSubtle)),
+    decoration: BoxDecoration(
+      color: AppColors.of(context).canvas,
+      border: Border(
+        bottom: BorderSide(color: AppColors.of(context).borderSubtle),
+      ),
     ),
     child: Center(
       child: ConstrainedBox(
@@ -131,24 +133,24 @@ class ArchivePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-    color: AppColors.panel,
-    shape: const RoundedRectangleBorder(
-      side: BorderSide(color: AppColors.borderSubtle),
+    color: AppColors.of(context).panel,
+    shape: RoundedRectangleBorder(
+      side: BorderSide(color: AppColors.of(context).borderSubtle),
     ),
     child: Padding(padding: padding, child: child),
   );
 }
 
 class ArchiveTag extends StatelessWidget {
-  const ArchiveTag(this.label, {super.key, this.color = AppColors.secondary});
+  const ArchiveTag(this.label, {super.key, this.color});
   final String label;
-  final Color color;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
     decoration: BoxDecoration(
-      color: color.withValues(alpha: .10),
+      color: (color ?? AppColors.of(context).secondary).withValues(alpha: .10),
       borderRadius: BorderRadius.zero,
     ),
     child: Text(
@@ -157,7 +159,7 @@ class ArchiveTag extends StatelessWidget {
         fontSize: 10,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.6,
-        color: color,
+        color: color ?? AppColors.of(context).secondary,
       ),
     ),
   );
@@ -174,20 +176,22 @@ class PreviewNotice extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color: AppColors.yellow.withValues(alpha: .06),
-      border: const Border(left: BorderSide(color: AppColors.yellow, width: 2)),
+      color: AppColors.of(context).yellow.withValues(alpha: .06),
+      border: Border(
+        left: BorderSide(color: AppColors.of(context).yellow, width: 2),
+      ),
     ),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.info_outline, size: 17, color: AppColors.yellow),
+        Icon(Icons.info_outline, size: 17, color: AppColors.of(context).yellow),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: AppColors.secondary,
+              color: AppColors.of(context).secondary,
               height: 1.6,
             ),
           ),
@@ -219,7 +223,7 @@ class ArchiveEmpty extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 40, color: AppColors.muted),
+            Icon(icon, size: 40, color: AppColors.of(context).muted),
             const SizedBox(height: 18),
             Text(
               title,
@@ -230,9 +234,9 @@ class ArchiveEmpty extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: AppColors.secondary,
+                color: AppColors.of(context).secondary,
                 height: 1.7,
               ),
             ),

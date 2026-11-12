@@ -1245,7 +1245,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('正在解码演出资源…'),
+                  Text('正在解码演出资源…', style: TextStyle(color: Colors.white)),
                 ],
               ),
             )
@@ -1254,8 +1254,12 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('观看断点已失效，无法恢复原观看位置。'),
+                  const Text(
+                    '观看断点已失效，无法恢复原观看位置。',
+                    style: TextStyle(color: Colors.white),
+                  ),
                   TextButton(
+                    style: TextButton.styleFrom(foregroundColor: Colors.white),
                     onPressed: () async {
                       await engine.restart();
                       if (!mounted) return;

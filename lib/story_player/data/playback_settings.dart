@@ -5,9 +5,11 @@ class PlaybackSettings {
     this.sfx = .85,
     this.autoDelay = 2,
     this.typingMs = 40,
+    this.lightTheme = false,
   });
 
   final double master, bgm, sfx, autoDelay, typingMs;
+  final bool lightTheme;
 
   PlaybackSettings copyWith({
     double? master,
@@ -15,20 +17,23 @@ class PlaybackSettings {
     double? sfx,
     double? autoDelay,
     double? typingMs,
+    bool? lightTheme,
   }) => PlaybackSettings(
     master: master ?? this.master,
     bgm: bgm ?? this.bgm,
     sfx: sfx ?? this.sfx,
     autoDelay: autoDelay ?? this.autoDelay,
     typingMs: typingMs ?? this.typingMs,
+    lightTheme: lightTheme ?? this.lightTheme,
   );
 
-  Map<String, double> toJson() => {
+  Map<String, Object> toJson() => {
     'master': master,
     'bgm': bgm,
     'sfx': sfx,
     'autoDelay': autoDelay,
     'typingMs': typingMs,
+    'lightTheme': lightTheme,
   };
 
   factory PlaybackSettings.fromJson(Map<String, dynamic> json) {
@@ -43,6 +48,7 @@ class PlaybackSettings {
       sfx: value('sfx', .85, 0, 1),
       autoDelay: value('autoDelay', 2, 1, 5),
       typingMs: value('typingMs', 40, 10, 80),
+      lightTheme: json['lightTheme'] == true,
     );
   }
 }

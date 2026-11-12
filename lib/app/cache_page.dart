@@ -229,9 +229,9 @@ class _CachePageState extends State<CachePage> {
                               const SizedBox(height: 8),
                               Text(
                                 '已处理 ${widget.done} / ${widget.total} 幕',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: AppColors.subtext,
+                                  color: AppColors.of(context).subtext,
                                 ),
                               ),
                             ],
@@ -240,9 +240,9 @@ class _CachePageState extends State<CachePage> {
                                 padding: const EdgeInsets.only(top: 8),
                                 child: SelectableText(
                                   widget.message!,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
-                                    color: AppColors.secondary,
+                                    color: AppColors.of(context).secondary,
                                   ),
                                 ),
                               ),
@@ -321,7 +321,7 @@ class _CachePageState extends State<CachePage> {
         title: Text(group.name, style: const TextStyle(fontSize: 15)),
         subtitle: Text(
           '已缓存 ${group.entries.length} 幕',
-          style: const TextStyle(fontSize: 12, color: AppColors.subtext),
+          style: TextStyle(fontSize: 12, color: AppColors.of(context).subtext),
         ),
         trailing: const Icon(Icons.chevron_right, size: 20),
         onTap: () => setState(() {
@@ -398,8 +398,8 @@ class _CachePageState extends State<CachePage> {
               style: DefaultTextStyle.of(context).style.copyWith(
                 fontSize: 12,
                 color: job.status == CacheJobStatus.failed
-                    ? AppColors.danger
-                    : AppColors.subtext,
+                    ? AppColors.of(context).danger
+                    : AppColors.of(context).subtext,
               ),
               child: Text(status),
             ),
@@ -439,14 +439,14 @@ class _CachePageState extends State<CachePage> {
                     ArchiveTag(
                       '继续观看',
                       key: ValueKey('continue-${entry.path}'),
-                      color: AppColors.yellow,
+                      color: AppColors.of(context).yellow,
                     ),
                     const SizedBox(height: 8),
                   ] else if (widget.completedPaths.contains(entry.path)) ...[
                     ArchiveTag(
                       '已看完',
                       key: ValueKey('completed-${entry.path}'),
-                      color: AppColors.green,
+                      color: AppColors.of(context).green,
                     ),
                     const SizedBox(height: 8),
                   ],

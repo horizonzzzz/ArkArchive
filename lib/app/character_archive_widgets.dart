@@ -43,11 +43,11 @@ class _CharacterPortraitState extends State<CharacterPortrait> {
   }
 
   Widget _placeholder() => ColoredBox(
-    color: AppColors.panel,
+    color: AppColors.of(context).panel,
     child: Center(
       child: Text(
         widget.name.characters.firstOrNull ?? '?',
-        style: const TextStyle(fontSize: 42, color: AppColors.subtext),
+        style: TextStyle(fontSize: 42, color: AppColors.of(context).subtext),
       ),
     ),
   );
@@ -85,10 +85,10 @@ class CharacterLoadError extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+          Icon(
             Icons.folder_off_outlined,
             size: 40,
-            color: AppColors.subtext,
+            color: AppColors.of(context).subtext,
           ),
           const SizedBox(height: 16),
           const Text('人物档案暂时无法读取', style: TextStyle(fontSize: 18)),

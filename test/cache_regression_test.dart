@@ -623,7 +623,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('系统设置').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('存储与缓存'));
+    await tester.tap(find.text('缓存设置'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('setting-移动数据缓存提示')));
     await tester.tap(find.byKey(const ValueKey('setting-移动数据缓存提示')));
@@ -713,7 +713,7 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('存储与缓存'));
+    await tester.tap(find.text('缓存设置'));
     await tester.pumpAndSettle();
     final slider = tester.widget<Slider>(
       find.byKey(const ValueKey('setting-并发下载数')),

@@ -129,7 +129,7 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
             child: Text(
               widget.person.appellation,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.subtext),
+              style: TextStyle(color: AppColors.of(context).subtext),
             ),
           ),
         if (widget.person.aliases.isNotEmpty)
@@ -163,9 +163,13 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
             ),
           ),
         const SizedBox(height: 20),
-        const Text(
+        Text(
           '资料来源：PRTS Wiki / 游戏公开数据。文本随应用更新；出场记录只包含已识别台词。',
-          style: TextStyle(color: AppColors.subtext, fontSize: 12, height: 1.5),
+          style: TextStyle(
+            color: AppColors.of(context).subtext,
+            fontSize: 12,
+            height: 1.5,
+          ),
         ),
       ],
     );
@@ -228,10 +232,10 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
           label: const Text('放大查看'),
         ),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           '图片按需联网，已加载图片会进入共享缓存。',
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.subtext, fontSize: 12),
+          style: TextStyle(color: AppColors.of(context).subtext, fontSize: 12),
         ),
       ],
     );
@@ -251,7 +255,10 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
             const SizedBox(height: 6),
             Text(
               '已识别 ${appearance.lineCount} 句',
-              style: const TextStyle(color: AppColors.subtext, fontSize: 12),
+              style: TextStyle(
+                color: AppColors.of(context).subtext,
+                fontSize: 12,
+              ),
             ),
             for (final snippet in appearance.snippets)
               Padding(
@@ -261,8 +268,8 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
                   children: [
                     Text(
                       snippet.speaker,
-                      style: const TextStyle(
-                        color: AppColors.subtext,
+                      style: TextStyle(
+                        color: AppColors.of(context).subtext,
                         fontSize: 12,
                       ),
                     ),

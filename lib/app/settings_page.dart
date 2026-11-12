@@ -109,10 +109,10 @@ class _SettingsPageState extends State<SettingsPage> {
     if (widget.androidAbi == null) unawaited(_detectAndroidAbi());
   }
 
-  /// 网络与节点分类在 categories 中的下标。
-  static const _networkCategory = 3;
+  /// 网络设置分类在 categories 中的下标。
+  static const _networkCategory = 2;
 
-  /// 下钻设置分类；进入网络与节点时自动检测一次，无需手动触发。
+  /// 下钻设置分类；进入网络设置时自动检测一次，无需手动触发。
   void _openCategory(int index) {
     setState(() => _category = index);
     if (index == _networkCategory) _diagnose();
@@ -168,19 +168,17 @@ class _SettingsPageState extends State<SettingsPage> {
     child: LayoutBuilder(
       builder: (context, constraints) {
         const categories = [
-          (Icons.graphic_eq, '音频通道', '主音量、音乐与音效'),
-          (Icons.slow_motion_video, '演出偏好', '自动播放与文字显示速度'),
-          (Icons.storage_outlined, '存储与缓存', '缓存占用、下载并发与本地文件'),
-          (Icons.public, '网络与节点', '检查剧情与素材连接'),
+          (Icons.tune, '基础设置', '主题、音量与播放速度'),
+          (Icons.storage_outlined, '缓存设置', '缓存占用、下载并发与本地文件'),
+          (Icons.public, '网络设置', '检查剧情与素材连接'),
           (Icons.info_outline, '关于', '版本、更新与开源信息'),
         ];
         final wide = constraints.maxWidth >= 880;
         final content = switch (_category) {
-          0 => _audio(),
-          1 => _playback(),
-          2 => _storage(wide),
-          3 => _network(),
-          4 => _about(),
+          0 => _playback(),
+          1 => _storage(wide),
+          2 => _network(),
+          3 => _about(),
           _ => ArchivePanel(
             padding: EdgeInsets.zero,
             child: Column(
@@ -196,7 +194,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     leading: Icon(
                       categories[i].$1,
                       size: 22,
-                      color: AppColors.subtext,
+                      color: AppColors.of(context).subtext,
                     ),
                     title: Text(
                       categories[i].$2,
@@ -204,9 +202,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     subtitle: Text(
                       categories[i].$3,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.subtext,
+                        color: AppColors.of(context).subtext,
                       ),
                     ),
                     trailing: const Icon(Icons.chevron_right, size: 20),
@@ -265,7 +263,17 @@ class _SettingsPageState extends State<SettingsPage> {
     ),
   );
 
-  Widget _audio() => _section([
+  Widget _playback() => _section([
+    SwitchListTile(
+      key: const ValueKey('setting-light-theme'),
+      contentPadding: EdgeInsets.zero,
+      title: const Text('明亮色主题'),
+      subtitle: const Text('关闭时使用方舟风格暗色主题'),
+      value: _settings.lightTheme,
+      onChanged: (value) =>
+          _changeSettings(_settings.copyWith(lightTheme: value)),
+    ),
+    const Divider(height: 20),
     _slider(
       '主音量',
       _settings.master * 100,
@@ -293,9 +301,7 @@ class _SettingsPageState extends State<SettingsPage> {
       (v) => _changeSettings(_settings.copyWith(sfx: v / 100)),
       divisions: 100,
     ),
-  ]);
-
-  Widget _playback() => _section([
+    const Divider(height: 20),
     _slider(
       '自动播放等待',
       _settings.autoDelay,
@@ -332,9 +338,9 @@ class _SettingsPageState extends State<SettingsPage> {
         key: const ValueKey('setting-移动数据缓存提示'),
         contentPadding: EdgeInsets.zero,
         title: const Text('移动数据缓存提示', style: TextStyle(fontSize: 13)),
-        subtitle: const Text(
+        subtitle: Text(
           '关闭后，使用移动数据缓存前不再弹窗确认。',
-          style: TextStyle(fontSize: 12, color: AppColors.subtext),
+          style: TextStyle(fontSize: 12, color: AppColors.of(context).subtext),
         ),
         value: widget.mobileDataPrompt,
         onChanged: widget.onMobileDataPromptChanged,
@@ -345,18 +351,18 @@ class _SettingsPageState extends State<SettingsPage> {
       widget.cacheBytes == null
           ? '缓存占用：无法读取'
           : '缓存占用：${(widget.cacheBytes! / 1048576).toStringAsFixed(1)} MB',
-      style: const TextStyle(fontSize: 12, color: AppColors.muted),
+      style: TextStyle(fontSize: 12, color: AppColors.of(context).muted),
     ),
     if (widget.isDesktop) ...[
       const Divider(height: 20),
-      const Text(
+      Text(
         '本地媒体缓存目录',
-        style: TextStyle(fontSize: 13, color: AppColors.text),
+        style: TextStyle(fontSize: 13, color: AppColors.of(context).text),
       ),
       const SizedBox(height: 8),
       SelectableText(
         widget.cacheLocation ?? '无法读取',
-        style: const TextStyle(fontSize: 12, color: AppColors.muted),
+        style: TextStyle(fontSize: 12, color: AppColors.of(context).muted),
       ),
       const SizedBox(height: 8),
       Wrap(
@@ -377,9 +383,9 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       if (defaultTargetPlatform == TargetPlatform.windows) ...[
         const SizedBox(height: 6),
-        const Text(
+        Text(
           '路径不能包含中文：Windows 上中文路径会导致音频无法播放。',
-          style: TextStyle(fontSize: 12, color: AppColors.yellow),
+          style: TextStyle(fontSize: 12, color: AppColors.of(context).yellow),
         ),
       ],
     ],
@@ -400,8 +406,15 @@ class _SettingsPageState extends State<SettingsPage> {
       onPressed: widget.directoryBusy || widget.caching
           ? null
           : widget.onClearCache,
-      icon: const Icon(Icons.delete_outline, size: 17, color: AppColors.danger),
-      label: const Text('清空素材缓存', style: TextStyle(color: AppColors.danger)),
+      icon: Icon(
+        Icons.delete_outline,
+        size: 17,
+        color: AppColors.of(context).danger,
+      ),
+      label: Text(
+        '清空素材缓存',
+        style: TextStyle(color: AppColors.of(context).danger),
+      ),
     ),
   ]);
 
@@ -431,8 +444,9 @@ class _SettingsPageState extends State<SettingsPage> {
       setState(() {
         _update = result;
         _updateError = null;
-        _updatePhase =
-            result == null ? _UpdatePhase.latest : _UpdatePhase.available;
+        _updatePhase = result == null
+            ? _UpdatePhase.latest
+            : _UpdatePhase.available;
       });
     } catch (error) {
       if (!mounted) return;
@@ -479,8 +493,9 @@ class _SettingsPageState extends State<SettingsPage> {
         .catchError((Object error) {
           if (mounted) {
             setState(() {
-              download.error =
-                  error is UpdateDownloadCancelled ? '已取消下载。' : '$error';
+              download.error = error is UpdateDownloadCancelled
+                  ? '已取消下载。'
+                  : '$error';
             });
           }
         });
@@ -495,9 +510,8 @@ class _SettingsPageState extends State<SettingsPage> {
       await widget.update?.reveal(path);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('无法打开所在文件夹：$error')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('无法打开所在文件夹：$error')));
       }
     }
   }
@@ -524,16 +538,22 @@ class _SettingsPageState extends State<SettingsPage> {
                     style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     '明日方舟剧情离线播放器',
-                    style: TextStyle(fontSize: 12, color: AppColors.subtext),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.of(context).subtext,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      const Text(
+                      Text(
                         '版本',
-                        style: TextStyle(fontSize: 12, color: AppColors.muted),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.of(context).muted,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -541,10 +561,10 @@ class _SettingsPageState extends State<SettingsPage> {
                         widget.appVersion == null
                             ? '无法读取'
                             : 'v${widget.appVersion}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: AppTypography.bender,
                           fontFamilyFallback: [AppTypography.sans],
-                          color: AppColors.terminalWhite,
+                          color: AppColors.of(context).terminalWhite,
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           letterSpacing: .6,
@@ -573,9 +593,7 @@ class _SettingsPageState extends State<SettingsPage> {
       children: [
         Row(
           children: [
-            const Expanded(
-              child: Text('应用更新', style: TextStyle(fontSize: 15)),
-            ),
+            const Expanded(child: Text('应用更新', style: TextStyle(fontSize: 15))),
             OutlinedButton.icon(
               key: const ValueKey('about-check-update'),
               onPressed:
@@ -601,9 +619,12 @@ class _SettingsPageState extends State<SettingsPage> {
             widget.update == null
                 ? '此构建未接入更新检查。'
                 : '检查 GitHub 上的最新发布版本，桌面端可在应用内下载安装包。',
-            style: const TextStyle(fontSize: 12, color: AppColors.subtext),
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.of(context).subtext,
+            ),
           ),
-          _UpdatePhase.checking => const Row(
+          _UpdatePhase.checking => Row(
             children: [
               SizedBox(
                 width: 16,
@@ -613,30 +634,47 @@ class _SettingsPageState extends State<SettingsPage> {
               SizedBox(width: 10),
               Text(
                 '正在检查更新…',
-                style: TextStyle(fontSize: 12, color: AppColors.subtext),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.of(context).subtext,
+                ),
               ),
             ],
           ),
-          _UpdatePhase.latest => const Row(
+          _UpdatePhase.latest => Row(
             children: [
-              Icon(Icons.check_circle_outline, size: 16, color: AppColors.green),
+              Icon(
+                Icons.check_circle_outline,
+                size: 16,
+                color: AppColors.of(context).green,
+              ),
               SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '已是最新版本。',
-                  style: TextStyle(fontSize: 12, color: AppColors.secondary),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.of(context).secondary,
+                  ),
                 ),
               ),
             ],
           ),
           _UpdatePhase.failed => Row(
             children: [
-              const Icon(Icons.error_outline, size: 16, color: AppColors.danger),
+              Icon(
+                Icons.error_outline,
+                size: 16,
+                color: AppColors.of(context).danger,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '检查更新失败：$_updateError',
-                  style: const TextStyle(fontSize: 12, color: AppColors.danger),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.of(context).danger,
+                  ),
                 ),
               ),
             ],
@@ -654,27 +692,27 @@ class _SettingsPageState extends State<SettingsPage> {
       children: [
         Row(
           children: [
-            const Icon(
+            Icon(
               Icons.new_releases_outlined,
               size: 16,
-              color: AppColors.yellow,
+              color: AppColors.of(context).yellow,
             ),
             const SizedBox(width: 8),
-            const Text(
+            Text(
               '发现新版本',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: AppColors.yellow,
+                color: AppColors.of(context).yellow,
               ),
             ),
             const SizedBox(width: 10),
             Text(
               update.version,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: AppTypography.bender,
                 fontFamilyFallback: [AppTypography.sans],
-                color: AppColors.terminalWhite,
+                color: AppColors.of(context).terminalWhite,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 letterSpacing: .6,
@@ -686,9 +724,9 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 10),
           SelectableText(
             update.notes.trim(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: AppColors.secondary,
+              color: AppColors.of(context).secondary,
               height: 1.7,
             ),
           ),
@@ -723,9 +761,9 @@ class _SettingsPageState extends State<SettingsPage> {
     final asset = _preferredUpdateAsset(update);
     if (asset == null) {
       return [
-        const Text(
+        Text(
           '当前平台没有可自动匹配的安装包，请在发布页面查看全部文件。',
-          style: TextStyle(fontSize: 12, color: AppColors.subtext),
+          style: TextStyle(fontSize: 12, color: AppColors.of(context).subtext),
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
@@ -740,9 +778,9 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     return [
       if (defaultTargetPlatform == TargetPlatform.android) ...[
-        const Text(
+        Text(
           '已自动匹配设备架构，直接下载安装即可。',
-          style: TextStyle(fontSize: 11, color: AppColors.muted),
+          style: TextStyle(fontSize: 11, color: AppColors.of(context).muted),
         ),
         const SizedBox(height: 8),
       ],
@@ -798,7 +836,7 @@ class _SettingsPageState extends State<SettingsPage> {
         : null;
     return Container(
       key: ValueKey('about-asset-${asset.name}'),
-      color: AppColors.surface,
+      color: AppColors.of(context).surface,
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -806,20 +844,17 @@ class _SettingsPageState extends State<SettingsPage> {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  asset.name,
-                  style: const TextStyle(fontSize: 12),
-                ),
+                child: Text(asset.name, style: const TextStyle(fontSize: 12)),
               ),
               if (asset.bytes != null) ...[
                 const SizedBox(width: 10),
                 Text(
                   '${(asset.bytes! / 1048576).toStringAsFixed(1)} MB',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: AppTypography.bender,
                     fontFamilyFallback: [AppTypography.sans],
                     fontSize: 11,
-                    color: AppColors.muted,
+                    color: AppColors.of(context).muted,
                   ),
                 ),
               ],
@@ -829,18 +864,18 @@ class _SettingsPageState extends State<SettingsPage> {
           if (saved != null)
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.check_circle_outline,
                   size: 15,
-                  color: AppColors.green,
+                  color: AppColors.of(context).green,
                 ),
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
                     '已保存到下载目录',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.secondary,
+                      color: AppColors.of(context).secondary,
                     ),
                   ),
                 ),
@@ -853,14 +888,18 @@ class _SettingsPageState extends State<SettingsPage> {
           else if (error != null)
             Row(
               children: [
-                const Icon(Icons.error_outline, size: 15, color: AppColors.danger),
+                Icon(
+                  Icons.error_outline,
+                  size: 15,
+                  color: AppColors.of(context).danger,
+                ),
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
                     error,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.danger,
+                      color: AppColors.of(context).danger,
                     ),
                   ),
                 ),
@@ -883,11 +922,11 @@ class _SettingsPageState extends State<SettingsPage> {
                         total == null
                             ? '${_formatBytes(download.received)} / 未知'
                             : '${_formatBytes(download.received)} / ${_formatBytes(total)} · ${(download.received * 100 / total).round()}%',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: AppTypography.bender,
                           fontFamilyFallback: [AppTypography.sans],
                           fontSize: 11,
-                          color: AppColors.subtext,
+                          color: AppColors.of(context).subtext,
                         ),
                       ),
                     ),
@@ -905,9 +944,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 Expanded(
                   child: Text(
                     inApp ? '保存到系统下载目录' : '通过系统浏览器下载',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: AppColors.muted,
+                      color: AppColors.of(context).muted,
                     ),
                   ),
                 ),
@@ -970,13 +1009,17 @@ class _SettingsPageState extends State<SettingsPage> {
   ) => ListTile(
     key: ValueKey('about-link-$title'),
     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    leading: Icon(icon, size: 22, color: AppColors.subtext),
+    leading: Icon(icon, size: 22, color: AppColors.of(context).subtext),
     title: Text(title, style: const TextStyle(fontSize: 15)),
     subtitle: Text(
       subtitle,
-      style: const TextStyle(fontSize: 12, color: AppColors.subtext),
+      style: TextStyle(fontSize: 12, color: AppColors.of(context).subtext),
     ),
-    trailing: const Icon(Icons.open_in_new, size: 18, color: AppColors.muted),
+    trailing: Icon(
+      Icons.open_in_new,
+      size: 18,
+      color: AppColors.of(context).muted,
+    ),
     onTap: widget.onOpenLink == null ? null : () => widget.onOpenLink!(uri),
   );
 
@@ -986,23 +1029,23 @@ class _SettingsPageState extends State<SettingsPage> {
       children: [
         const Text('数据来源与声明', style: TextStyle(fontSize: 15)),
         const SizedBox(height: 10),
-        const Text(
+        Text(
           '剧情脚本、目录索引与多媒体素材来自 PRTS Wiki（torappu.prts.wiki）'
           '与 Kengxxiao/ArknightsGameData 等社区解包项目，'
           '相关内容版权归鹰角网络所有。',
           style: TextStyle(
             fontSize: 12,
-            color: AppColors.secondary,
+            color: AppColors.of(context).secondary,
             height: 1.8,
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           '本应用为社区非官方作品，与鹰角网络无关联，仅用于离线浏览剧情演出，'
           '请勿用于任何商业用途。',
           style: TextStyle(
             fontSize: 12,
-            color: AppColors.secondary,
+            color: AppColors.of(context).secondary,
             height: 1.8,
           ),
         ),
@@ -1020,7 +1063,10 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 5),
             Text(
               description,
-              style: const TextStyle(fontSize: 10, color: AppColors.muted),
+              style: TextStyle(
+                fontSize: 10,
+                color: AppColors.of(context).muted,
+              ),
             ),
           ],
         ),
@@ -1048,10 +1094,10 @@ class _SettingsPageState extends State<SettingsPage> {
             Expanded(child: Text(title, style: const TextStyle(fontSize: 13))),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: AppTypography.bender,
                 fontFamilyFallback: [AppTypography.sans],
-                color: AppColors.terminalWhite,
+                color: AppColors.of(context).terminalWhite,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),

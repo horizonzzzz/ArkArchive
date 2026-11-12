@@ -281,8 +281,8 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
                             onPressed: () => _selectKind(value),
                             style: TextButton.styleFrom(
                               foregroundColor: _kind == value
-                                  ? AppColors.text
-                                  : AppColors.subtext,
+                                  ? AppColors.of(context).text
+                                  : AppColors.of(context).subtext,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 10,
                               ),
@@ -292,7 +292,7 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
                                 border: Border(
                                   bottom: BorderSide(
                                     color: _kind == value
-                                        ? AppColors.indicator
+                                        ? AppColors.of(context).indicator
                                         : Colors.transparent,
                                     width: 2,
                                   ),
@@ -382,8 +382,8 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
                       : '剧情角色',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.subtext,
+                  style: TextStyle(
+                    color: AppColors.of(context).subtext,
                     fontSize: 12,
                   ),
                 ),
@@ -392,8 +392,8 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
                     person.faction,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.subtext,
+                    style: TextStyle(
+                      color: AppColors.of(context).subtext,
                       fontSize: 12,
                     ),
                   ),
@@ -434,11 +434,11 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
               const ArchiveHeading('人物档案', subtitle: '正在读取本地档案…'),
               const SizedBox(height: 24),
               for (var i = 0; i < 6; i++)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(bottom: 16),
                   child: SizedBox(
                     height: 72,
-                    child: ColoredBox(color: AppColors.panel),
+                    child: ColoredBox(color: AppColors.of(context).panel),
                   ),
                 ),
             ],
@@ -478,8 +478,8 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
                               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                               child: Text(
                                 '显示 ${people.length} 位 · 出场统计仅包含已识别台词 · 数据 $date',
-                                style: const TextStyle(
-                                  color: AppColors.subtext,
+                                style: TextStyle(
+                                  color: AppColors.of(context).subtext,
                                   fontSize: 12,
                                 ),
                               ),

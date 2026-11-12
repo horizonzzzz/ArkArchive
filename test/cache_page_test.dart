@@ -247,7 +247,7 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('存储与缓存'));
+      await tester.tap(find.text('缓存设置'));
       await tester.pumpAndSettle();
       expect(
         find.text('关闭后，使用移动数据缓存前不再弹窗确认。'),

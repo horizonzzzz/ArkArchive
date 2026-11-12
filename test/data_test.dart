@@ -206,6 +206,14 @@ void main() {
     expect(failing.playbackProgresses, isEmpty);
   });
 
+  test('旧设置和无效主题字段回退暗色', () {
+    expect(PlaybackSettings.fromJson({'master': .3}).lightTheme, isFalse);
+    expect(
+      PlaybackSettings.fromJson({'lightTheme': 'light'}).lightTheme,
+      isFalse,
+    );
+    expect(PlaybackSettings.fromJson({'lightTheme': true}).lightTheme, isTrue);
+  });
   test('播放设置保存、清理缓存后保留并恢复', () async {
     final cache = MemoryCache();
     final store = AssetStore(cache: cache);
@@ -219,6 +227,7 @@ void main() {
         sfx: .5,
         autoDelay: 3,
         typingMs: 60,
+        lightTheme: true,
       ),
     );
     await store.clearCache();
@@ -229,6 +238,7 @@ void main() {
       'sfx': .5,
       'autoDelay': 3.0,
       'typingMs': 60.0,
+      'lightTheme': true,
     });
   });
 

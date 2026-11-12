@@ -9,6 +9,7 @@ import 'package:arknights_story_player/app/story_launcher.dart';
 import 'package:arknights_story_player/story_player/story_player.dart';
 import 'package:arknights_story_player/story_player/ui/story_stage.dart';
 import 'package:arknights_story_player/story_player/data/file_cache.dart';
+import 'package:arknights_story_player/story_player/data/playback_settings.dart';
 import 'package:arknights_story_player/story_player/data/cache_control.dart';
 
 const _main = StoryEntry(
@@ -190,6 +191,40 @@ Future<_Repository> _mount(
 }
 
 void main() {
+  testWidgets('启动恢复主题并通过设置切换和保存', (tester) async {
+    final repo = _Repository();
+    addTearDown(repo.store.close);
+    await repo.store.setPlaybackSettings(
+      const PlaybackSettings(lightTheme: true),
+    );
+    var light = false;
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) => MaterialApp(
+          theme: buildAppTheme(light: light),
+          home: StoryLauncher(
+            repository: repo,
+            onThemeChanged: (value) => setState(() => light = value),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(light, isTrue);
+    await tester.tap(find.text('系统设置').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('基础设置'));
+    await tester.pumpAndSettle();
+    final toggle = find.byKey(const ValueKey('setting-light-theme'));
+    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(light, isFalse);
+    await repo.store.loadSettings();
+    expect(repo.store.playbackSettings.lightTheme, isFalse);
+  });
   testWidgets('主线章节使用对应背景，缺少映射时保持原样', (tester) async {
     await _mount(
       tester,
@@ -633,7 +668,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('系统设置').last);
       await tester.pump();
-      await tester.tap(find.text('音频通道'));
+      await tester.tap(find.text('基础设置'));
       await tester.pump(const Duration(milliseconds: 40));
       expect(find.byTooltip('返回设置分类'), findsOneWidget);
       await tester.tap(find.text('剧情馆').last);
@@ -657,7 +692,7 @@ void main() {
       await tester.tap(find.text('系统设置').last);
       await tester.pumpAndSettle();
       expect(find.byTooltip('返回设置分类'), findsNothing);
-      expect(find.text('音频通道'), findsOneWidget);
+      expect(find.text('基础设置'), findsOneWidget);
       expect(repo.indexCalls, 1);
       expect(repo.entryCalls, 0);
       expect(tester.takeException(), isNull);
@@ -692,7 +727,7 @@ void main() {
       );
       await tester.tap(find.text('系统设置').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('存储与缓存'));
+      await tester.tap(find.text('缓存设置'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('离线与缓存'));
       await tester.pumpAndSettle();
@@ -700,7 +735,7 @@ void main() {
       await tester.tap(find.byTooltip('返回'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('settings-header')), findsOneWidget);
-      expect(find.text('音频通道'), findsOneWidget);
+      expect(find.text('基础设置'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
@@ -787,7 +822,7 @@ void main() {
     await _mount(tester, repository: _Repository()..cacheIndex = true);
     await tester.tap(find.text('系统设置').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('存储与缓存'));
+    await tester.tap(find.text('缓存设置'));
     await tester.pumpAndSettle();
     expect(find.text('缓存占用：1.0 MB'), findsOneWidget);
   });
@@ -993,7 +1028,7 @@ void main() {
     final repo = await _mount(tester);
     await tester.tap(find.text('系统设置').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('音频通道'));
+    await tester.tap(find.text('基础设置'));
     await tester.pumpAndSettle();
     final slider = find.byKey(const ValueKey('setting-主音量'));
     final before = tester.widget<Slider>(slider).value;
@@ -1007,7 +1042,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(slider, findsNothing);
     expect(find.byTooltip('返回设置分类'), findsNothing);
-    await tester.tap(find.text('音频通道'));
+    await tester.tap(find.text('基础设置'));
     await tester.pumpAndSettle();
     expect(tester.widget<Slider>(slider).value, after);
     expect(repo.indexCalls, 1);
