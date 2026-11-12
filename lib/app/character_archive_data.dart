@@ -172,11 +172,9 @@ class CharacterProfile {
     : title = _text(json, 'title'),
       text = _text(json, 'text'),
       formId = _text(json, 'formId'),
-      formIds = _strings(json['formIds']),
-      spoiler = json['spoiler'] != false;
+      formIds = _strings(json['formIds']);
   final String title, text, formId;
   final List<String> formIds;
-  final bool spoiler;
   bool appliesTo(String id) => formIds.isNotEmpty
       ? formIds.contains(id)
       : formId.isEmpty || formId == id;
@@ -186,10 +184,8 @@ class CharacterArtwork {
   CharacterArtwork.fromJson(Map<String, dynamic> json)
     : url = _text(json, 'url'),
       kind = _text(json, 'kind'),
-      formId = _text(json, 'formId'),
-      spoiler = json['spoiler'] != false;
+      formId = _text(json, 'formId');
   final String url, kind, formId;
-  final bool spoiler;
   String get label => switch (kind) {
     'elite0' => '基础立绘',
     'elite2' => '精英二立绘',

@@ -33,7 +33,6 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
   String _kind = '', _profession = '', _faction = '';
   int? _rarity;
   CharacterOrder _order = CharacterOrder.appearances;
-  bool _protect = true;
 
   @override
   void initState() {
@@ -101,11 +100,6 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
         _rarity = null;
       }
     });
-  }
-
-  Future<void> _toggleProtection() async {
-    if (_protect && !await confirmCharacterSpoilers(context)) return;
-    if (mounted) setState(() => _protect = !_protect);
   }
 
   Future<void> _filters(CharacterIndex index) async {
@@ -231,7 +225,6 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
           index: index,
           repository: _repository,
           store: widget.store,
-          protectSpoilers: _protect,
           onReplay: widget.onReplay,
         ),
       ),
@@ -250,14 +243,6 @@ class _CharacterArchivePageState extends State<CharacterArchivePage> {
       title: '人物档案',
       subtitle: '收录 ${index.people.length} 位人物',
       maxWidth: 1440,
-      trailing: TextButton.icon(
-        onPressed: _toggleProtection,
-        icon: Icon(
-          _protect ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-          size: 18,
-        ),
-        label: Text(_protect ? '保护中' : '保护关闭'),
-      ),
       bottom: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

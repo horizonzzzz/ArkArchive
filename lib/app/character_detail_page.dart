@@ -12,14 +12,12 @@ class CharacterDetailPage extends StatefulWidget {
     required this.index,
     required this.repository,
     required this.store,
-    this.protectSpoilers = true,
     this.onReplay,
   });
   final CharacterSummary person;
   final CharacterIndex index;
   final CharacterRepository repository;
   final AssetStore store;
-  final bool protectSpoilers;
   final CharacterReplay? onReplay;
   @override
   State<CharacterDetailPage> createState() => _CharacterDetailPageState();
@@ -30,25 +28,10 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
     widget.person,
   );
   late String _form = widget.person.forms.firstOrNull?.id ?? '';
-  late bool _protect = widget.protectSpoilers;
-  final _revealedProfiles = <CharacterProfile>{};
-  final _revealedStories = <String>{};
   final _expandedChapters = <String>{};
-  bool _showAllArtwork = false, _opening = false;
+  bool _opening = false;
   String _chapterQuery = '';
   int _artIndex = 0;
-
-  Future<void> _toggleProtection() async {
-    if (_protect && !await confirmCharacterSpoilers(context)) return;
-    if (mounted) {
-      setState(() {
-        _protect = !_protect;
-        _revealedProfiles.clear();
-        _revealedStories.clear();
-        _showAllArtwork = false;
-      });
-    }
-  }
 
   Future<void> _replay(CharacterStory story, CharacterSnippet snippet) async {
     if (_opening || widget.onReplay == null) return;
@@ -149,7 +132,7 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
               style: const TextStyle(color: AppColors.subtext),
             ),
           ),
-        if (!_protect && widget.person.aliases.isNotEmpty)
+        if (widget.person.aliases.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: SelectableText('其他称呼：${widget.person.aliases.join('、')}'),
@@ -162,31 +145,20 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
         for (final section in profile)
           Card(
             child: ExpansionTile(
-              key: ValueKey(
-                '${_form}_${detail.profile.indexOf(section)}_$_protect',
-              ),
-              initiallyExpanded: !section.spoiler || !_protect,
+              key: ValueKey('${_form}_${detail.profile.indexOf(section)}'),
+              initiallyExpanded: true,
               title: Text(section.title.isEmpty ? '档案资料' : section.title),
-              subtitle: section.spoiler && _protect
-                  ? const Text('含剧透 · 点击展开')
-                  : null,
-              onExpansionChanged: (open) {
-                if (open) setState(() => _revealedProfiles.add(section));
-              },
               children: [
-                if (!section.spoiler ||
-                    !_protect ||
-                    _revealedProfiles.contains(section))
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: SelectableText(
-                        characterPlainText(section.text),
-                        style: const TextStyle(height: 1.7),
-                      ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SelectableText(
+                      characterPlainText(section.text),
+                      style: const TextStyle(height: 1.7),
                     ),
                   ),
+                ),
               ],
             ),
           ),
@@ -220,13 +192,7 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
   );
 
   Widget _gallery(CharacterDetail detail) {
-    final all = _arts(detail);
-    final arts = all
-        .where(
-          (art) =>
-              art == all.first || !art.spoiler || !_protect || _showAllArtwork,
-        )
-        .toList();
+    final arts = _arts(detail);
     if (arts.isEmpty) {
       return const Center(
         child: Padding(
@@ -253,12 +219,6 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
               ),
           ],
         ),
-        if (arts.length < all.length)
-          TextButton.icon(
-            onPressed: () => setState(() => _showAllArtwork = true),
-            icon: const Icon(Icons.visibility_outlined),
-            label: const Text('显示其余立绘（可能剧透）'),
-          ),
         const SizedBox(height: 16),
         _portrait(selected.url, height: 440),
         const SizedBox(height: 12),
@@ -278,7 +238,6 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
   }
 
   Widget _appearance(CharacterAppearance appearance, CharacterStory story) {
-    final visible = !_protect || _revealedStories.contains(appearance.story);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -294,49 +253,38 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
               '已识别 ${appearance.lineCount} 句',
               style: const TextStyle(color: AppColors.subtext, fontSize: 12),
             ),
-            if (!visible)
-              TextButton.icon(
-                onPressed: () =>
-                    setState(() => _revealedStories.add(appearance.story)),
-                icon: const Icon(Icons.visibility_off_outlined, size: 18),
-                label: const Text('显示本幕台词（含剧透）'),
-              )
-            else
-              for (final snippet in appearance.snippets)
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        snippet.speaker,
-                        style: const TextStyle(
-                          color: AppColors.subtext,
-                          fontSize: 12,
+            for (final snippet in appearance.snippets)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      snippet.speaker,
+                      style: const TextStyle(
+                        color: AppColors.subtext,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      characterPlainText(snippet.text),
+                      style: const TextStyle(height: 1.6),
+                    ),
+                    if (widget.onReplay != null)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _opening
+                              ? null
+                              : () => _replay(story, snippet),
+                          icon: const Icon(Icons.play_circle_outline, size: 20),
+                          label: const Text('回放此处'),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      SelectableText(
-                        characterPlainText(snippet.text),
-                        style: const TextStyle(height: 1.6),
-                      ),
-                      if (widget.onReplay != null)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton.icon(
-                            onPressed: _opening
-                                ? null
-                                : () => _replay(story, snippet),
-                            icon: const Icon(
-                              Icons.play_circle_outline,
-                              size: 20,
-                            ),
-                            label: const Text('回放此处'),
-                          ),
-                        ),
-                    ],
-                  ),
+                  ],
                 ),
+              ),
           ],
         ),
       ),
@@ -370,14 +318,6 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  _protect ? '台词默认折叠，可逐幕显示；已有观看断点不代表完整读完。' : '正在显示全部台词节选。',
-                  style: const TextStyle(
-                    color: AppColors.subtext,
-                    fontSize: 12,
-                    height: 1.5,
-                  ),
-                ),
                 if (detail.appearances.isEmpty)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 32),
@@ -429,20 +369,7 @@ class _CharacterDetailPageState extends State<CharacterDetailPage> {
   Widget build(BuildContext context) => DefaultTabController(
     length: 3,
     child: Scaffold(
-      appBar: AppBar(
-        title: Text(widget.person.name),
-        actions: [
-          IconButton(
-            tooltip: _protect ? '关闭剧透保护' : '开启剧透保护',
-            onPressed: _toggleProtection,
-            icon: Icon(
-              _protect
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined,
-            ),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(widget.person.name)),
       body: SafeArea(
         top: false,
         child: Center(

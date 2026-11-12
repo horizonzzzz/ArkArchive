@@ -277,7 +277,6 @@ class CharacterCatalog {
               '${kind == 'avatar' ? '头像' : '立绘'}_$displayName$suffix.png',
             ).toString(),
             'verified': false,
-            'spoiler': entry.key != base || kind == 'elite2',
           },
       ]);
       final profile = profiles[entry.key];
@@ -339,7 +338,6 @@ class CharacterCatalog {
           'formId': formId,
           'title': section['storyTitle'] as String? ?? '',
           'text': text,
-          'spoiler': story['unLockType'] != 'DIRECT',
           if (story['patchIdList'] != null) 'formIds': story['patchIdList'],
         });
       }
@@ -418,11 +416,9 @@ class CharacterCatalog {
         final text = cells[1].text.trim();
         if (text.isNotEmpty &&
             !person.profile.any((section) => section['text'] == text)) {
-          // Wiki 简介常直接揭示结局，不能作为无剧透的基础档案。
           person.profile.add({
             'title': '人物简介',
             'text': text,
-            'spoiler': true,
             'source': cells[2].text.trim(),
           });
         }
@@ -447,7 +443,6 @@ class CharacterCatalog {
             'kind': 'avg',
             'url': url,
             'verified': false,
-            'spoiler': true,
           });
         }
       }
@@ -469,8 +464,6 @@ class CharacterCatalog {
   }
 
   /// 人工收录表：边缘人物建卡与伪装/归属合并。
-  /// mergeInto 的称呼只影响台词归属，不进入公开别名与搜索，
-  /// 防止“假名→真身”这种身份揭示在卡片上泄露。
   /// [groupPatterns] 为群体/职务称呼正则，建卡名单命中即拒绝，防群体误建卡。
   void loadNpcExtras(
     Map<String, dynamic> extras, {
@@ -493,8 +486,7 @@ class CharacterCatalog {
         if (previous != null && previous != mergeInto) {
           throw FormatException('人物称呼冲突：$name 已指向 $previous');
         }
-        // 仅登记归属，不经过 _register，避免伪装名进入 aliases/searchText。
-        _speakerIds[name] = mergeInto;
+        _register(name, mergeInto);
         final aliases = spec['aliases'];
         if (aliases != null) {
           for (final alias in array(
@@ -536,7 +528,6 @@ class CharacterCatalog {
           throw FormatException('npc_extra avg 资源名不安全：$avg');
         }
         // 枚举皮肤变体交给图片校验淘汰；复杂资源名（含 #/$）原样即完整文件主体；
-        // 剧情形象默认按剧透处理。
         final base = avg.replaceFirst(RegExp(r'_\d+$'), '');
         final variants = <String>{
           avg,
@@ -549,7 +540,6 @@ class CharacterCatalog {
             'kind': 'avg',
             'url': mediaUri('Avg_$variant.png').toString(),
             'verified': false,
-            'spoiler': true,
           });
         }
       }

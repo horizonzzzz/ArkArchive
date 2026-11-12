@@ -167,11 +167,10 @@ void main() {
     );
   });
 
-  test('档案适配官方 patch 的形态范围，缺少剧透标记时默认保护', () {
+  test('档案适配官方 patch 的形态范围', () {
     final detail = CharacterDetail.fromJson(detailJson());
     expect(detail.profile.last.appliesTo('char_1037_amiya3'), isTrue);
     expect(detail.profile.last.appliesTo('char_002_amiya'), isFalse);
-    expect(CharacterProfile.fromJson({'title': '未知'}).spoiler, isTrue);
   });
 
   test('仓库复用读取且可在失败后显式重试', () async {
@@ -391,9 +390,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('深层档案默认隐藏，形态切换采用对应资料', (tester) async {
+  testWidgets('深层档案默认展示，形态切换采用对应资料', (tester) async {
     await pumpArchive(tester, detail: true);
-    expect(find.text('隐藏身份'), findsNothing);
+    expect(find.text('隐藏身份'), findsOneWidget);
+    expect(find.text('其他称呼：奇美拉（测试）'), findsOneWidget);
     expect(find.text('剧情秘密对白'), findsNothing);
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
@@ -403,7 +403,24 @@ void main() {
     expect(find.text('基础档案'), findsNothing);
   });
 
-  testWidgets('出场节选需主动展开，回放传入正确位置', (tester) async {
+  testWidgets('旧数据标记不隐藏画廊立绘', (tester) async {
+    final bundle = ArchiveBundle()
+      ..detail = {
+        ...detailJson(),
+        'artCandidates': [
+          {'kind': 'elite0', 'verified': true, 'spoiler': false},
+          {'kind': 'elite2', 'verified': true, 'spoiler': true},
+          {'kind': 'avg', 'verified': true},
+        ],
+      };
+    await pumpArchive(tester, detail: true, bundle: bundle);
+    await tester.tap(find.text('立绘'));
+    await tester.pumpAndSettle();
+    expect(find.text('基础立绘'), findsOneWidget);
+    expect(find.text('精英二立绘'), findsOneWidget);
+    expect(find.text('剧情立绘 3'), findsOneWidget);
+  });
+  testWidgets('展开篇章直接显示节选，回放传入正确位置', (tester) async {
     CharacterSnippet? clicked;
     await pumpArchive(
       tester,
@@ -415,9 +432,6 @@ void main() {
     await tester.tap(find.text('出场'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('测试篇章'));
-    await tester.pumpAndSettle();
-    expect(find.text('剧情秘密对白'), findsNothing);
-    await tester.tap(find.text('显示本幕台词（含剧透）'));
     await tester.pumpAndSettle();
     expect(find.text('剧情秘密对白'), findsOneWidget);
     await tester.tap(find.text('回放此处'));

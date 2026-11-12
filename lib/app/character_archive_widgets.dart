@@ -104,25 +104,5 @@ class CharacterLoadError extends StatelessWidget {
   );
 }
 
-Future<bool> confirmCharacterSpoilers(BuildContext context) async =>
-    await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('显示含剧透内容？'),
-        content: const Text('将显示人物深层档案、身份信息及剧情台词。关闭保护仅在本次浏览中生效。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('保持保护'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('显示全部'),
-          ),
-        ],
-      ),
-    ) ??
-    false;
-
 String characterPlainText(String text) =>
     text.replaceAll(RegExp(r'<(?:@[^>]*|/)>'), '');

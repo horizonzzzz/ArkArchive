@@ -190,7 +190,7 @@ void main() {
     expect(value.statistics()['operatorsWithFallbackPortrait'], 0);
   });
 
-  test('npc_extra：边缘人物建卡、伪装归并不暴露假名', () {
+  test('npc_extra：边缘人物建卡、伪装归并公开称呼', () {
     final value = catalog()..loadNpcs(npcTable([npcRow('已知人物')]));
     value.loadAliases({'真实姓名': 'op:char_001_base'});
     value.loadNpcExtras({
@@ -212,7 +212,7 @@ void main() {
       everyElement(contains('Avg_avg_npc_777_')),
     );
     expect(person.artCandidates.length, 4);
-    expect(person.artCandidates.first['spoiler'], isTrue);
+    expect(person.artCandidates.first.containsKey('spoiler'), isFalse);
     // 已有卡片只补充候选，不重建。
     final known = value.people['npc:%E5%B7%B2%E7%9F%A5%E4%BA%BA%E7%89%A9']!;
     expect(
@@ -221,13 +221,13 @@ void main() {
       ),
       isTrue,
     );
-    // 伪装归并：说话时归真身，但假名不进公开别名与搜索。
+    // 归并称呼同时用于台词归属和搜索。
     final op = value.people['op:char_001_base']!;
     addStories(value, ['activities/demo/one']);
     value.scanStory('activities/demo/one', utf8.encode('[name=“甲”]一句伪装台词'));
     expect(op.lineCount, 1);
-    expect(op.aliases, isNot(contains('“甲”')));
-    expect(op.toIndex()['searchText'] as String, isNot(contains('“甲”')));
+    expect(op.aliases, contains('“甲”'));
+    expect(op.toIndex()['searchText'] as String, contains('“甲”'));
   });
 
   test('npc_extra：拒绝伪装目标缺失、阻塞名单与称呼冲突', () {
@@ -302,10 +302,7 @@ void main() {
     value.loadNpcExtras({
       '“医疗干员”': {'mergeInto': 'op:char_001_base'},
     }, groupPatterns: patterns);
-    expect(
-      value.people['op:char_001_base']!.aliases,
-      isNot(contains('“医疗干员”')),
-    );
+    expect(value.people['op:char_001_base']!.aliases, contains('“医疗干员”'));
   });
 
   test('avg 资源使用统计覆盖全部舞台登场与说话人共现', () {
@@ -413,10 +410,12 @@ void main() {
     );
   });
 
-  test('深层档案保留剧透标记与适用形态', () {
+  test('档案保留适用形态，不生成剧透标记', () {
     final sections = catalog().people['op:char_001_base']!.profile;
-    expect(sections.first['spoiler'], isFalse);
-    expect(sections.last['spoiler'], isTrue);
+    expect(
+      sections.every((section) => !section.containsKey('spoiler')),
+      isTrue,
+    );
     expect(sections.last['formIds'], ['char_006_patch']);
   });
 
@@ -437,7 +436,8 @@ void main() {
     );
     final npc = value.people.values.singleWhere((p) => p.kind == 'npc');
     expect(npc.name, '医生(代号)*');
-    expect(npc.profile.single['spoiler'], isTrue);
+    expect(npc.profile.single.containsKey('spoiler'), isFalse);
+    expect(npc.artCandidates.single.containsKey('spoiler'), isFalse);
     expect(
       npc.artCandidates.single['url'],
       mediaUri('Avg_demo.png').toString(),
@@ -541,7 +541,7 @@ void main() {
     expect(snippets.map((s) => s['text']), ['首句', '中间乙', '末句']);
   });
 
-  test('有档案但零出场的人物保留，导航索引不含剧透正文', () {
+  test('有档案但零出场的人物保留，导航索引不含档案正文', () {
     final value = catalog();
     final entry = value.includedPeople.single;
     expect(entry['id'], 'op:char_001_base');
