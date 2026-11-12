@@ -71,6 +71,30 @@ flutter test test/reference_live_test.dart --dart-define=STORY_REFERENCE_URL=htt
 
 此检查下载静态依赖、解码图片并报告指令覆盖，默认不联网；它不能证明动态演出和音频听感正确。历史视觉参照为 [PRTS TL-1 行动后](https://prts.wiki/w/TL-1_%E5%BA%B8%E4%BF%97%E7%9A%84%E5%AE%9E%E8%B7%B5/END)。应用原生解释脚本，不下载执行 PRTS 播放器 JavaScript；参考端构建文件名会变化。
 
-当前 `bgeffect`、`effect`、`video` 和依赖未授权字体的 `spellsticker` 仍跳过；`spellstickerclear` 为空处理。`cameraeffect=Chaos`、部分 `avgdisplay` 样式和非 `group_location_stamp` 的 `animtext` 尚不支持。通讯窗口部分模板、波形、关键帧和占位图仍简化，商业字体以 Noto 近似；随机震动不保证逐帧一致。`fit_mode` 仅保留元数据，未实现额外适配语义。
+当前 `video` 和依赖未授权字体的 `spellsticker` 仍跳过；`spellstickerclear` 为空处理。`cameraeffect=Chaos`、部分 `avgdisplay` 样式和非 `group_location_stamp` 的 `animtext` 尚不支持。通讯窗口部分模板、波形、关键帧和占位图仍简化，商业字体以 Noto 近似；随机震动不保证逐帧一致。`fit_mode` 仅保留元数据，未实现额外适配语义。
 
 历史对齐细节可用 `git show 70b0fd2^:docs/player_alignment.md` 查阅；其旧测试数量和资源打包说明已过时。断点相关历史入口为 `f4a8892`、`261e499`，进度条为 `60a2c6a`、`6bb88e0`，人物回放保护为 `7fdb2f5`。
+
+## 解包资源驱动的粒子特效
+
+`bgeffect` / `effect` 使用通用的描述解析、粒子模拟和二维绘制管线。首批 `avg_fire_01`（8 个粒子发射器和 1 个烟雾网格）与 `avg_048_smoke_01`（4 个发射器）的 `fx.json` 和主贴图位于 `assets/fx-runtime/`，已在 `pubspec.yaml` 注册，默认通过 Flutter `rootBundle` 离线加载，无需配置外部目录。
+
+`tool/avg_fx_extract.py` 将 ArkUnpacker 的 `TT_*.ab.json` 转换为版本 1 描述，保留来源 SHA-256、独立渲染组件、父级二维变换、材质颜色、发射速率、随机寿命/速度/尺寸、Hermite 曲线、颜色渐变和网格翻页。转换器和模拟测试使用合成数据；打包加载测试直接读取仓库内的两组资源，不要求安装游戏。
+
+```sh
+uv run --no-project python tool/avg_fx_extract.py .temp/unpacked-fire-smoke assets/fx-runtime
+uv run --no-project python tool/avg_fx_extract.py .temp/unpacked-smoke assets/fx-runtime
+uv run --no-project python tool/test_avg_fx_extract.py
+flutter test test/fx_test.dart
+flutter run -d windows
+```
+
+每组目录结构为 `assets/fx-runtime/<特效小写名>/fx.json` 和同目录 PNG；新增目录时须在 `pubspec.yaml` 分别注册，Flutter 不递归收录所有子目录。开发时可用 `--dart-define=STORY_FX_ROOT=...` 替换默认资源根目录：桌面/移动端接受绝对本地目录或 `file:` URI，Web 可使用 HTTP(S) 地址，服务端需允许跨域。外部覆盖资源未纳入“完整下载”的依赖与完成状态判断；默认打包资源不占用剧情缓存，删除剧情缓存不会删除它们。资源缺失时记录警告并继续对白。
+
+变量按 `story_variables.json` 解析，例如 TL-10「活着的重量」行动后使用 `$eb_smoke_01 → avg_048_smoke_01`（layer 1）及 `$eb_burn → avg_fire_01`（layer 2）。背景特效在背景之后、CG 之前绘制；前景特效在人物之后、遮罩之前绘制，各组内按 layer 从低到高排列。同组同层的新指令替换旧实例；无名称且指定 layer 时清除此层，空指令清除该组全部层。`fade=true` 配合 `fadetime` 淡入/淡出，`block=true` 等待结束；`x/y` 使用舞台中心原点、y 向上，`roz` 控制平面旋转，`rox/roy` 仅用余弦缩放近似投影。这些层级与投影规则是当前播放器的实现约定，尚未以游戏运行时逐帧验证。
+
+粒子共用引擎时钟，暂停时冻结；重播、跳转和断点重建创建新的实例，旧淡出不会移除新实例。重建还原特效是否存在，不追赶已跳过对白的历史粒子时间。Unity 的 prewarm 仅对声明预热的循环发射器执行，最多 10 秒；长帧最多追赶 250 毫秒，粒子数量按发射器上限限制。
+
+这套实现可复用已有粒子模块和材质规则，但没有复现 Unity 自定义 shader。当前溶解、扭曲、多重噪声、三维发射形状及火花拉伸仍近似，不能据此宣称与原版像素一致。后续效果如果只使用已支持模块，可提取转换、登记资源并验收；遇到新模块、网格或 shader，必须补充对应 Dart 或 Flutter shader 实现。
+
+按当前项目要求，运行时使用的派生 `fx.json` 和主贴图纳入 `assets/` 并随应用打包；原始 AssetBundle、完整 typetree、中间解包结果和验收截图继续保留在忽略的 `.temp/`。这两组资源合计约 349.5 KiB，无需 Git LFS。游戏素材的版权归属不因转换或打包而改变，也不自动适用项目代码许可证。

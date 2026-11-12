@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../data/media_catalog.dart';
 import '../stage_state.dart';
+import '../fx/fx_painter.dart';
 
 /// 1280×720 逻辑舞台的分层绘制；层级顺序与参考端 ir.attach 一致。
 class StagePainter extends CustomPainter {
@@ -66,6 +67,11 @@ class StagePainter extends CustomPainter {
       }
     });
     _withFocus(canvas, 'bg', (c) => _avgDisplays(c, 'bgover'));
+    _withFocus(
+      canvas,
+      'bg',
+      (c) => paintEffects(c, state.effects, textures, 'bgeffect'),
+    );
     canvas.save();
     canvas.translate(640, 360);
     canvas.rotate(state.imageRotation * math.pi / 180);
@@ -95,6 +101,7 @@ class StagePainter extends CustomPainter {
       }
     });
     _withFocus(canvas, 'char', (c) => _avgDisplays(c, 'charover'));
+    paintEffects(canvas, state.effects, textures, 'effect');
     if (cameraFilter != null) {
       canvas.restore();
     }
@@ -934,8 +941,7 @@ class StagePainter extends CustomPainter {
                   art.faceRect!.width * bodyScaleX,
                   art.faceRect!.height * bodyScaleY,
                 );
-          final isTerminal =
-              frame.maskId == 'group_interclude_square_common';
+          final isTerminal = frame.maskId == 'group_interclude_square_common';
           final contentScaleX = faceRect == null && isTerminal
               ? window.width / frame.size.dx
               : 1.0;

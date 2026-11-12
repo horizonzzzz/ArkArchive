@@ -72,7 +72,7 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # 剧情对白字体与滑动遮罩纹理随应用打包，运行时不联网获取。
+  # 剧情对白字体、滑动遮罩与首批粒子特效随应用打包，运行时不联网获取。
   assets:
     - assets/fonts/NotoSansHans-Medium.ttf
     - assets/fonts/Bender.otf
@@ -83,6 +83,8 @@ flutter:
     - assets/images/prts_ui/
     - assets/characters/
     - assets/characters/details/
+    - assets/fx-runtime/avg_fire_01/
+    - assets/fx-runtime/avg_048_smoke_01/
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
   shaders:

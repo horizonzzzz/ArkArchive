@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import 'fx/fx_simulation.dart';
+
 class StageImage {
   StageImage(this.key, {this.cg = false, this.fit = 'coverall'});
   final String key;
@@ -249,6 +251,7 @@ class HeaderMeta {
 
 class StageState {
   final List<StageImage> backgrounds = [], images = [];
+  final List<StageEffect> effects = [];
   final List<LargeScene> largeScenes = [], largeImages = [];
   final List<StageCharacter> characters = [];
   final Map<String, InterludeFrame> interludes = {};

@@ -16,6 +16,8 @@ import '../runtime/story_audio.dart';
 import '../runtime/story_engine.dart';
 import '../runtime/playback_checkpoint.dart';
 import '../stage_state.dart';
+import '../fx/fx_asset.dart';
+import '../fx/fx_loader.dart';
 import 'story_stage.dart';
 import 'stage_painter.dart';
 import 'story_text.dart';
@@ -53,6 +55,7 @@ class StoryPlayer extends StatefulWidget {
 class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   late final StoryEngine engine;
   final Map<Uri, ui.Image> textures = {};
+  final Map<String, FxAsset> effectAssets = {};
   final Map<String, ui.Image> sprites = {};
   ui.FragmentShader? slideMaskShader;
   ui.Image? slideMask;
@@ -116,6 +119,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     engine = StoryEngine(
       widget.story.document.script,
       variables: widget.story.catalog.variables,
+      effectAssets: effectAssets,
       typingInterval: Duration(milliseconds: widget.settings.typingMs.round()),
       autoWaitSeconds: widget.settings.autoDelay,
       audio:
@@ -147,7 +151,59 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     unawaited(_prepare());
   }
 
+  Future<void> _prepareEffects() async {
+    if (storyFxRoot.isEmpty) return;
+    late final FxLoader loader;
+    try {
+      loader = FxLoader(storyFxRoot, widget.story.assets);
+    } catch (e) {
+      engine.warn('特效目录配置失败：$e');
+      return;
+    }
+    final names = <String>{};
+    for (final c in widget.story.document.script.commands) {
+      if ((c.tag == 'bgeffect' || c.tag == 'effect') &&
+          c.value('name').isNotEmpty) {
+        try {
+          names.add(
+            resolveFxName(c.value('name'), widget.story.catalog.variables),
+          );
+        } catch (e) {
+          engine.warn('特效名称解析失败：$e');
+        }
+      }
+    }
+    for (final name in names) {
+      final decoded = <Uri, ui.Image>{};
+      try {
+        final asset = await loader.load(name);
+        if (!mounted) return;
+        for (final file in asset.textures) {
+          final uri = asset.textureUri(file);
+          final codec = await ui.instantiateImageCodec(await loader.bytes(uri));
+          try {
+            decoded[uri] = (await codec.getNextFrame()).image;
+          } finally {
+            codec.dispose();
+          }
+          if (!mounted) return;
+        }
+        effectAssets[name] = asset;
+        textures.addAll(decoded);
+        decoded.clear();
+      } catch (e) {
+        if (mounted) engine.warn('特效 $name 加载失败：$e');
+      } finally {
+        for (final image in decoded.values) {
+          image.dispose();
+        }
+      }
+    }
+  }
+
   Future<void> _prepare() async {
+    await _prepareEffects();
+    if (!mounted) return;
     final uris = widget.story.catalog.dependencies(
       widget.story.document.script,
       [],

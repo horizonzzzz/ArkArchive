@@ -6,6 +6,9 @@ import 'package:flutter/foundation.dart';
 
 import '../script.dart';
 import '../stage_state.dart';
+import '../fx/fx_asset.dart';
+import '../fx/fx_loader.dart';
+import '../fx/fx_simulation.dart';
 import 'story_audio.dart';
 import 'playback_checkpoint.dart';
 
@@ -367,6 +370,7 @@ class StoryEngine extends ChangeNotifier {
     this.firstRead = true,
     this.characterArtSize,
     this.imageNaturalWidth,
+    this.effectAssets = const {},
   }) : audio = audio ?? SilentStoryAudio() {
     defaultSpeed = PlaySpeed(
       typingMs: typingInterval.inMicroseconds / 1000,
@@ -394,6 +398,7 @@ class StoryEngine extends ChangeNotifier {
 
   /// 图片原始宽度（像素），供 showitem cutin 窗口缺省宽度计算（参考端回退 100）。
   final double? Function(String image)? imageNaturalWidth;
+  final Map<String, FxAsset> effectAssets;
   final Map<String, CommandHandler> handlers = {};
   final List<String> warnings = [];
   final Map<String, _Animation> _animations = {};
@@ -639,6 +644,11 @@ class StoryEngine extends ChangeNotifier {
     _lastTick = now;
     if (paused || _disposed || _rebuilding) return;
     var changed = false;
+    for (final effect in state.effects.toList()) {
+      effect.simulation.advance(dt / 1000);
+      changed = true;
+      if (!effect.simulation.active) state.effects.remove(effect);
+    }
     for (final frame in state.interludes.values) {
       if (!frame.voiceActive || !frame.visible) continue;
       frame.voicePhase = (frame.voicePhase + dt / 1000) % (math.pi * 2);
@@ -843,6 +853,74 @@ class StoryEngine extends ChangeNotifier {
       node.shakeOffsetX = 0;
       node.shakeOffsetY = 0;
       node.jumpOffsetY = 0;
+    }
+  }
+
+  Future<void> _effect(StoryCommand c) async {
+    final group = c.tag;
+    final layer = c.number('layer').toInt();
+    final name = c.value('name');
+    final seconds = scaled(c.number('fadetime', .3));
+    final fades = c.flag('fade');
+    final key = 'fx:$group:$layer';
+    if (name.isEmpty) {
+      final clearing = state.effects
+          .where(
+            (e) =>
+                e.group == group &&
+                (!c.args.containsKey('layer') || e.layer == layer),
+          )
+          .toList();
+      Future<void> clear(StageEffect effect) async {
+        final alpha = effect.alpha;
+        await animate(
+          'fx:$group:${effect.layer}',
+          fades ? seconds : 0,
+          (t) => effect.alpha = alpha * (1 - t),
+        );
+        state.effects.remove(effect);
+        _changed();
+      }
+
+      final done = Future.wait(clearing.map(clear));
+      if (c.flag('block')) {
+        await done;
+      } else {
+        unawaited(done);
+      }
+      return;
+    }
+    late final String resolved;
+    try {
+      resolved = resolveFxName(name, variables);
+    } on FormatException catch (e) {
+      warn('第 ${c.line} 行：${e.message}');
+      return;
+    }
+    final asset = effectAssets[resolved];
+    if (asset == null) {
+      warn('第 ${c.line} 行：特效 $resolved 未加载（未打包或资源加载失败）');
+      return;
+    }
+    _cancelAnimation(key);
+    state.effects.removeWhere((e) => e.group == group && e.layer == layer);
+    final effect = StageEffect(
+      FxSimulation(asset, seed: c.line),
+      group: group,
+      layer: layer,
+      offset: Offset(c.number('x'), c.number('y')),
+      rotation: c.number('roz') * math.pi / 180,
+      scale: Offset(
+        math.cos(c.number('roy') * math.pi / 180),
+        math.cos(c.number('rox') * math.pi / 180),
+      ),
+    );
+    state.effects.add(effect);
+    final done = animate(key, fades ? seconds : 0, (t) => effect.alpha = t);
+    if (c.flag('block')) {
+      await done;
+    } else {
+      unawaited(done);
     }
   }
 
@@ -1711,12 +1789,8 @@ class StoryEngine extends ChangeNotifier {
       }
       _changed();
     });
-    register('bgeffect', (c) async {
-      warn('第 ${c.line} 行：bgeffect 参考端同样不支持，跳过');
-    });
-    register('effect', (c) async {
-      warn('第 ${c.line} 行：effect 参考端同样不支持，跳过');
-    });
+    register('bgeffect', _effect);
+    register('effect', _effect);
     register('video', (c) async {
       warn('第 ${c.line} 行：video 需要平台播放器（Windows 无官方实现），本轮跳过');
     });
