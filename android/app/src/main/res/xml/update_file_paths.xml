@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 应用内更新安装包所在目录：
+     external-files-path 对应 path_provider 的 getExternalStorageDirectory()，
+     files-path 对应 getApplicationSupportDirectory() 兜底路径。 -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-files-path
+        name="update_external"
+        path="." />
+    <files-path
+        name="update_internal"
+        path="." />
+</paths>

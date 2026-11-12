@@ -17,6 +17,15 @@ class UpdateFileStore {
 
   Future<void> remove(String path) async {}
 
+  Future<String> sha256Of(String path) async =>
+      throw UnsupportedError('当前平台不支持校验更新文件');
+
+  Future<void> installApk(String path) async =>
+      throw UnsupportedError('当前平台不支持安装更新包');
+
+  Future<void> openFile(String path) async =>
+      throw UnsupportedError('当前平台不支持打开更新文件');
+
   Future<void> reveal(String path) async =>
       throw UnsupportedError('当前平台不支持打开所在文件夹');
 }

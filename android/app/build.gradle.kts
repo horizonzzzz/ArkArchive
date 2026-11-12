@@ -76,6 +76,11 @@ gradle.taskGraph.whenReady {
     }
 }
 
+dependencies {
+    // 应用内更新的安装通道需要 FileProvider（androidx.core）。
+    implementation("androidx.core:core-ktx:1.15.0")
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17

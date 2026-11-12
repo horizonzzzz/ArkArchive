@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// 读取当前设备的 Android ABI（如 `arm64-v8a`、`x86_64`）；
@@ -27,9 +29,20 @@ Future<String?> detectAndroidAbi() async {
 class UpdateFileStore {
   const UpdateFileStore();
 
-  /// 系统「下载」目录；Android/iOS 没有可直接写入的公共下载目录，返回 null。
+  static const MethodChannel _installChannel = MethodChannel(
+    'app_update/install',
+  );
+
+  /// 更新包保存目录。桌面为系统「下载」目录；Android 没有可直接写入的
+  /// 公共下载目录，改用应用专属外部目录（无需存储权限，卸载时清除）；
+  /// iOS 没有可用目录，返回 null 交回系统浏览器流程。
   Future<String?> downloadDirectory() async {
     try {
+      if (Platform.isAndroid) {
+        return (await getExternalStorageDirectory() ??
+                await getApplicationSupportDirectory())
+            .path;
+      }
       return (await getDownloadsDirectory())?.path;
     } catch (_) {
       return null;
@@ -45,20 +58,49 @@ class UpdateFileStore {
     try {
       await sink.addStream(stream);
     } catch (_) {
-      unawaited(sink.close().catchError((_) {}));
+      await sink.close().catchError((_) {});
       rethrow;
     }
     await sink.close();
   }
 
   Future<void> move(String from, String to) => File(from).rename(to);
-
   Future<void> remove(String path) async {
     try {
       final file = File(path);
       if (await file.exists()) await file.delete();
     } catch (_) {
       // 清理失败不掩盖原始错误。
+    }
+  }
+
+  /// 计算文件 sha256 十六进制摘要，用于安装包完整性校验。
+  Future<String> sha256Of(String path) async =>
+      (await File(path).openRead().transform(sha256).first).toString();
+
+  /// Android：通过系统安装器安装下载完成的 APK；由 MainActivity 的
+  /// `app_update/install` 通道实现。
+  Future<void> installApk(String path) async {
+    if (!Platform.isAndroid) {
+      throw UnsupportedError('仅 Android 支持安装更新包。');
+    }
+    await _installChannel.invokeMethod<void>('installApk', <String, Object?>{
+      'path': path,
+    });
+  }
+
+  /// 运行或打开已下载的文件；Windows 下用于启动安装器。
+  Future<void> openFile(String path) async {
+    if (Platform.isWindows) {
+      await Process.start(
+        path,
+        const <String>[],
+        mode: ProcessStartMode.detached,
+      );
+    } else if (Platform.isMacOS) {
+      await Process.start('open', [path]);
+    } else {
+      await Process.start('xdg-open', [path]);
     }
   }
 

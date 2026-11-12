@@ -23,6 +23,13 @@ class _AssetDownload {
   String? savedPath;
   String? error;
 
+  /// 当前下载源主机名；换源时变化，用于界面提示。
+  String? sourceHost;
+
+  /// 最近 3 秒的（时间戳, 已下载字节）样本，用于计算实时速度。
+  final List<MapEntry<int, int>> speedSamples = [];
+  double? speedBytesPerSecond;
+
   bool get active => savedPath == null && error == null;
 }
 
@@ -102,6 +109,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
   /// 探测到的 Android 架构；null 表示未知或非 Android。
   String? _androidAbi;
+
+  /// Android 支持应用内下载并拉起系统安装器；iOS 仍交给系统浏览器。
+  bool get _androidInApp =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   @override
   void initState() {
@@ -469,9 +480,18 @@ class _SettingsPageState extends State<SettingsPage> {
           asset,
           onProgress: (received, total) {
             if (mounted) {
+              setState(() => _recordProgress(download, received, total));
+            }
+          },
+          onSource: (source) {
+            if (mounted) {
               setState(() {
-                download.received = received;
-                download.total = total;
+                download
+                  ..sourceHost = source.host
+                  ..received = 0
+                  ..total = null
+                  ..speedBytesPerSecond = null
+                  ..speedSamples.clear();
               });
             }
           },
@@ -480,12 +500,18 @@ class _SettingsPageState extends State<SettingsPage> {
         .then((path) {
           if (!mounted) return;
           setState(() => download.savedPath = path);
+          if (_androidInApp) {
+            // 下载完成即拉起系统安装器；未授权或失败时保留手动「安装」按钮。
+            update.install(path).ignore();
+          }
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('更新已保存到 $path'),
+              content: Text(_androidInApp ? '安装包已下载完成。' : '更新已保存到 $path'),
               action: SnackBarAction(
-                label: '打开所在文件夹',
-                onPressed: () => _revealUpdateFile(path),
+                label: _androidInApp ? '安装' : '打开所在文件夹',
+                onPressed: () => _androidInApp
+                    ? _installUpdateFile(path)
+                    : _revealUpdateFile(path),
               ),
             ),
           );
@@ -503,6 +529,51 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _cancelAssetDownload(_AssetDownload download) {
     setState(() => download.cancelled = true);
+  }
+
+  /// 记录进度样本并按 3 秒滑动窗口计算实时速度。
+  void _recordProgress(_AssetDownload download, int received, int? total) {
+    if (received < download.received) {
+      // 换源后从头下载，重置速度统计。
+      download.speedSamples.clear();
+      download.speedBytesPerSecond = null;
+    }
+    download.received = received;
+    download.total = total;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    download.speedSamples.add(MapEntry(now, received));
+    while (download.speedSamples.length > 1 &&
+        now - download.speedSamples.first.key >= 3000) {
+      download.speedSamples.removeAt(0);
+    }
+    if (download.speedSamples.length > 1) {
+      final first = download.speedSamples.first;
+      final last = download.speedSamples.last;
+      final seconds = (last.key - first.key) / 1000;
+      if (seconds > 0) {
+        download.speedBytesPerSecond = (last.value - first.value) / seconds;
+      }
+    }
+  }
+
+  Future<void> _installUpdateFile(String path) async {
+    try {
+      await widget.update?.install(path);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('无法启动安装：$error')));
+    }
+  }
+
+  Future<void> _runInstaller(String path) async {
+    try {
+      await widget.update?.openFile(path);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('无法运行安装程序：$error')));
+    }
   }
 
   Future<void> _revealUpdateFile(String path) async {
@@ -618,7 +689,7 @@ class _SettingsPageState extends State<SettingsPage> {
           _UpdatePhase.idle => Text(
             widget.update == null
                 ? '此构建未接入更新检查。'
-                : '检查 GitHub 上的最新发布版本，桌面端可在应用内下载安装包。',
+                : '检查 GitHub 上的最新发布版本，应用内下载并显示进度、速度与剩余时间。',
             style: TextStyle(
               fontSize: 12,
               color: AppColors.of(context).subtext,
@@ -748,7 +819,7 @@ class _SettingsPageState extends State<SettingsPage> {
     };
   }
 
-  /// 更新下载区域：Web 展示全部资产，其余平台只给本设备应下载的那一个安装包。
+  /// 更新下载区域：Web 展示全部资产，Windows 同时展示安装器和便携包。
   List<Widget> _updateDownloadArea(AppUpdate update) {
     if (kIsWeb) {
       return [
@@ -785,12 +856,20 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 8),
       ],
       _updateAssetRow(asset),
+      if (defaultTargetPlatform == TargetPlatform.windows)
+        for (final portable in update.assets.where(
+          (candidate) =>
+              candidate.name.contains('-windows-') &&
+              candidate.name.endsWith('.zip') &&
+              candidate.name != asset.name,
+        )) ...[const SizedBox(height: 8), _updateAssetRow(portable)],
     ];
   }
 
   /// 从发布资产中挑出本设备应下载的那一个安装包。
   ///
   /// Android 优先精确匹配设备 ABI，其次 universal，最后唯一候选；
+  /// Windows 同时发布便携 ZIP 与安装器时优先选中安装器，界面另展示 ZIP；
   /// 其他平台只有唯一候选时给出下载入口，否则交回发布页面。
   AppUpdateAsset? _preferredUpdateAsset(AppUpdate update) {
     final token = _assetPlatformToken();
@@ -799,22 +878,28 @@ class _SettingsPageState extends State<SettingsPage> {
         .where((asset) => asset.name.contains(token))
         .toList();
     if (matching.isEmpty) return null;
-    if (token != '-android-') {
-      return matching.length == 1 ? matching.single : null;
-    }
-    final abi = widget.androidAbi ?? _androidAbi;
-    if (abi != null) {
-      final exact = matching
-          .where((asset) => asset.name.contains('-$abi.'))
+    if (token == '-android-') {
+      final abi = widget.androidAbi ?? _androidAbi;
+      if (abi != null) {
+        final exact = matching
+            .where((asset) => asset.name.contains('-$abi.'))
+            .toList();
+        if (exact.isNotEmpty) return exact.first;
+      }
+      final universal = matching
+          .where((asset) => asset.name.contains('universal'))
           .toList();
-      if (exact.isNotEmpty) return exact.first;
+      if (universal.isNotEmpty) return universal.first;
+      if (matching.length == 1) return matching.single;
+      return null;
     }
-    final universal = matching
-        .where((asset) => asset.name.contains('universal'))
-        .toList();
-    if (universal.isNotEmpty) return universal.first;
-    if (matching.length == 1) return matching.single;
-    return null;
+    if (token == '-windows-') {
+      final installers = matching
+          .where((asset) => asset.name.endsWith('-setup.exe'))
+          .toList();
+      if (installers.isNotEmpty) return installers.first;
+    }
+    return matching.length == 1 ? matching.single : null;
   }
 
   Future<void> _detectAndroidAbi() async {
@@ -828,8 +913,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final active = download != null && download.active;
     final saved = download?.savedPath;
     final error = download?.error;
-    // 桌面端支持应用内下载，其他平台交给系统浏览器。
-    final inApp = widget.isDesktop;
+    // Android 与桌面端支持应用内下载，iOS/Web 交给系统浏览器。
+    final inApp = _androidInApp || widget.isDesktop;
     final total = download?.total;
     final progress = active && total != null && total > 0
         ? download.received / total
@@ -872,17 +957,32 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
-                    '已保存到下载目录',
+                    _androidInApp ? '已下载安装包' : '已保存到下载目录',
                     style: TextStyle(
                       fontSize: 12,
                       color: AppColors.of(context).secondary,
                     ),
                   ),
                 ),
-                TextButton(
-                  onPressed: () => _revealUpdateFile(saved),
-                  child: const Text('打开所在文件夹'),
-                ),
+                if (_androidInApp)
+                  TextButton(
+                    key: ValueKey('about-install-${asset.name}'),
+                    onPressed: () => _installUpdateFile(saved),
+                    child: const Text('安装'),
+                  )
+                else if (!kIsWeb &&
+                    defaultTargetPlatform == TargetPlatform.windows &&
+                    asset.name.endsWith('-setup.exe'))
+                  TextButton(
+                    key: ValueKey('about-run-installer-${asset.name}'),
+                    onPressed: () => _runInstaller(saved),
+                    child: const Text('运行安装程序'),
+                  ),
+                if (!_androidInApp)
+                  TextButton(
+                    onPressed: () => _revealUpdateFile(saved),
+                    child: const Text('打开所在文件夹'),
+                  ),
               ],
             )
           else if (error != null)
@@ -919,9 +1019,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   children: [
                     Expanded(
                       child: Text(
-                        total == null
-                            ? '${_formatBytes(download.received)} / 未知'
-                            : '${_formatBytes(download.received)} / ${_formatBytes(total)} · ${(download.received * 100 / total).round()}%',
+                        _downloadProgressLabel(download),
                         style: TextStyle(
                           fontFamily: AppTypography.bender,
                           fontFamilyFallback: [AppTypography.sans],
@@ -936,6 +1034,16 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ],
                 ),
+                if (download.sourceHost != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '下载源 ${download.sourceHost} · 失败自动换源',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.of(context).muted,
+                    ),
+                  ),
+                ],
               ],
             )
           else
@@ -943,7 +1051,9 @@ class _SettingsPageState extends State<SettingsPage> {
               children: [
                 Expanded(
                   child: Text(
-                    inApp ? '保存到系统下载目录' : '通过系统浏览器下载',
+                    inApp
+                        ? (_androidInApp ? '下载安装包到本机' : '保存到系统下载目录')
+                        : '通过系统浏览器下载',
                     style: TextStyle(
                       fontSize: 11,
                       color: AppColors.of(context).muted,
@@ -971,6 +1081,41 @@ class _SettingsPageState extends State<SettingsPage> {
   String _formatBytes(int bytes) => bytes >= 1048576
       ? '${(bytes / 1048576).toStringAsFixed(1)} MB'
       : '${(bytes / 1024).round()} KB';
+
+  /// 进度文案：字节、百分比、实时速度与预计剩余时间。
+  String _downloadProgressLabel(_AssetDownload download) {
+    final total = download.total;
+    final buffer = StringBuffer(
+      total == null || total <= 0
+          ? '${_formatBytes(download.received)} / 未知'
+          : '${_formatBytes(download.received)} / ${_formatBytes(total)}'
+                ' · ${(download.received * 100 / total).round()}%',
+    );
+    final speed = download.speedBytesPerSecond;
+    if (speed != null && speed > 0) {
+      buffer.write(' · ${_formatSpeed(speed)}');
+      if (total != null && total > download.received) {
+        buffer.write(
+          ' · 剩余 ${_formatDuration((total - download.received) / speed)}',
+        );
+      }
+    }
+    return buffer.toString();
+  }
+
+  String _formatSpeed(double bytesPerSecond) => bytesPerSecond >= 1048576
+      ? '${(bytesPerSecond / 1048576).toStringAsFixed(1)} MB/s'
+      : '${(bytesPerSecond / 1024).toStringAsFixed(0)} KB/s';
+
+  String _formatDuration(double seconds) {
+    if (!seconds.isFinite || seconds < 0) return '—';
+    final total = seconds.round();
+    String two(int value) => value.toString().padLeft(2, '0');
+    if (total >= 3600) {
+      return '${total ~/ 3600}:${two((total % 3600) ~/ 60)}:${two(total % 60)}';
+    }
+    return '${two(total ~/ 60)}:${two(total % 60)}';
+  }
 
   Widget _aboutLinks() => ArchivePanel(
     padding: EdgeInsets.zero,
