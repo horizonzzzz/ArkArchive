@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>剧情编辑器产品设计</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { min-height: 100%; }
+body {
+  position: relative;
+  font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", "Noto Sans SC", sans-serif;
+  color: #1f2d3d;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 40px 28px 56px;
+  background: linear-gradient(160deg, #f8fafc 0%, #ffffff 45%, #cfe0f5 100%);
+  min-height: 100vh;
+}
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 45% 35% at 12% 8%, rgba(255,255,255,0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 88% 90%, rgba(255,255,255,0.45) 0%, transparent 55%);
+}
+body > * { position: relative; z-index: 1; }
+
+/* 封面 */
+.title {
+  position: relative; overflow: hidden;
+  padding: 54px 42px;
+  text-align: left;
+  background: linear-gradient(135deg, #1e3a5f 0%, #3b82f6 62%, #4f8ef7 100%);
+  color: #fff; border-radius: 16px; margin-bottom: 24px;
+  box-shadow: 0 8px 28px rgba(15,30,51,0.22);
+}
+.title::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 55% at 18% 82%, rgba(255,255,255,0.14) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 82% 18%, rgba(255,255,255,0.10) 0%, transparent 55%);
+}
+.title > * { position: relative; z-index: 1; }
+.title .kicker {
+  display: inline-block; font-size: 12px; letter-spacing: 2px;
+  padding: 4px 10px; border: 1px solid rgba(255,255,255,0.45);
+  border-radius: 20px; margin-bottom: 18px; color: rgba(255,255,255,0.92);
+}
+.title h1 { font-size: 34px; font-weight: 800; letter-spacing: 1px; line-height: 1.3; margin-bottom: 12px; color: #fff; }
+.title .accent-line { width: 56px; height: 3px; background: rgba(255,255,255,0.9); border-radius: 2px; margin-bottom: 16px; }
+.title p { font-size: 15px; color: rgba(255,255,255,0.88); line-height: 1.8; max-width: 660px; }
+.title .meta { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 10px 26px; font-size: 12px; color: rgba(255,255,255,0.78); }
+
+/* 标题 */
+h1.heading {
+  font-size: 26px; color: #0f1e33; margin: 40px 0 16px 0; font-weight: 700;
+  border-left: 4px solid #3b82f6; padding-left: 16px; line-height: 1.4;
+}
+h2.heading {
+  font-size: 20px; color: #0f1e33; margin: 30px 0 12px; padding-bottom: 8px;
+  border-bottom: 2px solid #c9d6f3; font-weight: 600; line-height: 1.4;
+}
+h3.sub { font-size: 16px; color: #2563eb; margin: 20px 0 8px; font-weight: 700; }
+
+/* 正文 */
+.paragraph { font-size: 15px; color: #1f2d3d; line-height: 1.85; margin: 0 0 14px 0; }
+.list { margin: 0 0 16px 0; padding-left: 24px; font-size: 15px; color: #1f2d3d; line-height: 1.8; }
+.list li { margin-bottom: 7px; }
+.list li::marker { color: #3b82f6; }
+.list.tight li { margin-bottom: 4px; }
+strong { color: #0f1e33; }
+em { font-style: normal; color: #2563eb; font-weight: 600; }
+code.inline {
+  font-family: 'Cascadia Code', 'Fira Code', 'SF Mono', Consolas, monospace;
+  font-size: 12.5px; background: #eef5ff; color: #1e3a5f;
+  padding: 1px 5px; border-radius: 4px; border: 1px solid #dbe4ef;
+}
+
+/* 正文卡片 */
+.doc-section {
+  background: #fff; border-radius: 14px; padding: 24px 28px;
+  margin: 0 0 16px 0; box-shadow: 0 2px 12px rgba(15,30,51,0.05);
+}
+.doc-section.alt { background: #e6edf6; box-shadow: none; }
+.doc-section > .paragraph:last-child,
+.doc-section > .list:last-child,
+.doc-section > .table-wrap:last-child { margin-bottom: 0; }
+
+/* callout */
+.callout {
+  margin: 0 0 16px 0; padding: 16px 22px;
+  background: #e8f0fe; border-left: 4px solid #3b82f6; border-radius: 8px;
+}
+.callout[data-variant="warning"] { background: #fff3e0; border-left-color: #d97706; }
+.callout[data-variant="quote"] { background: #f0fdfa; border-left-color: #14b8a6; }
+.callout p { font-size: 14.5px; color: #1f2d3d; margin: 0; line-height: 1.8; }
+.callout p + p { margin-top: 8px; }
+.callout strong { color: #0a1626; }
+
+/* 表格 */
+.table-wrap {
+  background: #fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(15,30,51,0.05);
+  overflow: hidden; margin: 0 0 16px 0;
+}
+.table-caption {
+  padding: 11px 16px; background: linear-gradient(135deg, #c9d6f3, #e8f0fe);
+  color: #0f1e33; font-size: 13.5px; font-weight: 600;
+  border-bottom: 1px solid #dbe4ef;
+}
+table.table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+table.table thead th {
+  padding: 10px 12px; text-align: left; background: #c9d6f3; color: #0f1e33;
+  font-weight: 700; border-bottom: 2px solid #dbe4ef; word-break: break-word;
+}
+table.table tbody td {
+  padding: 9px 12px; border-bottom: 1px solid #dbe4ef; color: #1f2d3d;
+  word-break: normal; overflow-wrap: break-word; vertical-align: top; line-height: 1.65;
+}
+table.table tbody tr:last-child td { border-bottom: none; }
+table.table tbody tr:nth-child(even) { background: #f8fafc; }
+table.table td code, table.table th code {
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-size: 11.5px; color: #1e3a5f;
+  word-break: keep-all; overflow-wrap: break-word;
+}
+
+/* 标签 */
+.pill {
+  display: inline-block; font-size: 11px; font-weight: 700; line-height: 1.6;
+  padding: 1px 7px; border-radius: 20px; white-space: nowrap;
+}
+.pill.p0 { background: #e8f5e9; color: #2e7d32; }
+.pill.p1 { background: #e3f2fd; color: #1565c0; }
+.pill.p2 { background: #fff3e0; color: #e65100; }
+.pill.no { background: #fce4ec; color: #c62828; }
+.pill.gray { background: #eef1f4; color: #5b6b80; }
+.pill.dark { background: #0f1e33; color: #e8edf0; }
+
+/* 卡片 */
+.card-grid { display: flex; gap: 16px; margin: 0 0 16px 0; }
+.card {
+  flex: 1; background: #fff; padding: 20px 22px; border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(15,30,51,0.06); border-top: 3px solid #3b82f6;
+  min-width: 0;
+}
+.card h3 { font-size: 16px; color: #0f1e33; margin: 0 0 8px 0; font-weight: 700; }
+.card p { font-size: 13.5px; color: #5b6b80; margin: 0 0 8px 0; line-height: 1.75; }
+.card p:last-child { margin-bottom: 0; }
+.card ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: #5b6b80; line-height: 1.75; }
+.card ul li { margin-bottom: 4px; }
+
+/* 指标 */
+.stat-grid { display: flex; gap: 16px; margin: 0 0 16px 0; }
+.stat {
+  flex: 1; text-align: left; padding: 18px 20px; background: #fff;
+  border-radius: 12px; box-shadow: 0 2px 10px rgba(15,30,51,0.05);
+  border-left: 3px solid #3b82f6;
+}
+.stat .num { font-size: 24px; color: #2563eb; font-weight: 800; line-height: 1.2; }
+.stat .label { font-size: 12px; color: #5b6b80; margin-top: 4px; line-height: 1.6; }
+
+/* 时间线 */
+.timeline { list-style: none; padding: 0; margin: 0 0 16px 0; }
+.timeline li {
+  position: relative; padding-left: 26px; padding-bottom: 18px;
+  border-left: 2px solid #c9d6f3; margin-left: 6px;
+}
+.timeline li:last-child { border-left-color: transparent; padding-bottom: 0; }
+.timeline li::before {
+  content: ''; position: absolute; left: -7px; top: 5px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #3b82f6; border: 2px solid #f4f7fb; box-shadow: 0 0 0 2px #e8f0fe;
+}
+.timeline .when { font-size: 13px; color: #2563eb; font-weight: 700; }
+.timeline .what { font-size: 14px; color: #1f2d3d; margin-top: 2px; line-height: 1.75; }
+.timeline .what strong { color: #0f1e33; }
+
+/* 代码 */
+.code {
+  background: #111820; color: #d7e3ea; padding: 16px 20px; border-radius: 8px;
+  font-size: 12.5px; line-height: 1.65; overflow-x: auto; margin: 0 0 16px 0;
+  font-family: 'Cascadia Code', 'Fira Code', 'SF Mono', Consolas, monospace;
+}
+.code .cmt { color: #7d919e; }
+.code .key { color: #9ccfd8; }
+.code .str { color: #dfc080; }
+
+/* 结构图 */
+.flow {
+  display: flex; align-items: stretch; gap: 8px; margin: 0 0 16px 0; flex-wrap: wrap;
+}
+.flow .node {
+  flex: 1; min-width: 110px; background: #fff; border: 1px solid #dbe4ef;
+  border-radius: 8px; padding: 12px 10px; text-align: center;
+  font-size: 12.5px; color: #1f2d3d; line-height: 1.6;
+}
+.flow .node b { display: block; color: #0f1e33; font-size: 13.5px; margin-bottom: 2px; }
+.flow .arrow { align-self: center; color: #3b82f6; font-weight: 700; font-size: 15px; }
+
+/* 线框图（深色，贴近应用实际配色） */
+.mock-note { font-size: 12px; color: #5b6b80; margin: 6px 0 18px 0; line-height: 1.7; }
+.mock {
+  background: #111518; border: 1px solid #354048; border-radius: 10px;
+  overflow: hidden; color: #c2ccd3; font-size: 11px; line-height: 1.5;
+  margin: 0 0 6px 0; box-shadow: 0 6px 18px rgba(15,30,51,0.16);
+}
+.mock .bar {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  background: #171c20; border-bottom: 1px solid #283138; color: #9ba9b3;
+}
+.mock .bar .dot { width: 8px; height: 8px; border-radius: 50%; background: #354048; }
+.mock .bar .brand { color: #e8eff2; font-weight: 700; letter-spacing: .5px; }
+.mock .bar .spacer { flex: 1; }
+.mock .chip {
+  border: 1px solid #354048; background: #20272c; color: #c2ccd3;
+  border-radius: 3px; padding: 2px 7px; white-space: nowrap;
+}
+.mock .chip.on { background: #e8eff2; color: #152027; border-color: #e8eff2; font-weight: 700; }
+.mock-desktop .body { display: flex; height: 354px; }
+.mock-desktop .left { width: 158px; background: #171c20; border-right: 1px solid #283138; padding: 8px; }
+.mock-desktop .center { flex: 1; display: flex; flex-direction: column; background: #0c1013; min-width: 0; }
+.mock-desktop .right { width: 176px; background: #171c20; border-left: 1px solid #283138; padding: 8px; }
+.mock-desktop .timeline { height: 66px; background: #14191d; border-top: 1px solid #283138; padding: 6px 10px; }
+.mock .panel-title {
+  font-size: 10px; letter-spacing: 1px; color: #83939f; margin: 2px 2px 6px;
+  text-transform: uppercase;
+}
+.mock .panel-title .count { color: #dfc080; }
+.mock .search {
+  border: 1px solid #354048; border-radius: 3px; padding: 4px 6px;
+  color: #83939f; margin-bottom: 6px; background: #20272c;
+}
+.mock .item {
+  display: flex; align-items: center; gap: 6px; padding: 4px 5px;
+  border-radius: 3px; margin-bottom: 2px; color: #c2ccd3;
+}
+.mock .item.sel { background: #252d33; color: #e8eff2; border-left: 2px solid #a5c7d5; }
+.mock .item .ic {
+  width: 14px; height: 14px; border-radius: 2px; background: #354048; flex: none;
+}
+.mock .item .txt { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mock .item .sub { color: #83939f; font-size: 9.5px; }
+.mock .scene {
+  flex: 1; margin: 10px; border: 1px solid #354048; border-radius: 4px;
+  position: relative; overflow: hidden;
+  background:
+    linear-gradient(180deg, #243442 0%, #17222b 55%, #101619 100%);
+}
+.mock .scene .sky {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse 60% 45% at 50% 12%, rgba(165,199,213,0.18), transparent 70%);
+}
+.mock .scene .char {
+  position: absolute; bottom: 44px; width: 54px; height: 150px;
+  background: linear-gradient(180deg, #3d4d57 0%, #2a363f 60%, #202a31 100%);
+  border: 1px solid #4a5b66; border-radius: 24px 24px 4px 4px;
+}
+.mock .scene .char.l { left: 17%; }
+.mock .scene .char.m { left: 44%; height: 172px; width: 60px; border-color: #7f96a4; }
+.mock .scene .char.r { right: 15%; }
+.mock .scene .char span {
+  position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+  font-size: 8px; color: #9ba9b3; letter-spacing: 1px;
+}
+.mock .scene .cue {
+  position: absolute; left: 18px; top: 12px; border: 1px dashed #a5c7d5;
+  color: #a5c7d5; font-size: 9px; padding: 2px 6px; border-radius: 2px;
+}
+.mock .scene .textbox {
+  position: absolute; left: 20px; right: 20px; bottom: 12px; height: 54px;
+  background: rgba(10,14,17,0.82); border: 1px solid #354048; border-radius: 3px;
+  padding: 6px 10px; color: #e8eff2;
+}
+.mock .scene .textbox .name { font-size: 10px; color: #dfc080; margin-bottom: 2px; }
+.mock .scene .textbox .line { font-size: 10.5px; color: #c2ccd3; }
+.mock .scene .tool {
+  position: absolute; right: 8px; top: 8px; display: flex; gap: 4px;
+}
+.mock .scene .tool .chip { font-size: 9px; padding: 1px 5px; }
+.mock .prop { margin-bottom: 7px; }
+.mock .prop .k { font-size: 9.5px; color: #83939f; margin-bottom: 2px; }
+.mock .prop .v {
+  border: 1px solid #354048; background: #20272c; border-radius: 2px;
+  padding: 3px 6px; color: #e8eff2; display: flex; justify-content: space-between;
+}
+.mock .prop .v .u { color: #83939f; }
+.mock .track {
+  position: relative; height: 22px; margin-top: 6px;
+  border-left: 1px solid #354048; border-right: 1px solid #354048;
+  background: repeating-linear-gradient(90deg, transparent 0 39px, #20272c 39px 40px);
+}
+.mock .track .clip {
+  position: absolute; top: 3px; height: 16px; border-radius: 2px;
+  background: #2f4a5c; border: 1px solid #4b6b7f; color: #cfe0e8;
+  font-size: 8.5px; padding-left: 4px; overflow: hidden; white-space: nowrap;
+}
+.mock .track .clip.alt { background: #4a4258; border-color: #6a6080; }
+.mock .track .playhead {
+  position: absolute; top: -4px; bottom: -2px; width: 1px; background: #dfc080;
+}
+.mock .beatrail { display: flex; gap: 5px; overflow: hidden; }
+.mock .beat {
+  width: 64px; flex: none; border: 1px solid #354048; border-radius: 3px;
+  background: #20272c; padding: 4px;
+}
+.mock .beat.sel { border-color: #a5c7d5; background: #2a343b; }
+.mock .beat .thumb {
+  height: 26px; border-radius: 2px; margin-bottom: 3px;
+  background: linear-gradient(135deg, #33454f, #1b252b);
+}
+.mock .beat .nm { font-size: 8.5px; color: #c2ccd3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 手机线框 */
+.phone-row { display: flex; gap: 24px; flex-wrap: wrap; margin: 0 0 6px 0; }
+.phone {
+  position: relative; display: flex; flex-direction: column;
+  width: 268px; height: 430px; flex: none; background: #0c1013;
+  border: 6px solid #20272c; border-radius: 22px; overflow: hidden;
+  box-shadow: 0 8px 22px rgba(15,30,51,0.22);
+}
+.phone .status {
+  display: flex; justify-content: space-between; padding: 4px 12px;
+  font-size: 8px; color: #83939f; background: #111518;
+}
+.phone .appbar {
+  display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+  background: #171c20; border-bottom: 1px solid #283138; font-size: 10px; color: #e8eff2;
+}
+.phone .appbar .ttl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.phone .appbar .ic { width: 18px; height: 18px; border-radius: 2px; background: #252d33; }
+.phone .pstage {
+  margin: 8px; height: 128px; border: 1px solid #354048; border-radius: 4px;
+  position: relative; overflow: hidden;
+  background: linear-gradient(180deg, #243442 0%, #17222b 58%, #101619 100%);
+}
+.phone .pstage .char {
+  position: absolute; bottom: 25px; width: 34px; height: 86px; border-radius: 16px 16px 3px 3px;
+  background: linear-gradient(180deg, #3d4d57, #202a31); border: 1px solid #4a5b66;
+}
+.phone .pstage .char.a { left: 22%; }
+.phone .pstage .char.b { left: 45%; height: 96px; border-color: #7f96a4; }
+.phone .pstage .textbox {
+  position: absolute; left: 8px; right: 8px; bottom: 6px; height: 32px;
+  background: rgba(10,14,17,0.85); border: 1px solid #354048; border-radius: 2px;
+  font-size: 8px; padding: 3px 6px; color: #c2ccd3;
+}
+.phone .pstage .textbox .nm { color: #dfc080; font-size: 8px; }
+.phone .ptool {
+  display: flex; gap: 4px; padding: 0 8px 8px; font-size: 8.5px; color: #9ba9b3;
+}
+.phone .ptool .chip {
+  flex: 1; text-align: center; border: 1px solid #354048; background: #20272c;
+  border-radius: 3px; padding: 3px 0;
+}
+.phone .ptool .chip.on { background: #e8eff2; color: #152027; border-color: #e8eff2; font-weight: 700; }
+.phone .pcard {
+  margin: 0 8px 8px; background: #171c20; border: 1px solid #283138;
+  border-radius: 4px; padding: 7px 8px;
+}
+.phone .pcard .row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.phone .pcard .who {
+  border: 1px solid #354048; background: #20272c; border-radius: 2px;
+  padding: 2px 6px; font-size: 9px; color: #dfc080;
+}
+.phone .pcard .typing { flex: 1; font-size: 9px; color: #83939f; }
+.phone .pcard .line {
+  border: 1px solid #354048; background: #20272c; border-radius: 2px;
+  padding: 4px 6px; font-size: 9px; color: #e8eff2; line-height: 1.5;
+}
+.phone .pcard .hint { font-size: 8px; color: #83939f; margin-top: 3px; }
+.phone .prail { display: flex; gap: 4px; padding: 0 8px 8px; overflow: hidden; }
+.phone .pbeat {
+  width: 48px; flex: none; border: 1px solid #354048; border-radius: 3px;
+  background: #20272c; padding: 3px;
+}
+.phone .pbeat.sel { border-color: #a5c7d5; background: #2a343b; }
+.phone .pbeat .th {
+  height: 22px; border-radius: 2px; margin-bottom: 2px;
+  background: linear-gradient(135deg, #33454f, #1b252b);
+}
+.phone .pbeat .nm { font-size: 7.5px; color: #c2ccd3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .pnav {
+  display: flex; margin-top: auto; border-top: 1px solid #283138; background: #171c20;
+  font-size: 8px; color: #83939f;
+}
+.phone .pnav div { flex: 1; text-align: center; padding: 5px 0; }
+.phone .pnav div.on { color: #a5c7d5; }
+.phone .sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 176px;
+  background: #171c20; border-top: 1px solid #354048; border-radius: 10px 10px 0 0;
+  padding: 7px 10px; box-shadow: 0 -8px 20px rgba(0,0,0,0.35);
+}
+.phone .sheet .handle {
+  width: 28px; height: 3px; border-radius: 3px; background: #576570; margin: 0 auto 7px;
+}
+.phone .sheet .tabs { display: flex; gap: 4px; margin-bottom: 7px; }
+.phone .sheet .tabs .tab {
+  flex: 1; text-align: center; font-size: 8.5px; padding: 3px 0;
+  border-bottom: 1px solid #354048; color: #83939f;
+}
+.phone .sheet .tabs .tab.on { color: #e8eff2; border-bottom-color: #a5c7d5; }
+.phone .sheet .prow { display: flex; justify-content: space-between; font-size: 8.5px; color: #c2ccd3; padding: 5px 0; border-bottom: 1px solid #202b32; }
+.phone .sheet .prow .v { color: #e8eff2; }
+.phone .kbd {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 104px;
+  background: #20272c; border-top: 1px solid #354048; padding: 6px;
+  display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px;
+}
+.phone .kbd span { background: #2b343b; border-radius: 2px; height: 14px; }
+.phone-wrap { width: 268px; }
+.phone-wrap .cap { font-size: 12px; color: #5b6b80; text-align: center; margin-top: 6px; line-height: 1.6; }
+
+/* 对比条 */
+.compare { display: flex; gap: 14px; margin: 0 0 16px 0; }
+.compare .col {
+  flex: 1; background: #fff; border: 1px solid #dbe4ef; border-radius: 10px; padding: 16px;
+}
+.compare .col.recommend { border: 2px solid #3b82f6; background: #f8fbff; }
+.compare .col h3 { font-size: 14.5px; color: #0f1e33; margin-bottom: 6px; }
+.compare .col .verdict { font-size: 11.5px; color: #5b6b80; margin-bottom: 8px; }
+.compare .col ul { margin: 0; padding-left: 16px; font-size: 12.5px; color: #5b6b80; line-height: 1.7; }
+
+/* 分隔线 */
+.divider { margin: 30px 0; text-align: center; user-select: none; }
+.divider .line {
+  display: inline-block; width: 36px; height: 1px; vertical-align: middle;
+  background: linear-gradient(to right, transparent, #c9d6f3);
+}
+.divider .line:last-child { background: linear-gradient(to left, transparent, #c9d6f3); }
+.divider .diamond {
+  display: inline-block; width: 8px; height: 8px; margin: 0 12px;
+  vertical-align: middle; transform: rotate(45deg); background: #3b82f6; border-radius: 1px;
+}
+
+/* 尾页 */
+.end_page {
+  margin-top: 28px; padding: 46px 26px; text-align: center;
+  background: linear-gradient(135deg, #c9d6f3 0%, #e8f0fe 100%); border-radius: 16px;
+}
+.end_page h1 { font-size: 26px; color: #0f1e33; margin: 0 0 12px 0; font-weight: 800; }
+.end_page p { font-size: 14px; color: #5b6b80; margin: 0; line-height: 1.9; }
+
+@media screen and (max-width: 720px) {
+  body { padding: 18px 14px 36px; }
+  .title { padding: 34px 22px; }
+  .title h1 { font-size: 25px; }
+  .card-grid, .stat-grid, .compare, .flow { flex-direction: column; }
+  .mock-desktop .right { display: none; }
+  .mock-desktop .left { width: 120px; }
+  table.table { font-size: 12px; }
+  table.table thead th, table.table tbody td { padding: 7px 8px; }
+}
+
+@media print {
+  body {
+    padding: 0 !important; margin: 0 !important; max-width: none;
+    background: #f4f7fb; -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body::before { display: none; }
+  .title, .end_page { border-radius: 0; box-shadow: none; }
+  .doc-section, .card, .stat, .table-wrap { box-shadow: none; border: 1px solid #dbe4ef; }
+  .mock, .phone { break-inside: avoid; }
+  h1.heading, h2.heading { break-after: avoid; }
+  .table-wrap, .callout { break-inside: avoid; }
+  section { break-inside: auto !important; }
+}
+</style>
+</head>
+<body class="mode-doc" data-palette="ink-blue">
+
+<section class="title">
+  <span class="kicker">PRODUCT DESIGN / v0.1</span>
+  <h1>剧情编辑器 · 产品分析设计</h1>
+  <div class="accent-line"></div>
+  <p>面向「方舟档案室」的本地创作工具：用 PRTS 素材与本地素材，编排一段可直接播放的剧情演出。本文覆盖产品定位、能力边界、核心模型、双端界面、效果映射、素材与导出方案、分期与验收，不包含代码实现。</p>
+  <div class="meta">
+    <span>项目：arknights_story_player</span>
+    <span>形态：桌面横屏 / 移动端竖屏</span>
+    <span>画布：1280 × 720</span>
+    <span>更新：2026-11-12</span>
+  </div>
+</section>
+
+<aside class="callout">
+  <p><strong>结论先行：</strong>编辑器不应做成「时间轴剪辑器」，也不应做成「脚本文本框」。推荐以 <em>分镜（Beat）</em> 为最小创作单位、以 <em>舞台状态</em> 为真相、以 <em>脚本</em> 为编译产物：一套数据模型，三种视图（故事板、舞台、时间轴），两端各自组织界面而不是缩放同一套界面。</p>
+</aside>
+
+<h1 class="heading">一、产品定位与目标</h1>
+
+<div class="doc-section">
+  <p class="paragraph">「剧情编辑器」是播放器的反向工具：播放器把脚本解释成演出，编辑器把创作者的意图编译成脚本。它服务于「我想用方舟的素材，做一段自己的剧情演出」，而不是「我想修改游戏原版剧情」。</p>
+  <div class="card-grid" data-cols="3">
+    <div class="card">
+      <h3>产品定位</h3>
+      <p>本地优先的演出创作台：素材可来自 PRTS，也可来自本机；作品只存在本地，可导出为可移植的剧本包。</p>
+      <p><span class="pill dark">不做账号</span> <span class="pill dark">不做云同步</span></p>
+    </div>
+    <div class="card">
+      <h3>核心价值</h3>
+      <p>把「写指令」变成「摆画面」：先看到结果，再微调参数；常用演出有预设，复杂演出仍可下探到参数与命令。</p>
+    </div>
+    <div class="card">
+      <h3>成功标准</h3>
+      <p>新用户 5 分钟内能完成「背景 + 两个立绘 + 三句对白」并播放；熟练用户能在不手写脚本的情况下完成带运镜、遮罩、分支的短片。</p>
+    </div>
+  </div>
+  <h3 class="sub">目标</h3>
+  <ul class="list tight">
+    <li>覆盖引擎已支持的主流演出：对白、背景、立绘、文字、音频、运镜、遮罩、镜头特效、选项分支。</li>
+    <li>桌面端可高效批量编排；移动端可随时查看、改台词、调位置、做轻量演出。</li>
+    <li>作品可保存、可恢复、可导出、可再导入；导出物在播放器内行为确定。</li>
+    <li>不引入「编辑器能配、播放器演不出」的假能力。</li>
+  </ul>
+  <h3 class="sub">非目标（本期明确不做）</h3>
+  <ul class="list tight">
+    <li>不做视频剪辑、特效合成、逐帧动画；引擎不支持的 <code class="inline">video</code>、<code class="inline">effect</code>、<code class="inline">bgeffect</code>、<code class="inline">spellsticker</code> 不提供开关。</li>
+    <li>不做在线作品广场、账号体系、云端协作、跨设备同步。</li>
+    <li>不修改原版 PRTS 脚本；对原版剧情只提供「派生为新作品」的导入。</li>
+    <li>v1 不产出竖屏成片，竖屏只是编辑与预览的界面形态（见第十六节待拍板项）。</li>
+  </ul>
+</div>
+
+<aside class="callout" data-variant="warning">
+  <p><strong>关键约束：</strong>播放器舞台固定为 1280×720 逻辑坐标，文字、立绘、遮罩的所有位置参数都基于该坐标系。竖屏手机上的画布是被缩放的 16:9 视口，不是另一套 720×1280 舞台；这决定了「移动端竖屏编辑」只能是布局适配，不能改变成片比例。</p>
+</aside>
+
+<h1 class="heading">二、现状能力盘点</h1>
+
+<div class="doc-section">
+  <p class="paragraph">编辑器的能力上限由播放器解释器决定。现状是「命令覆盖较全、但部分命令语义不完整」，因此产品必须先做能力分层，再决定暴露方式。</p>
+  <div class="table-wrap">
+    <div class="table-caption">表 1　引擎能力与产品暴露建议</div>
+    <table class="table">
+      <colgroup><col style="width:17%"><col style="width:22%"><col style="width:37%"><col style="width:24%"></colgroup>
+      <thead><tr><th>能力域</th><th>现状</th><th>编辑器可用方式</th><th>暴露等级</th></tr></thead>
+      <tbody>
+        <tr><td>对白 / 旁白</td><td>普通文本与 <code>[name=...]</code> 均已支持，固定底部对话框</td><td>说话人 + 台词卡片；连续对白快速录入</td><td><span class="pill p0">P0 必备</span></td></tr>
+        <tr><td>背景 / CG</td><td><code>background</code>、<code>image</code>、<code>backgroundtween</code>、<code>imagetween</code>、<code>imagerotate</code></td><td>背景层选择、淡入淡出、缩放平移运镜、画面旋转</td><td><span class="pill p0">P0 必备</span></td></tr>
+        <tr><td>立绘</td><td><code>charslot</code> 支持 L/M/R、差分、focus、淡入淡出、位移、跳、抖、缩放、旋转、剪影；<code>characteraction</code> 补齐相对动作</td><td>立绘槽位、素材选择、位置拖动、动作预设、剪影滑杆</td><td><span class="pill p0">P0 必备</span></td></tr>
+        <tr><td>舞台文字</td><td><code>subtitle</code> 单条覆盖文字；<code>sticker</code> 多浮层文字，支持补间</td><td>字幕卡与浮层文字，点选拖动改位置</td><td><span class="pill p0">P0 必备</span></td></tr>
+        <tr><td>音频</td><td><code>playmusic</code>（intro/loop/volume/fadetime）、<code>playsound</code>、停止与音量</td><td>BGM 轨与音效点；试听、淡入淡出</td><td><span class="pill p0">P0 必备</span></td></tr>
+        <tr><td>转场</td><td><code>blocker</code> 色块/图片遮罩、slider；<code>curtain</code> 方向幕布</td><td>黑屏、白闪、遮罩、幕布预设</td><td><span class="pill p1">P1 建议</span></td></tr>
+        <tr><td>镜头</td><td><code>camerashake</code>、<code>cameraeffect</code> 灰度/反色、<code>focusout</code> 景深式聚焦</td><td>震动、灰度、反色、聚焦预设</td><td><span class="pill p1">P1 建议</span></td></tr>
+        <tr><td>分支</td><td><code>decision</code> + <code>label</code>/<code>warp</code>，最多建议 4 项</td><td>可视化选项与跳转连线</td><td><span class="pill p1">P1 建议</span></td></tr>
+        <tr><td>复合场景</td><td><code>gridbg</code>/<code>largebg</code>/<code>largeimg</code> 与对应 tween</td><td>进阶场景模板，参数面板</td><td><span class="pill p2">P2 后期</span></td></tr>
+        <tr><td>CG 图层 / 通讯 / 切入</td><td><code>cgitem</code>、<code>showitem</code>、<code>avgdisplay</code>、<code>charactercutin</code>、<code>interlude</code></td><td>以「高级图层」形式保留，必要时只读</td><td><span class="pill p2">P2 后期</span></td></tr>
+        <tr><td>视频 / 特效 / 花体字</td><td>播放器明确跳过或仅空处理</td><td>不出现；导入时保留为只读「高级指令」并提示</td><td><span class="pill no">不可用</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <aside class="callout" data-variant="quote">
+    <p><strong>产品原则：不做假控件。</strong>凡是不能稳定播放的能力，不放进常规面板、不进入预设、不生成教程。用户看不到的按钮，比点了没反应的按钮更可信。</p>
+  </aside>
+</div>
+
+<h1 class="heading">三、用户与核心场景</h1>
+
+<div class="doc-section">
+  <div class="card-grid" data-cols="3">
+    <div class="card">
+      <h3>同人创作者</h3>
+      <p>熟悉角色与素材，想快速把脑内桥段做出来。关心素材好不好找、演出像不像原作、能不能导出分享。</p>
+      <ul><li>高频：找立绘差分、摆三人构图、加 BGM</li><li>低频：分支、复杂遮罩</li></ul>
+    </div>
+    <div class="card">
+      <h3>剧情区内容作者</h3>
+      <p>需要批量产出短剧情用于配音或视频二创，关注效率与一致性，愿意学习高级参数。</p>
+      <ul><li>高频：连续对白、重复模板、批量改台词</li><li>依赖：导出脚本、时间轴精修</li></ul>
+    </div>
+    <div class="card">
+      <h3>轻度玩家</h3>
+      <p>在手机上随手改几句台词、看看效果，不追求复杂演出。关心能不能单手完成、会不会误操作。</p>
+      <ul><li>高频：改台词、换表情、调文字位置</li><li>依赖：大按钮、撤销、自动保存</li></ul>
+    </div>
+  </div>
+  <h3 class="sub">典型任务流</h3>
+  <ol class="timeline">
+    <li><span class="when">5 分钟 Quick Start</span><div class="what">新建作品 → 选背景 → 放入两个立绘 → 写三句对白 → 播放。全程不接触命令与坐标。</div></li>
+    <li><span class="when">30 分钟 精修一段演出</span><div class="what">在舞台上直接拖动立绘与文字 → 加「缓慢推近」运镜 → 调时长与缓动 → 加黑屏转场 → 从当前分镜循环预览。</div></li>
+    <li><span class="when">跨设备 连续创作</span><div class="what">桌面端完成主体编排 → 导出剧本包 → 手机端导入继续改台词与位置；不做云同步，靠文件传递。</div></li>
+    <li><span class="when">复用原版剧情</span><div class="what">从剧情馆选择一篇已缓存剧情「派生为我的作品」，保留原指令序列，仅替换对白与素材，不修改原脚本。</div></li>
+  </ol>
+</div>
+
+<h1 class="heading">四、编辑模型的三个方案</h1>
+
+<div class="doc-section">
+  <p class="paragraph">在进入界面之前，必须先确定「用户编辑的到底是什么」。这决定了双端布局、预览方式与导出格式。</p>
+  <div class="compare">
+    <div class="col">
+      <h3>A. 纯时间轴</h3>
+      <div class="verdict">像剪辑软件：轨道 + 关键帧</div>
+      <ul>
+        <li>优点：动画时序直观，适合并行演出</li>
+        <li>缺点：对白这种离散内容不适合放轨道；状态累积（谁还在台上、BGM 是什么）不可见；移动端极难操作</li>
+        <li>结论：不作为主视图，只作为局部精修工具</li>
+      </ul>
+    </div>
+    <div class="col recommend">
+      <h3>B. 分镜 + 舞台（推荐）</h3>
+      <div class="verdict">像故事板：一屏一个意图，舞台即结果</div>
+      <ul>
+        <li>优点：符合「一句台词 / 一个动作」的创作直觉；状态可见；双端都能操作</li>
+        <li>缺点：并行动画需要在分镜内用微时间轴表达</li>
+        <li>结论：作为主模型，时间轴降级为分镜内的时序条</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>C. 纯脚本编辑器</h3>
+      <div class="verdict">像代码编辑器：直接写命令</div>
+      <ul>
+        <li>优点：实现成本最低，能力最全</li>
+        <li>缺点：只服务少数人；无法做到「所见即所得」；与产品定位冲突</li>
+        <li>结论：作为高级模式与导入兼容层保留</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="callout">
+    <p><strong>推荐 B 的核心理由：</strong>引擎的脚本是命令式的、状态累积的，而剪辑式时间轴假设「每个轨道独立且可随机访问」。分镜模型把「意图」作为单位，编译时才展开成命令与并行动画，既贴合引擎，也贴合用户的心智。</p>
+  </aside>
+</div>
+
+<h1 class="heading">五、核心产品模型</h1>
+
+<div class="doc-section">
+  <h2 class="heading">5.1 四层结构</h2>
+  <div class="flow">
+    <div class="node"><b>作品 Project</b>标题、封面、素材库、设置、版本</div>
+    <div class="arrow">→</div>
+    <div class="node"><b>幕 Scene</b>连续舞台状态；换场时重置或保留</div>
+    <div class="arrow">→</div>
+    <div class="node"><b>分镜 Beat</b>一个创作意图：一句台词、一次出场、一段运镜</div>
+    <div class="arrow">→</div>
+    <div class="node"><b>指令 Command</b>编译产物；一个分镜可生成 1~N 条命令</div>
+  </div>
+  <p class="paragraph">分镜是唯一的编辑单位。它有三个关键字段：<em>类型</em>（对白 / 立绘 / 背景 / 文字 / 音频 / 特效 / 选项 / 等待 / 高级）、<em>参数</em>（面向用户的语义字段）、<em>时长与阻塞</em>（是否等待动画结束再继续）。</p>
+
+  <h2 class="heading">5.2 状态是真相，脚本是结果</h2>
+  <p class="paragraph">剧情演出不是「一张张独立画面」，而是状态不断累积：背景还在、立绘还在、BGM 还在、遮罩还盖着。编辑器必须让这些状态可见，否则用户从中间预览时会出现「立绘凭空消失」「BGM 突然开始」的困惑。</p>
+  <ul class="list">
+    <li><strong>舞台状态快照：</strong>每个分镜执行后记录背景、各槽位立绘、文字、遮罩、镜头、音轨的状态；编辑时在舞台下方以「当前状态」标签呈现。</li>
+    <li><strong>确定性重演：</strong>从某个分镜预览时，从所属幕的开头重演到该分镜；重演不播放音效、不触发等待、不写观看进度，最多执行固定步数防止死循环。</li>
+    <li><strong>编辑不依赖回放：</strong>快照仅用于预览与拾取；作品文件仍以分镜参数为真相，避免把运行时状态写进作品导致漂移。</li>
+  </ul>
+
+  <h2 class="heading">5.3 舞台图层与槽位</h2>
+  <div class="table-wrap">
+    <div class="table-caption">表 2　舞台图层从底到顶</div>
+    <table class="table">
+      <colgroup><col style="width:16%"><col style="width:30%"><col style="width:26%"><col style="width:28%"></colgroup>
+      <thead><tr><th>层</th><th>可编辑对象</th><th>位置语义</th><th>编辑方式</th></tr></thead>
+      <tbody>
+        <tr><td>背景层</td><td>背景、CG 图、旋转</td><td>图层内 x/y、缩放、宽高；旋转作用于整个画面</td><td>舞台拖动 / 缩放；属性面板填数值</td></tr>
+        <tr><td>场景层</td><td>grid / large 场景（P2）</td><td>取景框与场景图分离</td><td>取景框拖动，图内平移</td></tr>
+        <tr><td>立绘层</td><td>左 / 中 / 右三个槽位</td><td>槽位中心 x 为 440 / 640 / 840；立绘按底部对齐</td><td>选槽位后拖动；吸附到三槽位与中线</td></tr>
+        <tr><td>遮罩层</td><td>色块、图片、滑块遮罩</td><td>覆盖全屏，不随镜头移动</td><td>预设 + 颜色/透明度</td></tr>
+        <tr><td>文字层</td><td>舞台文字、浮层文字</td><td>逻辑坐标 x/y、宽度、字号、对齐</td><td>点选后直接拖动；属性面板微调</td></tr>
+        <tr><td>UI 层</td><td>底部对白框</td><td>播放器统一布局，不可移动</td><td>只改说话人与文本</td></tr>
+        <tr><td>音频</td><td>BGM 轨、音效点</td><td>无空间位置，只有时间与音量</td><td>音频面板 / 分镜内插入</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="heading">5.4 数据流</h2>
+  <div class="flow">
+    <div class="node"><b>编辑</b>分镜参数 / 舞台拖动</div>
+    <div class="arrow">→</div>
+    <div class="node"><b>项目文件</b>project.json（真相）</div>
+    <div class="arrow">→</div>
+    <div class="node"><b>编译</b>Beat → StoryCommand 序列</div>
+    <div class="arrow">→</div>
+    <div class="node"><b>预览</b>复用播放器绘制与音频</div>
+    <div class="arrow">→</div>
+    <div class="node"><b>导出</b>script.txt + assets/</div>
+  </div>
+  <p class="paragraph">反向链路同样成立：导入外部脚本时先解析成命令序列，再按「可识别模式」归并为分镜；无法归并的命令保留为「高级指令」分镜，只读展示原文并允许上下移动、删除。这样既不丢内容，也不假装所有原版脚本都能可视化编辑。</p>
+</div>
+
+<h1 class="heading">六、信息架构与入口</h1>
+
+<div class="doc-section">
+  <p class="paragraph">编辑器是高频创作工具，但不能挤占「看剧情」这一主路径。建议在主导航新增一级入口「创作」，与剧情馆、人物档案、系统设置并列；移动端底栏变为四项，图标与文案保持现有视觉规范。</p>
+  <div class="flow">
+    <div class="node"><b>我的作品</b>列表 / 新建 / 导入 / 排序</div>
+    <div class="arrow">→</div>
+    <div class="node"><b>编辑器</b>故事板 / 舞台 / 检查器</div>
+    <div class="arrow">→</div>
+    <div class="node"><b>预览</b>全片 / 从当前 / 单镜循环</div>
+    <div class="arrow">→</div>
+    <div class="node"><b>导出</b>剧本包 / 脚本 / 分享文件</div>
+  </div>
+  <div class="table-wrap">
+    <div class="table-caption">表 3　页面与职责</div>
+    <table class="table">
+      <colgroup><col style="width:20%"><col style="width:42%"><col style="width:38%"></colgroup>
+      <thead><tr><th>页面</th><th>内容</th><th>关键状态</th></tr></thead>
+      <tbody>
+        <tr><td>我的作品</td><td>封面网格 / 列表、最近编辑、草稿、导入入口</td><td>空态给出「新建」与「导入剧本包」两条路；损坏作品单独标记</td></tr>
+        <tr><td>作品设置</td><td>标题、简介、封面、默认打字速度、素材授权声明</td><td>只在创建与导出时出现，不占用编辑器主界面</td></tr>
+        <tr><td>编辑器</td><td>分镜、舞台、检查器、时间轴、预览控制</td><td>自动保存、撤销栈、当前分镜、选中对象</td></tr>
+        <tr><td>预览</td><td>复用播放器画面与控制条，隐藏编辑控件</td><td>不写观看进度；退出回到原分镜</td></tr>
+        <tr><td>导出 / 导入</td><td>导出范围、是否打包 PRTS 素材、校验结果</td><td>失败项逐条列出，可定位到分镜</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <aside class="callout" data-variant="tip">
+    <p><strong>入口替代方案：</strong>若不想增加一级导航，可放在剧情馆的「创作」Tab 内。但编辑器是独立心智，且移动端底栏已有四项，长期看一级入口更清晰；建议先按一级入口设计，实施时再视导航容量取舍。</p>
+  </aside>
+</div>
+
+<h1 class="heading">七、双端界面设计</h1>
+
+<div class="doc-section">
+  <p class="paragraph">桌面与移动不是同一界面的缩放。桌面是「编排台」，强调信息密度、并行操作与批量编辑；移动是「随身修改器」，强调画布可见、单手可达、随时收起。两端共享舞台渲染、检查器字段定义与分镜数据，不共享布局。</p>
+
+  <h2 class="heading">7.1 断点策略</h2>
+  <div class="table-wrap">
+    <div class="table-caption">表 4　布局断点与形态</div>
+    <table class="table">
+      <colgroup><col style="width:22%"><col style="width:40%"><col style="width:38%"></colgroup>
+      <thead><tr><th>条件</th><th>布局</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>宽度 ≥ 1100</td><td>桌面三栏 + 底部时间轴</td><td>左分镜/素材，中舞台，右检查器；时间轴可折叠</td></tr>
+        <tr><td>600 ≤ 宽度 &lt; 1100</td><td>双栏（舞台 + 侧栏）</td><td>平板横屏；检查器以右侧抽屉出现，分镜改为底部横轨</td></tr>
+        <tr><td>宽度 &lt; 600（竖屏）</td><td>单列纵向流</td><td>舞台 → 工具条 → 当前分镜卡 → 分镜轨 → 底栏；检查器为底部抽屉</td></tr>
+        <tr><td>高度 &lt; 500（横屏手机）</td><td>舞台左置 + 右侧分镜列表</td><td>隐藏底部时间轴；检查器全屏抽屉；键盘弹出时只保留输入区</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="heading">7.2 桌面端：编排台</h2>
+  <div class="mock mock-desktop">
+    <div class="bar">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="brand">方舟档案室 · 创作</span>
+      <span class="chip">我的作品</span>
+      <span class="spacer"></span>
+      <span class="chip">撤销</span>
+      <span class="chip">重做</span>
+      <span class="chip">从当前播放</span>
+      <span class="chip on">导出</span>
+    </div>
+    <div class="body">
+      <div class="left">
+        <div class="panel-title">分镜 <span class="count">12</span></div>
+        <div class="search">搜索台词或分镜…</div>
+        <div class="item sel"><span class="ic"></span><span class="txt">背景·罗德岛走廊</span></div>
+        <div class="item"><span class="ic"></span><span class="txt">对话·阿米娅</span></div>
+        <div class="item"><span class="ic"></span><span class="txt">立绘·博士入场</span></div>
+        <div class="item"><span class="ic"></span><span class="txt">运镜·缓慢推近</span></div>
+        <div class="item"><span class="ic"></span><span class="txt">对话·凯尔希</span></div>
+        <div class="item"><span class="ic"></span><span class="txt">黑屏转场</span></div>
+        <div class="panel-title" style="margin-top:8px;">素材</div>
+        <div class="item"><span class="ic"></span><span class="txt">PRTS 立绘</span></div>
+        <div class="item"><span class="ic"></span><span class="txt">PRTS 背景</span></div>
+        <div class="item"><span class="ic"></span><span class="txt">本地图片 / 音频</span></div>
+      </div>
+      <div class="center">
+        <div class="scene">
+          <div class="sky"></div>
+          <div class="char l"><span>L</span></div>
+          <div class="char m"><span>M</span></div>
+          <div class="char r"><span>R</span></div>
+          <div class="cue">安全区 / 三槽位吸附</div>
+          <div class="tool">
+            <span class="chip on">选择</span><span class="chip">文字</span><span class="chip">适配</span>
+          </div>
+          <div class="textbox">
+            <div class="name">阿米娅</div>
+            <div class="line">博士，前面的路已经清理干净了。</div>
+          </div>
+        </div>
+        <div class="timeline">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <span class="chip on">分镜内时序</span>
+            <span class="chip">0.0s</span>
+            <span class="chip">0.5s</span>
+            <span class="chip">1.0s</span>
+            <span class="chip">2.0s</span>
+            <span class="spacer"></span>
+            <span class="chip">对齐吸附</span>
+          </div>
+          <div class="track">
+            <div class="clip" style="left:4px;width:26%;">立绘淡入 0.4s</div>
+            <div class="clip alt" style="left:30%;width:45%;">背景推近 1.2s</div>
+            <div class="clip" style="left:76%;width:22%;">对白</div>
+            <div class="playhead" style="left:32%;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="right">
+        <div class="panel-title">属性 · 背景运镜</div>
+        <div class="prop"><div class="k">目标图层</div><div class="v">背景 1 <span class="u">最上层</span></div></div>
+        <div class="prop"><div class="k">缩放</div><div class="v">1.00 → 1.18 <span class="u">×</span></div></div>
+        <div class="prop"><div class="k">位移</div><div class="v">0, 0 → 0, -24 <span class="u">px</span></div></div>
+        <div class="prop"><div class="k">时长</div><div class="v">1.2 <span class="u">s</span></div></div>
+        <div class="prop"><div class="k">缓动</div><div class="v">OutCubic <span class="u">▾</span></div></div>
+        <div class="prop"><div class="k">循环</div><div class="v">关 <span class="u">○</span></div></div>
+        <div class="panel-title" style="margin-top:8px;">高级</div>
+        <div class="item"><span class="txt">查看生成命令</span></div>
+        <div class="item"><span class="txt">插入高级指令</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="mock-note">桌面端主视图：左栏在「分镜 / 素材」间切换，中间舞台保持 16:9 自适应，右栏检查器随选中对象变化，底部时间轴只表达当前分镜内部的并行动画。舞台上的拖动与右栏数值双向同步。</p>
+
+  <h2 class="heading">7.3 移动端竖屏：随身修改器</h2>
+  <div class="phone-row">
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>创作 · 自动保存</span></div>
+        <div class="appbar"><span class="ic"></span><span class="ttl">归乡的路 · 第 2 幕</span><span class="ic"></span></div>
+        <div class="pstage">
+          <div class="char a"></div><div class="char b"></div>
+          <div class="textbox"><div class="nm">阿米娅</div>博士，前面的路已经清理干净了。</div>
+        </div>
+        <div class="ptool">
+          <div class="chip on">选择</div><div class="chip">文字</div><div class="chip">立绘</div><div class="chip">播放</div>
+        </div>
+        <div class="pcard">
+          <div class="row"><span class="who">阿米娅</span><span class="typing">对白 · 第 5 镜</span></div>
+          <div class="line">博士，前面的路已经清理干净了。</div>
+          <div class="hint">点按文本直接编辑 · 长按可插入分镜</div>
+        </div>
+        <div class="prail">
+          <div class="pbeat"><div class="th"></div><div class="nm">背景</div></div>
+          <div class="pbeat sel"><div class="th"></div><div class="nm">对白</div></div>
+          <div class="pbeat"><div class="th"></div><div class="nm">立绘</div></div>
+          <div class="pbeat"><div class="th"></div><div class="nm">运镜</div></div>
+          <div class="pbeat"><div class="th"></div><div class="nm">黑屏</div></div>
+        </div>
+        <div class="pnav"><div class="on">分镜</div><div>素材</div><div>属性</div><div>设置</div></div>
+      </div>
+      <div class="cap">编辑态：舞台常驻，台词就地改，分镜横滑切换</div>
+    </div>
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>属性 · 立绘</span></div>
+        <div class="appbar"><span class="ic"></span><span class="ttl">立绘 · 阿米娅</span><span class="ic"></span></div>
+        <div class="pstage" style="height:96px;">
+          <div class="char a"></div><div class="char b" style="left:42%;"></div>
+        </div>
+        <div class="sheet" style="bottom:104px;">
+          <div class="handle"></div>
+          <div class="tabs"><div class="tab on">基础</div><div class="tab">演出</div><div class="tab">音频</div><div class="tab">高级</div></div>
+          <div class="prow"><span>槽位</span><span class="v">中 · M</span></div>
+          <div class="prow"><span>差分</span><span class="v">默认 / 微笑</span></div>
+          <div class="prow"><span>位置</span><span class="v">640, 0</span></div>
+          <div class="prow"><span>黑色模板</span><span class="v">0% → 35%</span></div>
+          <div class="prow"><span>淡入时长</span><span class="v">0.3 s</span></div>
+        </div>
+        <div class="kbd">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+      <div class="cap">属性抽屉 + 键盘态：舞台压缩为上下文，输入区不被遮挡</div>
+    </div>
+  </div>
+  <p class="mock-note">竖屏采用「舞台常驻 + 卡片式当前分镜 + 横滑分镜轨」结构。属性从底部抽屉进入，按「基础 / 演出 / 音频 / 高级」分段；键盘弹出时舞台缩为窄条或折叠，保证输入框与候选词可见。复杂动画参数在移动端只给预设与时长，数值微调让位给桌面端。</p>
+
+  <h2 class="heading">7.4 移动端横屏与平板</h2>
+  <ul class="list">
+    <li><strong>横屏手机：</strong>左侧 58% 舞台，右侧分镜列表；工具条浮在舞台底部；属性为右侧全高抽屉。适合看效果与快速切换，不适合长文本录入。</li>
+    <li><strong>平板横屏：</strong>接近桌面双栏，保留底部时间轴，但把左栏收起为图标栏，避免压缩舞台。</li>
+    <li><strong>统一规则：</strong>无论何种布局，舞台始终按 16:9 等比缩放，编辑坐标以 1280×720 换算，不使用屏幕像素直接存储。</li>
+  </ul>
+
+  <aside class="callout" data-variant="warning">
+    <p><strong>竖屏的两个易错点：</strong>① 舞台高度只有约 56vw，拖动立绘时手指会遮挡目标，需提供「选中后出现偏移控制条 / 微调步进」；② 竖屏下若直接显示完整时间轴，会挤占舞台与输入区，因此移动端只保留「时长 + 缓动预设」，不做多轨编辑。</p>
+  </aside>
+</div>
+
+<h1 class="heading">八、编辑交互</h1>
+
+<div class="doc-section">
+  <h2 class="heading">8.1 舞台直编</h2>
+  <ul class="list">
+    <li><strong>选择：</strong>点选最上层可见对象；再次点击穿透到下一层；左栏分镜点击可定位到对应对象。选中态显示包围框、对象名与快捷操作。</li>
+    <li><strong>拖动：</strong>立绘拖动写入槽位偏移（position），文字拖动写入 <code class="inline">x/y</code>，背景拖动写入图层位移。拖动时实时显示逻辑坐标，松手后吸附。</li>
+    <li><strong>吸附：</strong>立绘吸附三槽位中心、画面中线、底部基线；文字吸附左右安全边距与水平中线；按住修饰键或关闭吸附可自由摆放。</li>
+    <li><strong>缩放与旋转：</strong>桌面用包围框手柄，移动用双指；立绘缩放写入 zoom 参数并保持锚点；旋转写入 angle，背景旋转是整幅画面旋转，需在属性中明确提示作用范围。</li>
+    <li><strong>拖入素材：</strong>从素材库拖到舞台，按落点自动判断类型：拖到背景区域建背景，拖到立绘区域建立绘，拖到文字区域建文字；落点不确定时弹出类型选择。</li>
+    <li><strong>安全区：</strong>默认显示字幕安全区与底部对白框占位，避免把关键内容放到会被对白遮挡的位置。</li>
+  </ul>
+
+  <h2 class="heading">8.2 分镜卡片与插入</h2>
+  <p class="paragraph">分镜列表是编辑器的主干。每张卡片包含：类型图标、缩略图或对象摘要、说话人 / 素材名、首行文本、演出标签、时长与阻塞标记。卡片支持拖拽排序、多选、复制、禁用（临时跳过）、折叠。</p>
+  <div class="table-wrap">
+    <div class="table-caption">表 5　插入菜单（按使用频率排序）</div>
+    <table class="table">
+      <colgroup><col style="width:18%"><col style="width:44%"><col style="width:38%"></colgroup>
+      <thead><tr><th>分组</th><th>项目</th><th>默认行为</th></tr></thead>
+      <tbody>
+        <tr><td>文本</td><td>对白、旁白、舞台文字、浮层文字</td><td>对白自动聚焦输入框；旁白无说话人；舞台文字落点居中</td></tr>
+        <tr><td>画面</td><td>背景、立绘、CG、黑屏、幕布</td><td>背景默认淡入 0.3s；立绘默认中槽淡入</td></tr>
+        <tr><td>动作</td><td>移动、跳跃、抖动、缩放、旋转、退场</td><td>作用于当前选中立绘；无选中时要求先选槽位</td></tr>
+        <tr><td>运镜</td><td>背景推近 / 拉远 / 平移、镜头震动、灰度、反色、聚焦</td><td>以当前背景或当前选中对象为目标</td></tr>
+        <tr><td>音频</td><td>播放 BGM、停止 BGM、音效、音量</td><td>BGM 默认循环并淡入 0.5s</td></tr>
+        <tr><td>流程</td><td>等待、选项、跳转标记、幕结束</td><td>等待默认 0.5s；选项最多 4 项</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="heading">8.3 检查器</h2>
+  <p class="paragraph">检查器不是「所有参数的列表」，而是「当前对象最可能的下一步」。字段按对象类型动态生成，常用项在前，高级项折叠；每个数值字段同时提供滑杆、步进与直接输入，并显示单位与取值范围。</p>
+  <ul class="list">
+    <li><strong>基础：</strong>槽位、素材、差分、位置、透明度、时长。</li>
+    <li><strong>演出：</strong>动作类型、起点与终点、缩放、旋转、缓动、循环、是否阻塞。</li>
+    <li><strong>音频：</strong>BGM / 音效、音量、淡入淡出、是否循环。</li>
+    <li><strong>高级：</strong>只读展示将生成的命令与参数；可切换为「直接编辑命令」但不建议普通用户使用。</li>
+  </ul>
+
+  <h2 class="heading">8.4 分镜内时间轴</h2>
+  <ul class="list">
+    <li>只展示当前分镜编译出的并行轨道：立绘淡入、背景推近、文字出现、音频淡入等。轨道不是独立编辑对象，而是参数的可视化。</li>
+    <li>拖动轨道块改时长与延迟；拖动缓动点改曲线预设；不支持任意关键帧，避免把简单模型做成半成品剪辑器。</li>
+    <li>时间轴上的播放头可拖动，舞台实时呈现该时刻的中间帧；松手回到分镜起点或停在当前位置。</li>
+    <li>移动端折叠为「时长 / 延迟 / 缓动」三个字段，必要时提供单行迷你时间轴。</li>
+  </ul>
+
+  <h2 class="heading">8.5 连续对白与批量操作</h2>
+  <ul class="list">
+    <li><strong>连续对白模式：</strong>在台词卡片中按回车即新建下一句，自动继承说话人；空行退出；支持从剪贴板按「说话人：台词」批量粘贴。</li>
+    <li><strong>批量替换：</strong>按作品范围替换说话人或素材，先预览影响的分镜数量再执行。</li>
+    <li><strong>模板：</strong>把常用组合存为「演出模板」（背景淡入 + 双人入场 + 推近），插入后只替换素材与台词。</li>
+    <li><strong>撤销：</strong>至少 50 步；舞台拖动合并为一次操作；撤销跨分镜有效。移动端提供常驻撤销按钮与轻提示。</li>
+  </ul>
+</div>
+
+<h1 class="heading">九、演出能力与控件映射</h1>
+
+<div class="doc-section">
+  <p class="paragraph">下表是产品控件与引擎命令的对照，也是研发评估工作量的依据。字段名以播放器实际解析为准；产品侧使用中文语义，导出时再映射为命令参数。</p>
+  <div class="table-wrap">
+    <div class="table-caption">表 6　核心演出能力映射</div>
+    <table class="table">
+      <colgroup><col style="width:14%"><col style="width:27%"><col style="width:35%"><col style="width:24%"></colgroup>
+      <thead><tr><th>能力</th><th>用户控件</th><th>命令与关键参数</th><th>约束与提示</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>对白 / 旁白 <span class="pill p0">P0</span></td>
+          <td>说话人、台词、是否旁白</td>
+          <td>纯文本；具名写作 <code>[name=阿米娅]台词</code></td>
+          <td>对白框位置固定；打字速度 40ms 为默认，可全局调整</td>
+        </tr>
+        <tr>
+          <td>背景出现 / 切换 <span class="pill p0">P0</span></td>
+          <td>素材、淡入时长、是否等待、适配方式</td>
+          <td><code>background(image, fadetime, block)</code></td>
+          <td>新背景淡入时旧背景同步淡出；同层多图会叠加，需在 UI 提示「替换」与「叠加」的区别</td>
+        </tr>
+        <tr>
+          <td>背景运镜 <span class="pill p1">P1</span></td>
+          <td>起点 / 终点缩放、位移、时长、缓动、循环</td>
+          <td><code>backgroundtween(xfrom,yfrom,xto,yto,xscalefrom,yscalefrom,xscaleto,yscaleto,duration,ease,loop,block)</code></td>
+          <td>只作用于最上层背景；loop 与 block 同时为真时 block 被忽略，界面应互斥</td>
+        </tr>
+        <tr>
+          <td>画面旋转 <span class="pill p1">P1</span></td>
+          <td>角度、圈数、方向、时长</td>
+          <td><code>imagerotate(angle,circles,inverse,fadetime)</code></td>
+          <td>旋转整幅画面而非单个图层；角度差自动取最短路径，需在预览中确认方向</td>
+        </tr>
+        <tr>
+          <td>立绘出场 / 换人 <span class="pill p0">P0</span></td>
+          <td>槽位、角色、差分、淡入时长、焦点、是否阻塞</td>
+          <td><code>charslot(slot,name,duration,afrom,ato,focus,isblock)</code></td>
+          <td>name 支持 <code>#序号</code> 与 <code>@别名</code>；焦点值为 all/l/m/r；非焦点立绘亮度 0.5</td>
+        </tr>
+        <tr>
+          <td>立绘位置 <span class="pill p0">P0</span></td>
+          <td>拖动位置、绝对坐标、相对位移、时长</td>
+          <td><code>charslot(action=move/setpos,posfrom,posto,duration)</code> 或 <code>characteraction(type=move,xpos,ypos)</code></td>
+          <td>绝对位置写 posto；相对移动写 characteraction；两套入口需在 UI 中统一为「移动到 / 移动多少」</td>
+        </tr>
+        <tr>
+          <td>立绘动作 <span class="pill p1">P1</span></td>
+          <td>跳跃、抖动、缩放、旋转、退场</td>
+          <td><code>characteraction(type=jump/shake/zoom/exit,...)</code>；<code>charslot(angle,circles,poszoom,xscale,yscale)</code></td>
+          <td>跳跃的 power/times 与抖动强度需要给预设；退场是淡出，不是滑出</td>
+        </tr>
+        <tr>
+          <td>黑色模板（剪影） <span class="pill p1">P1</span></td>
+          <td>起始位置、结束位置两个百分比滑杆</td>
+          <td><code>charslot(bstart,bend)</code>，取值为立绘高度的 0~1</td>
+          <td>顶部到 bstart 全黑，bstart→bend 渐隐；两值需满足 bend &gt; bstart，否则界面阻止</td>
+        </tr>
+        <tr>
+          <td>舞台文字 <span class="pill p0">P0</span></td>
+          <td>文本、位置、宽度、字号、对齐</td>
+          <td><code>subtitle(x,y,width,size,alignment,text)</code></td>
+          <td>x/y 必须在 0~1280 / 0~720；width 会被剩余宽度截断；同一条会被下一条替换</td>
+        </tr>
+        <tr>
+          <td>浮层文字 <span class="pill p1">P1</span></td>
+          <td>文本、位置、字号、出现方式、移动 / 旋转 / 透明度补间</td>
+          <td><code>sticker(id,x,y,width,size,text)</code>、<code>stickertween(...)</code></td>
+          <td>单场景建议不超过 20 条；同名 id 默认替换，需明确「续接」与「替换」两种模式</td>
+        </tr>
+        <tr>
+          <td>黑屏 / 遮罩 <span class="pill p1">P1</span></td>
+          <td>颜色、透明度、图片、方向滑块、是否反相、时长</td>
+          <td><code>blocker(r,g,b,a,afrom,style,image,inverse,fadetime)</code></td>
+          <td>颜色分量为 0~1；slider / verticalslider 为滑入遮罩；图片遮罩与纯色互斥</td>
+        </tr>
+        <tr>
+          <td>幕布转场 <span class="pill p1">P1</span></td>
+          <td>方向、填充比例、渐变、延迟、时长</td>
+          <td><code>curtain(direction,fillfrom,fillto,grad,delay,fadetime,block)</code></td>
+          <td>方向 -1 为回收；方向 0~7；渐变幕布会多一条柔边</td>
+        </tr>
+        <tr>
+          <td>镜头震动 <span class="pill p1">P1</span></td>
+          <td>强度、时长、频率、方向、淡出、是否无限</td>
+          <td><code>camerashake(duration,vibrato,randomness,xstrength,ystrength,fadeout,stop,block)</code></td>
+          <td>duration 为负表示无限，必须有停止入口；随机震动无法逐帧复现，预览仅作观感参考</td>
+        </tr>
+        <tr>
+          <td>灰度 / 反色 <span class="pill p1">P1</span></td>
+          <td>效果、强度、是否保持、时长</td>
+          <td><code>cameraeffect(effect=Grayscale/Colorinverse,amount,keep,block)</code></td>
+          <td>Chaos 不支持，不出现在选项；keep=false 时动画结束自动恢复</td>
+        </tr>
+        <tr>
+          <td>聚焦 / 失焦 <span class="pill p2">P2</span></td>
+          <td>对象类型、对象、强度、时长、模糊开关</td>
+          <td><code>focusout(type,id,from,to,duration)</code>、<code>focusparam(blur,effect)</code></td>
+          <td>cgitem 需要 id；与「立绘焦点变暗」是两套机制，UI 文案需区分</td>
+        </tr>
+        <tr>
+          <td>BGM <span class="pill p0">P0</span></td>
+          <td>曲目、前奏、音量、淡入、循环</td>
+          <td><code>playmusic(key,intro,volume,fadetime)</code></td>
+          <td>音乐默认循环；有 intro 时先播前奏再循环主段；停止用 <code>stopmusic</code></td>
+        </tr>
+        <tr>
+          <td>音效 <span class="pill p0">P0</span></td>
+          <td>音效、音量、延迟</td>
+          <td><code>playsound(key,volume)</code>、<code>stopsound</code></td>
+          <td>音效不循环；多个音效可同时播放，需限制同帧数量避免刺耳</td>
+        </tr>
+        <tr>
+          <td>选项分支 <span class="pill p1">P1</span></td>
+          <td>选项文本、跳转目标、禁用项</td>
+          <td><code>decision(options,values)</code> + <code>label</code>/<code>warp</code></td>
+          <td>建议不超过 4 项；跳转目标必须存在；导出前校验无孤立标记</td>
+        </tr>
+        <tr>
+          <td>等待 / 节拍 <span class="pill p0">P0</span></td>
+          <td>时长</td>
+          <td><code>delay(time)</code></td>
+          <td>随播放速度缩放；不要用它替代动画的 block</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <aside class="callout" data-variant="tip">
+    <p><strong>高级指令的定位：</strong>导入的原版脚本可能包含 <code>interlude</code>、<code>avgdisplay</code>、<code>charactercutin</code> 等复杂命令。编辑器提供「高级指令」分镜：只读展示原文、允许排序与删除、在预览中照常执行。这样既保留完整演出，又不承诺可视化编辑所有字段。</p>
+  </aside>
+</div>
+
+<h1 class="heading">十、素材中心</h1>
+
+<div class="doc-section">
+  <h2 class="heading">10.1 双来源</h2>
+  <div class="card-grid" data-cols="2">
+    <div class="card">
+      <h3>PRTS 素材</h3>
+      <p>沿用播放器现有的资源映射规则：立绘来自 <code class="inline">character.json</code>，背景来自 <code class="inline">background.json</code>，音频来自剧情变量表。编辑器只做选择器与预览，不复制一套地址规则。</p>
+      <ul>
+        <li>立绘按角色名、别名、差分筛选；网格展示缩略图</li>
+        <li>背景 / CG 按目录分组，支持关键词搜索</li>
+        <li>BGM / 音效支持试听与最近使用</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>本地素材</h3>
+      <p>用户上传的图片与音频复制进作品包，引用而非移动原文件；删除作品不影响用户原文件。</p>
+      <ul>
+        <li>图片：PNG / JPG / WebP，建议单张 ≤ 8MB</li>
+        <li>音频：MP3 / OGG / WAV，建议单个 ≤ 20MB</li>
+        <li>自动记录尺寸、时长、哈希，重复文件去重</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 class="heading">10.2 本地立绘的对齐问题</h2>
+  <p class="paragraph">PRTS 立绘自带尺寸与锚点（<code class="inline">size</code> / <code class="inline">pos</code>），本地上传的图片没有这些元数据。若直接按原图尺寸摆放，会出现人物忽大忽小、脚底悬空。产品必须在导入时解决：</p>
+  <ul class="list">
+    <li><strong>自动读取像素尺寸</strong>，按「底部中心」作为默认锚点，按画面高度归一化到参考身高。</li>
+    <li><strong>首次放入舞台时进入对齐模式</strong>：显示底部基线、三槽位中心与参考身高框；用户可拖动缩放，确认后写入素材元数据。</li>
+    <li><strong>素材级元数据</strong>：锚点、参考身高、可选的脸部区域（供未来差分使用），保存在项目内，跨分镜复用。</li>
+    <li><strong>不伪造差分</strong>：本地图片没有表情组，选择器只显示单张；需要多表情时由用户建立「素材组」，手动标注。</li>
+  </ul>
+
+  <h2 class="heading">10.3 素材规范与版权提示</h2>
+  <div class="table-wrap">
+    <div class="table-caption">表 7　素材规则</div>
+    <table class="table">
+      <colgroup><col style="width:20%"><col style="width:44%"><col style="width:36%"></colgroup>
+      <thead><tr><th>项目</th><th>规则</th><th>产品处理</th></tr></thead>
+      <tbody>
+        <tr><td>图片格式</td><td>PNG / JPG / WebP；透明背景优先 PNG</td><td>导入时解码校验，失败给出具体文件名</td></tr>
+        <tr><td>画布比例</td><td>舞台 16:9；竖图 / 方图会被裁切或留边</td><td>导入时提示，并提供「适配预览」，不假装支持竖屏成片</td></tr>
+        <tr><td>音频</td><td>可解码、非加密；采样率不限</td><td>导入时读取时长，超长音频提示</td></tr>
+        <tr><td>版权</td><td>PRTS 素材与本地素材的授权由创作者负责</td><td>导出前展示一次性声明；作品内记录素材来源，不改变原始授权</td></tr>
+        <tr><td>体积</td><td>单作品建议 ≤ 500MB，超出提示</td><td>显示占用分布，可清理未使用素材</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h1 class="heading">十一、作品数据与导出</h1>
+
+<div class="doc-section">
+  <h2 class="heading">11.1 剧本包结构</h2>
+  <pre class="code" data-lang="text"><code>my-story/
+├── project.json          <span class="cmt"># 真源：分镜、参数、素材索引、设置</span>
+├── story.txt             <span class="cmt"># 编译产物：播放器可直接解析的脚本</span>
+├── assets/
+│   ├── images/           <span class="cmt"># 本地图片，按哈希命名</span>
+│   ├── audio/            <span class="cmt"># 本地音频</span>
+│   └── manifest.json     <span class="cmt"># 文件名、哈希、尺寸/时长、来源</span>
+└── cover.png             <span class="cmt"># 可选封面</span></code></pre>
+
+  <h2 class="heading">11.2 project.json 示意</h2>
+  <pre class="code" data-lang="json"><code>{
+  <span class="key">"schemaVersion"</span>: 1,
+  <span class="key">"id"</span>: "local-7f3c2a",
+  <span class="key">"title"</span>: "归乡的路",
+  <span class="key">"settings"</span>: { <span class="key">"typingMs"</span>: 40 },
+  <span class="key">"assets"</span>: [
+    { <span class="key">"key"</span>: "prts:char:amiya", <span class="key">"kind"</span>: "character" },
+    { <span class="key">"key"</span>: "local:9b2e", <span class="key">"kind"</span>: "image", <span class="key">"file"</span>: "images/9b2e.png" }
+  ],
+  <span class="key">"scenes"</span>: [{
+    <span class="key">"id"</span>: "s1",
+    <span class="key">"title"</span>: "走廊",
+    <span class="key">"beats"</span>: [
+      {
+        <span class="key">"id"</span>: "b1",
+        <span class="key">"kind"</span>: "background",
+        <span class="key">"params"</span>: { <span class="key">"image"</span>: "prts:bg:corridor", <span class="key">"fade"</span>: 0.3, <span class="key">"block"</span>: true }
+      },
+      {
+        <span class="key">"id"</span>: "b2",
+        <span class="key">"kind"</span>: "character",
+        <span class="key">"params"</span>: { <span class="key">"slot"</span>: "m", <span class="key">"name"</span>: "prts:char:amiya#1", <span class="key">"fade"</span>: 0.3, <span class="key">"focus"</span>: "m" }
+      },
+      {
+        <span class="key">"id"</span>: "b3",
+        <span class="key">"kind"</span>: "dialogue",
+        <span class="key">"params"</span>: { <span class="key">"speaker"</span>: "阿米娅", <span class="key">"text"</span>: "博士，前面的路已经清理干净了。" }
+      }
+    ]
+  }]
+}</code></pre>
+
+  <h2 class="heading">11.3 编译示例</h2>
+  <p class="paragraph">分镜在导出时展开为命令。下面是三个分镜的编译结果，播放器可原生解析：</p>
+  <pre class="code" data-lang="text"><code>[background(image="corridor", fadetime=0.3, block=true)]
+[charslot(slot="m", name="amiya#1", duration=0.3, focus="m", isblock=true)]
+[name="阿米娅"]博士，前面的路已经清理干净了。</code></pre>
+  <p class="paragraph">编译层需要处理四类细节：参数顺序无关、字符串转义（引号、逗号、反斜杠、换行）、数值格式化（避免科学计数法）、未识别分镜的兜底（降级为高级指令并保留原文）。</p>
+
+  <h2 class="heading">11.4 导出与导入</h2>
+  <div class="table-wrap">
+    <div class="table-caption">表 8　导出模式</div>
+    <table class="table">
+      <colgroup><col style="width:20%"><col style="width:44%"><col style="width:36%"></colgroup>
+      <thead><tr><th>模式</th><th>内容</th><th>适用</th></tr></thead>
+      <tbody>
+        <tr><td>仅脚本</td><td>story.txt + 素材 key 列表</td><td>素材仍在 PRTS / 本地，接收方需能解析相同 key</td></tr>
+        <tr><td>剧本包（推荐）</td><td>project.json + story.txt + 本地素材 + manifest</td><td>跨设备继续编辑，或分享给同样使用本应用的人</td></tr>
+        <tr><td>打包 PRTS 素材</td><td>在剧本包基础上复制引用的 PRTS 图片与音频</td><td>接收方无网络或素材下架；需在导出时提示授权与体积</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul class="list">
+    <li><strong>导入校验：</strong>schema 版本、素材缺失、脚本可解析、命令是否全部已注册；缺失素材给出替代与跳过选项。</li>
+    <li><strong>冲突策略：</strong>同 id 作品导入时生成副本，不覆盖现有作品；素材按哈希去重。</li>
+    <li><strong>版本迁移：</strong>schemaVersion 单调递增；旧版本导入时先迁移再打开，不原地改写源文件。</li>
+    <li><strong>外部脚本导入：</strong>先按命令序列解析，再尝试归并为分镜；归并失败的命令进入「高级指令」，不丢内容。</li>
+  </ul>
+</div>
+
+<h1 class="heading">十二、预览、校验与保存</h1>
+
+<div class="doc-section">
+  <h2 class="heading">12.1 三种预览</h2>
+  <ul class="list">
+    <li><strong>单镜循环：</strong>只执行当前分镜及其依赖状态，循环播放，用于调节奏与时长。默认不播音效。</li>
+    <li><strong>从当前播放：</strong>从所属幕开头重演到当前分镜，再继续播放，用于检查状态衔接与 BGM。</li>
+    <li><strong>全片预览：</strong>复用正式播放器，隐藏编辑控件，支持暂停、倍速与退出；不写观看进度、不修改断点。</li>
+  </ul>
+  <aside class="callout" data-variant="warning">
+    <p><strong>预览必须隔离：</strong>编辑器预览与正式观看的进度、断点、缓存作用域要分离。否则用户在编辑器里试看一段，会覆盖正式剧情的「继续观看」，这是不可接受的副作用。</p>
+  </aside>
+
+  <h2 class="heading">12.2 校验规则</h2>
+  <div class="table-wrap">
+    <div class="table-caption">表 9　导出前校验</div>
+    <table class="table">
+      <colgroup><col style="width:24%"><col style="width:44%"><col style="width:32%"></colgroup>
+      <thead><tr><th>级别</th><th>规则</th><th>处理</th></tr></thead>
+      <tbody>
+        <tr><td>错误（阻止导出）</td><td>脚本无法解析；跳转目标不存在；素材文件缺失；选项超过 4 项</td><td>定位到分镜，给出修复入口</td></tr>
+        <tr><td>警告（允许导出）</td><td>坐标越界；时长为 0 且要求阻塞；loop 与 block 同时为真；浮层文字超过 20 条；未使用素材</td><td>列出清单，可一键忽略</td></tr>
+        <tr><td>提示</td><td>音频无法解析；本地上传图片比例异常；作品体积过大</td><td>建议性说明，不阻止</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="heading">12.3 保存与恢复</h2>
+  <ul class="list">
+    <li>编辑即写入本地草稿（防抖 1~2 秒），不依赖手动保存；顶部显示「已保存 / 保存中 / 失败」。</li>
+    <li>每次打开作品保留最近 20 个自动快照，可回滚；快照只保留 project.json，不复制素材。</li>
+    <li>崩溃或强制退出后，下次打开提示「恢复未保存的修改」，用户确认后才覆盖当前作品。</li>
+    <li>素材导入与作品写入分开提交，避免一半素材写入导致作品损坏。</li>
+  </ul>
+</div>
+
+<h1 class="heading">十三、与现有代码的衔接</h1>
+
+<div class="doc-section">
+  <p class="paragraph">本节只做可行性判断，不改代码。核心结论：<strong>复用绘制与音频，不复用播放控制</strong>。播放器为「观看」设计，编辑器需要「随机访问、无副作用、可暂停在中间帧」，两者共用底层状态与画布，但控制层必须分开。</p>
+  <div class="table-wrap">
+    <div class="table-caption">表 10　模块复用与改造点</div>
+    <table class="table">
+      <colgroup><col style="width:28%"><col style="width:36%"><col style="width:36%"></colgroup>
+      <thead><tr><th>现有模块</th><th>复用方式</th><th>需要的改造</th></tr></thead>
+      <tbody>
+        <tr><td><code>script.dart</code></td><td>直接复用解析与转义规则</td><td>增加反向序列化（命令 → 文本）与参数顺序稳定输出</td></tr>
+        <tr><td><code>stage_state.dart</code> / <code>stage_painter.dart</code></td><td>直接渲染舞台</td><td>增加编辑态叠加层：选中框、吸附线、安全区、隐藏交互层</td></tr>
+        <tr><td><code>story_engine.dart</code></td><td>预览时执行命令</td><td>增加无等待重演模式、单步执行、按分镜定位；避免副作用写入进度</td></tr>
+        <tr><td><code>media_catalog.dart</code></td><td>PRTS 素材解析</td><td>抽出资源解析接口，支持 <code>local:</code> 与项目相对路径；本地立绘需注入尺寸与锚点</td></tr>
+        <tr><td><code>story_audio.dart</code></td><td>预览与正式播放共用</td><td>编辑器内可禁用音效；支持只播放 BGM 与试听单曲</td></tr>
+        <tr><td><code>story_player.dart</code></td><td>全片预览复用</td><td>增加「预览模式」：不写断点、不记录看完、不显示进度条断点提示</td></tr>
+        <tr><td><code>asset_store.dart</code></td><td>缓存与素材加载</td><td>作品素材独立作用域，避免与剧情缓存混用；清理缓存不得删除作品素材</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3 class="sub">主要技术风险</h3>
+  <ul class="list">
+    <li><strong>状态重建：</strong>现有断点恢复依赖「有对白或选项」才算有效停点，编辑器需要停在任意分镜，必须新增无副作用的 seek / replay 路径，并处理动画中间帧。</li>
+    <li><strong>本地素材解析：</strong><code>MediaCatalog</code> 目前把 PRTS 地址写死，且立绘尺寸来自 <code>character.json</code>；本地素材需要新的解析层与元数据，否则渲染会退回默认尺寸。</li>
+    <li><strong>音频副作用：</strong>重演时若照常执行音频，会重复播放前奏与音效；需要「静默重演 + 恢复音轨」两段式。</li>
+    <li><strong>绘制性能：</strong>舞台叠加层、缩略图、素材网格同时存在时，移动端需限制缩略图分辨率与缓存数量。</li>
+    <li><strong>命令语义差异：</strong>同一个视觉效果可能有多条路径（<code>backgroundtween</code> vs <code>largebgtween</code>、<code>charslot</code> vs <code>character</code>）。编辑器只生成一条规范路径，导入时保留原路径。</li>
+  </ul>
+</div>
+
+<h1 class="heading">十四、分期规划</h1>
+
+<div class="doc-section">
+  <ol class="timeline">
+    <li>
+      <span class="when">M0　技术验证</span>
+      <div class="what"><strong>目标：</strong>证明「分镜 → 编译 → 播放器预览」链路可行。范围：单幕、对白 / 背景 / 立绘 / 舞台文字、桌面舞台直编、本地保存。验收：三个分镜的示例作品能导出并在播放器中完整播放。</div>
+    </li>
+    <li>
+      <span class="when">M1　可用版本</span>
+      <div class="what"><strong>目标：</strong>普通用户可完成一段短片。范围：作品管理、素材选择器（PRTS + 本地）、音频、撤销 / 自动保存、导出与导入、桌面三栏 + 移动竖屏基础布局。验收：新用户 5 分钟完成任务流。</div>
+    </li>
+    <li>
+      <span class="when">M2　演出增强</span>
+      <div class="what"><strong>目标：</strong>覆盖主流演出。范围：背景运镜、立绘动作、黑色模板、遮罩 / 幕布、镜头震动与灰度、分镜内时间轴、连续对白与模板。验收：不手写脚本完成带运镜与转场的 2 分钟短片。</div>
+    </li>
+    <li>
+      <span class="when">M3　移动端完善与高级能力</span>
+      <div class="what"><strong>目标：</strong>移动端可独立完成轻量创作。范围：属性抽屉、手势编排、横屏布局、选项分支、原版脚本派生导入、高级指令只读。验收：手机上完成改台词、换表情、调位置、加黑屏并导出。</div>
+    </li>
+    <li>
+      <span class="when">M4　可选扩展</span>
+      <div class="what"><strong>目标：</strong>提升复用与分享。范围：作品模板、批量替换、素材组、打包 PRTS 素材导出、封面与简介。是否进入取决于前三个阶段的真实使用情况。</div>
+    </li>
+  </ol>
+  <aside class="callout" data-variant="tip">
+    <p><strong>排序理由：</strong>先打通「能演出来」，再解决「好用」，最后才是「能力全」。把时间轴、分支、CG 图层放到后面，是因为它们成本高、使用频率低，且不影响最小闭环。</p>
+  </aside>
+</div>
+
+<h1 class="heading">十五、验收标准</h1>
+
+<div class="doc-section">
+  <div class="table-wrap">
+    <div class="table-caption">表 11　可测试的验收项</div>
+    <table class="table">
+      <colgroup><col style="width:22%"><col style="width:44%"><col style="width:34%"></colgroup>
+      <thead><tr><th>维度</th><th>标准</th><th>验证方式</th></tr></thead>
+      <tbody>
+        <tr><td>最小闭环</td><td>新建 → 背景 → 两立绘 → 三句对白 → 预览 → 导出 → 重新导入，内容与演出一致</td><td>桌面与手机各走一遍</td></tr>
+        <tr><td>双端一致性</td><td>同一作品在两端打开，分镜顺序、台词、位置、时长一致；舞台坐标不因屏幕尺寸漂移</td><td>同作品双端截图对照 + 数值核对</td></tr>
+        <tr><td>状态衔接</td><td>从任意分镜预览，背景 / 立绘 / BGM / 遮罩与连续播放一致</td><td>逐分镜对比连续播放的中间帧</td></tr>
+        <tr><td>副作用隔离</td><td>编辑器预览不写观看进度、不改断点、不污染剧情缓存</td><td>预览前后检查进度与缓存记录</td></tr>
+        <tr><td>导出正确性</td><td>导出脚本可被解析；所有命令均已注册；转义字符与换行不破坏参数</td><td>解析回读 + 播放抽查</td></tr>
+        <tr><td>异常处理</td><td>素材缺失、坐标越界、跳转目标不存在时给出可定位的提示，不静默失败</td><td>构造异常作品逐项验证</td></tr>
+        <tr><td>移动端可用性</td><td>单手可完成改台词、换表情、拖动文字；键盘不遮挡输入区；误触可撤销</td><td>真机竖屏走查</td></tr>
+        <tr><td>性能</td><td>100 个分镜的作品打开 ≤ 2s；舞台拖动无明显掉帧；素材网格滚动流畅</td><td>中端安卓机与桌面各测一次</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h1 class="heading">十六、待拍板决策</h1>
+
+<div class="doc-section">
+  <p class="paragraph">以下五项会影响架构与排期，建议在进入设计稿前确认。每项给出推荐值，便于直接决策。</p>
+  <div class="table-wrap">
+    <div class="table-caption">表 12　需要确认的产品决策</div>
+    <table class="table">
+      <colgroup><col style="width:24%"><col style="width:46%"><col style="width:30%"></colgroup>
+      <thead><tr><th>决策点</th><th>选项与影响</th><th>建议</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>是否支持竖屏成片</td>
+          <td>支持则需改引擎画布比例、播放器布局、素材规范；不支持则竖屏仅编辑界面</td>
+          <td>v1 不支持，固定 16:9；若需求强烈，单独立项</td>
+        </tr>
+        <tr>
+          <td>入口位置</td>
+          <td>一级导航「创作」/ 剧情馆内 Tab / 设置内入口</td>
+          <td>一级导航；移动端底栏四项可接受</td>
+        </tr>
+        <tr>
+          <td>导出是否打包 PRTS 素材</td>
+          <td>打包便于离线分享但体积大、涉及授权；不打包则依赖接收方资源</td>
+          <td>默认仅脚本，提供「打包」高级选项并提示授权</td>
+        </tr>
+        <tr>
+          <td>是否允许直接编辑原版剧情</td>
+          <td>直接编辑会污染缓存与断点，且难以回滚</td>
+          <td>只允许「派生为新作品」，原脚本只读</td>
+        </tr>
+        <tr>
+          <td>高级指令的可见性</td>
+          <td>完全隐藏会丢失导入内容；完全开放会增加误操作</td>
+          <td>只读展示 + 可排序删除，不提供自由文本编辑</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <aside class="callout">
+    <p><strong>下一步建议：</strong>确认以上决策后，先出桌面与移动各一张高保真交互稿，再进入 M0 技术验证。编辑器的主要风险不在界面，而在「状态重建」与「本地素材解析」两条链路，建议用最小示例先验证，再铺开界面。</p>
+  </aside>
+</div>
+
+<div class="divider"><span class="line"></span><span class="diamond"></span><span class="line"></span></div>
+
+<section class="title end_page">
+  <h1>让创作停留在画面里</h1>
+  <p>本文为产品分析稿，不包含代码实现。确认方向后，可继续产出交互原型、数据结构定义与 M0 技术验证清单。</p>
+</section>
+
+</body>
+</html>
