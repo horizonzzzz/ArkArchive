@@ -13,6 +13,14 @@ import re
 import shutil
 
 
+# 当前 painter 尚未实现这些 shader 辅助贴图，直接绘制会把 mask 本身显示出来。
+UNSUPPORTED_MAIN_TEXTURES = {
+    'AVG_daoguang_06.png',
+    'AVG_flow_02.png',
+    'AVG_fire_09.png',
+    'AVG_fire_13.png',
+}
+
 def curve(raw):
     raw = raw or {}
     def keys(value):
@@ -93,6 +101,8 @@ def convert(source, output):
         filename = tex.get('m_Name', '') + '.png' if tex else ''
         if not filename or Path(filename).name != filename:
             raise ValueError(f'{name}：材质 {raw.get("m_Name")} 缺少本地 MainTex')
+        if filename in UNSUPPORTED_MAIN_TEXTURES:
+            raise ValueError(f'{name}：当前未实现 shader 辅助贴图 {filename}')
         used.add(filename)
         def color(key):
             c = colors.get(key, dict(r=1, g=1, b=1, a=1))
@@ -116,10 +126,15 @@ def convert(source, output):
             continue
         pos, scale, angle = transform(transforms[go])
         ps = systems.get(go)
+        try:
+            mat = material(mats[0])
+        except ValueError as error:
+            print(f'{source}: 跳过不支持的材质：{error}')
+            continue
         entry = {'name': tree.get(go, {}).get('m_Name', ''),
                  'kind': 'particle' if ps else 'mesh',
                  'position': pos, 'scale': scale, 'rotation': angle,
-                 'material': material(mats[0]),
+                 'material': mat,
                  'sorting': renderer.get('m_SortingOrder', 0)}
         if ps:
             im = ps['InitialModule']
@@ -163,6 +178,10 @@ def convert(source, output):
             'sourceSha256': hashlib.sha256(source.read_bytes()).hexdigest()}
     target = output / name
     target.mkdir(parents=True, exist_ok=True)
+    used_names = set(used)
+    for stale in target.glob('*.png'):
+        if stale.name not in used_names:
+            stale.unlink()
     for filename in sorted(used):
         shutil.copyfile(source.parent / filename, target / filename)
     # 禁止 NaN/Infinity，避免输出只能被部分 JSON 实现读取的描述。

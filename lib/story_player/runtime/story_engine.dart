@@ -905,7 +905,11 @@ class StoryEngine extends ChangeNotifier {
     _cancelAnimation(key);
     state.effects.removeWhere((e) => e.group == group && e.layer == layer);
     final effect = StageEffect(
-      FxSimulation(asset, seed: c.line),
+      FxSimulation(
+        asset,
+        seed: c.line,
+        loop: group == 'effect' ? false : null,
+      ),
       group: group,
       layer: layer,
       offset: Offset(c.number('x'), c.number('y')),

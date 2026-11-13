@@ -78,8 +78,10 @@ flutter test test/reference_live_test.dart --dart-define=STORY_REFERENCE_URL=htt
 ## 解包资源驱动的粒子特效
 
 `bgeffect` / `effect` 使用通用的描述解析、粒子模拟和二维绘制管线。首批 `avg_fire_01`（8 个粒子发射器和 1 个烟雾网格）与 `avg_048_smoke_01`（4 个发射器）的 `fx.json` 和主贴图位于 `assets/fx-runtime/`，已在 `pubspec.yaml` 注册，默认通过 Flutter `rootBundle` 离线加载，无需配置外部目录。
+本次根据剧情变量表补充 `avg_036_daoguang_01`、`avg_042_fire_01`、`avg_061_glow_01`、`avg_062_smoke_01`、`avg_072_speech` 和 `avg_079_daoguang01`；`avg_058_tyndall_01` 与 `avg_mohu_zhengyan_01` 仅包含当前管线尚未支持的自定义/后处理材质，因此不生成不可播放的空描述。
 
 `tool/avg_fx_extract.py` 将 ArkUnpacker 的 `TT_*.ab.json` 转换为版本 1 描述，保留来源 SHA-256、独立渲染组件、父级二维变换、材质颜色、发射速率、随机寿命/速度/尺寸、Hermite 曲线、颜色渐变和网格翻页。转换器和模拟测试使用合成数据；打包加载测试直接读取仓库内的两组资源，不要求安装游戏。
+`fx.json` 保留解包出的 Transform 投影坐标；运行时仅将粒子速度、粒子尺寸和粒子运动参数按 100 像素/单位换算，网格位置与尺寸沿用导出坐标。发射器绘制顺序使用解包出的 `sorting`。
 
 ```sh
 uv run --no-project python tool/avg_fx_extract.py .temp/unpacked-fire-smoke assets/fx-runtime

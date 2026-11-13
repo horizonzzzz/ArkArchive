@@ -85,6 +85,12 @@ flutter:
     - assets/characters/details/
     - assets/fx-runtime/avg_fire_01/
     - assets/fx-runtime/avg_048_smoke_01/
+    - assets/fx-runtime/avg_042_fire_01/
+    - assets/fx-runtime/avg_036_daoguang_01/
+    - assets/fx-runtime/avg_061_glow_01/
+    - assets/fx-runtime/avg_062_smoke_01/
+    - assets/fx-runtime/avg_072_speech/
+    - assets/fx-runtime/avg_079_daoguang01/
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
   shaders:

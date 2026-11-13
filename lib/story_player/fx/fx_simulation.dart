@@ -149,11 +149,13 @@ class FxEmitterSim {
 }
 
 class FxSimulation {
-  FxSimulation(this.asset, {int seed = 0}) {
+  FxSimulation(FxAsset asset, {int seed = 0, bool? loop})
+      : asset = asset,
+        _loop = loop ?? asset.loop {
     for (final spec in asset.emitters) {
       final emitter = FxEmitterSim(spec, seed + emitters.length * 7919);
       emitters.add(emitter);
-      if (spec.prewarm && spec.loop) {
+      if (spec.prewarm && _loop) {
         for (var t = 0.0; t < math.min(spec.duration, 10); t += 1 / 60) {
           emitter.advance(1 / 60);
         }
@@ -161,10 +163,11 @@ class FxSimulation {
     }
   }
   final FxAsset asset;
+  final bool _loop;
   final List<FxEmitterSim> emitters = [];
   double elapsed = 0;
   bool get active =>
-      asset.loop ||
+      _loop ||
       elapsed < asset.duration ||
       emitters.any((e) => e.particles.isNotEmpty);
 
@@ -175,7 +178,7 @@ class FxSimulation {
     while (remaining > 1e-8) {
       final step = math.min(remaining, 1 / 60);
       for (final e in emitters) {
-        e.advance(step, emit: asset.loop || elapsed < asset.duration);
+        e.advance(step, emit: _loop || elapsed < asset.duration);
       }
       elapsed += step;
       remaining -= step;

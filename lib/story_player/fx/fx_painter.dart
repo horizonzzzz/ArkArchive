@@ -18,7 +18,9 @@ void paintEffects(
     canvas.translate(640 + effect.offset.dx, 360 - effect.offset.dy);
     canvas.rotate(-effect.rotation);
     canvas.scale(effect.scale.dx, effect.scale.dy);
-    for (final emitter in effect.simulation.emitters) {
+    final emitters = effect.simulation.emitters.toList()
+      ..sort((a, b) => a.spec.sorting.compareTo(b.spec.sorting));
+    for (final emitter in emitters) {
       final spec = emitter.spec;
       final image = textures[effect.simulation.asset.textureUri(spec.texture)];
       if (image == null) continue;

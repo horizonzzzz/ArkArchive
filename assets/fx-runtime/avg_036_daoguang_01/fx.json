@@ -1,0 +1,440 @@
+{
+  "version": 1,
+  "name": "avg_036_daoguang_01",
+  "duration": 3.0,
+  "isLoop": true,
+  "emitters": [
+    {
+      "name": "lizi_huan",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": -3.141592653589793,
+      "material": {
+        "main": "AVG_trail_16.png",
+        "tint": [
+          0.5588235259056091,
+          0.5588235259056091,
+          0.5588235259056091,
+          0.501960813999176
+        ],
+        "mainColor": [
+          1.0,
+          1.0,
+          1.0,
+          0.5686274766921997
+        ],
+        "uvScroll": [
+          0.20000000298023224,
+          0.0
+        ],
+        "srcBlend": 5.0,
+        "dstBlend": 10.0
+      },
+      "sorting": 0,
+      "loop": false,
+      "prewarm": false,
+      "duration": 1.0,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 8.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "lifetime": {
+        "state": 3,
+        "scalar": 0.4000000059604645,
+        "min": 0.20000000298023224,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 3,
+        "scalar": 3.0,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 22.0,
+        "min": 7.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 22.0,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 3,
+        "scalar": 6.283185005187988,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": {
+        "state": 1,
+        "scalar": 1.0,
+        "min": 1.0,
+        "curve": [
+          [
+            0.0,
+            0.2284393310546875,
+            0.0,
+            1.37317955493927
+          ],
+          [
+            0.3206877112388611,
+            0.6688011288642883,
+            1.37317955493927,
+            0.4875502288341522
+          ],
+          [
+            1.0,
+            1.0,
+            0.4875502288341522,
+            1.0
+          ]
+        ],
+        "curveMin": []
+      },
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.29411764705882354,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false
+    },
+    {
+      "name": "suduxina",
+      "kind": "particle",
+      "position": [
+        -1.1920928955078125e-07,
+        0.7410049438476562
+      ],
+      "scale": [
+        3.8540053367614746,
+        3.8539998531341553
+      ],
+      "rotation": -3.141592653589793,
+      "material": {
+        "main": "AVG_trail_05.png",
+        "tint": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "mainColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 0.0
+      },
+      "sorting": 1,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.8999999761581421,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 20.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "lifetime": {
+        "state": 3,
+        "scalar": 0.20000000298023224,
+        "min": 0.15000000596046448,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 3,
+        "scalar": 8.0,
+        "min": 3.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 0.30000001192092896,
+        "min": 0.10000000149011612,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 0.30000001192092896,
+        "min": 0.10000000149011612,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 3,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.20000000298023224,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 8,
+        "radius": 0.009999999776482582,
+        "thickness": 1.0,
+        "angle": 90.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.3499961852445258,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.6294193942168307,
+          1.0,
+          1.0,
+          1.0,
+          0.927596390247345
+        ],
+        [
+          0.7911802853437094,
+          1.0,
+          1.0,
+          1.0,
+          0.447986900806427
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": true
+    }
+  ],
+  "sourceSha256": "8c698c376b317aee3d0b62a014d6521127b2e8cddbcfc82e99d7de1474c21d10"
+}

@@ -36,6 +36,7 @@ class FxEmitterSpec {
   FxEmitterSpec(Map<String, dynamic> j)
     : name = j['name'] as String,
       mesh = j['kind'] == 'mesh',
+      sorting = fxNumber(j['sorting']).toInt(),
       position = fxOffset(j['position']),
       scale = fxOffset(j['scale'], const Offset(1, 1)),
       rotation = fxNumber(j['rotation']),
@@ -66,7 +67,11 @@ class FxEmitterSpec {
       throw const FormatException('特效贴图文件名无效');
     }
     if (!const [1, 5].contains(fxNumber(material['srcBlend'], 5).toInt()) ||
-        !const [1, 10].contains(fxNumber(material['dstBlend'], 10).toInt())) {
+        !const [
+          0,
+          1,
+          10,
+        ].contains(fxNumber(material['dstBlend'], 10).toInt())) {
       throw const FormatException('不支持的特效材质混合方式');
     }
     final tiles = uv['tiles'] as List? ?? const [1, 1];
@@ -80,6 +85,7 @@ class FxEmitterSpec {
   final bool mesh, loop, prewarm, stretch;
   final Offset position, scale;
   final double rotation, duration;
+  final int sorting;
   final int maxParticles;
   final Map<String, dynamic> material, shape, uv, velocity;
   final FxRange rate,
@@ -96,7 +102,9 @@ class FxEmitterSpec {
   String get texture => material['main'] as String;
   Color get tint => fxColor(material['tint']);
   Color get mainColor => fxColor(material['mainColor']);
-  bool get additive => fxNumber(material['dstBlend'], 10) == 1;
+  bool get additive =>
+      fxNumber(material['srcBlend'], 5) == 1 &&
+      fxNumber(material['dstBlend'], 10) == 1;
 }
 
 /// Unity MinMaxCurve：0 常量、1 曲线、2 双曲线、3 双常量。

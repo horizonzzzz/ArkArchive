@@ -41,9 +41,22 @@ Map<String, dynamic> fixture({bool loop = true, int max = 20}) => {
   ],
 };
 
+
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+
+  test('FxSimulation 可将循环资源覆盖为一次性播放', () {
+    final simulation = FxSimulation(
+      FxAsset.parse(fixture()),
+      loop: false,
+    );
+    for (var i = 0; i < 4; i++) {
+      simulation.advance(.25);
+    }
+    expect(simulation.active, isFalse);
+  });
   test('默认随应用打包的火焰和烟雾可离线加载并解码全部贴图', () async {
     final store = AssetStore(
       client: MockClient((request) async {
@@ -53,7 +66,16 @@ void main() {
     addTearDown(store.close);
     final loader = FxLoader(storyFxRoot, store);
     expect(loader.root.scheme, 'asset');
-    for (final name in ['avg_fire_01', 'avg_048_smoke_01']) {
+    for (final name in [
+      'avg_fire_01',
+      'avg_048_smoke_01',
+      'avg_042_fire_01',
+      'avg_036_daoguang_01',
+      'avg_061_glow_01',
+      'avg_062_smoke_01',
+      'avg_072_speech',
+      'avg_079_daoguang01',
+    ]) {
       final asset = await loader.load(name);
       expect(asset.name, name);
       expect(asset.emitters, isNotEmpty);
@@ -99,6 +121,19 @@ void main() {
     }
     expect(sim.active, isFalse);
     expect(sim.emitters.single.particles, isEmpty);
+  });
+
+  test('保留导出位置并按 100 像素每单位换算粒子运动，并保留 sorting', () {
+    final raw = fixture(max: 1);
+    final emitter = (raw['emitters'] as List).single as Map<String, dynamic>;
+    emitter
+      ..['position'] = [1, 2]
+      ..['sorting'] = 7;
+    final asset = FxAsset.parse(raw);
+    expect(asset.emitters.single.sorting, 7);
+    final sim = FxSimulation(asset)..advance(.1);
+    expect(sim.emitters.single.particles.single.position.dx, closeTo(1, 1e-6));
+    expect(sim.emitters.single.particles.single.position.dy, greaterThan(2));
   });
 
   test('外部目录和变量解析拒绝目录穿越', () {
