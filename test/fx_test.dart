@@ -57,6 +57,27 @@ void main() {
     }
     expect(simulation.active, isFalse);
   });
+  test('seek 重建时不重播前景 Effect，并按目标时刻还原 bgeffect', () async {
+    final elapsed = Stopwatch()..start();
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[effect(name="test_fx")]
+[bgeffect(name="test_fx")]
+第一句
+[bgeffect]
+第二句
+'''),
+      effectAssets: {'test_fx': FxAsset.parse(fixture())},
+      elapsed: () => elapsed.elapsed,
+    );
+    addTearDown(engine.dispose);
+
+    expect(await engine.seekToStop(engine.stopPoints.first), isTrue);
+    expect(engine.state.effects.map((effect) => effect.group), ['bgeffect']);
+    expect(await engine.seekToStop(engine.stopPoints.last), isTrue);
+    expect(engine.state.effects, isEmpty);
+  });
+
   test('默认随应用打包的火焰和烟雾可离线加载并解码全部贴图', () async {
     final store = AssetStore(
       client: MockClient((request) async {

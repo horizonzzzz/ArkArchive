@@ -863,6 +863,7 @@ class StoryEngine extends ChangeNotifier {
     final seconds = scaled(c.number('fadetime', .3));
     final fades = c.flag('fade');
     final key = 'fx:$group:$layer';
+    if (_rebuilding && group == 'effect') return;
     if (name.isEmpty) {
       final clearing = state.effects
           .where(
