@@ -68,6 +68,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   late bool _archiveMode;
   String? _archiveNotice;
   Future<void>? _seekQueue;
+  int _seekRevision = 0;
   int _savedRevision = 0;
   bool _scrubbing = false;
   double? _scrubPosition;
@@ -80,8 +81,6 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   bool _progressHovered = false, _previewVisible = false;
   StoryStopPoint? _displayedPreviewStop;
   Timer? _previewDebounce, _previewShowTimer, _previewDismissTimer;
-  Timer? _thumbSnapTimer;
-  bool _thumbSnapping = false;
   StoryStopPoint? _previewStop;
   double? _scrubDragOriginX, _scrubDragOriginY;
   double _scrubStartPosition = 0;
@@ -318,6 +317,9 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
 
   void _progressChanged() {
     unawaited(_saveProgress());
+    if (!_scrubbing && !_seekFlash && engine.cursor != _lastCursor) {
+      _scrubPosition = null;
+    }
     // 开始播放的头几秒展示进度条（功能可发现性），随后自动让位给剧情。
     if (_lastCursor == 0 && engine.cursor > 0 && _progressRevealed) {
       _scheduleProgressHide();
@@ -361,7 +363,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   StoryStopPoint? _nearestStop(double position) {
     final points = engine.stopPoints;
     if (points.isEmpty) return null;
-    final target = position * engine.script.commands.length;
+    final target = position * engine.script.commands.length - 1;
     var low = 0, high = points.length;
     while (low < high) {
       final middle = (low + high) >> 1;
@@ -380,7 +382,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   }
 
   /// [seekToPointer] 仅为单击跳转服务：按下点即映射为位置；
-  /// 按住拖动（粗扫）走增量映射——起始比例 + Δx，拖回原位即可取消（§0/S4）。
+  /// 按住拖动（粗扫）走增量映射——起始比例 + Δx，拖回原位即可恢复原位置。
   void _startScrub(
     DragStartDetails details,
     double width, {
@@ -388,8 +390,6 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   }) {
     if (_progressDisabled) return;
 
-    _thumbSnapTimer?.cancel();
-    _thumbSnapping = false;
     _previewDebounce?.cancel();
     _previewShowTimer?.cancel();
     _previewDismissTimer?.cancel();
@@ -399,7 +399,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     _finePull = 0;
     _scrubDragOriginX = details.localPosition.dx;
     _scrubDragOriginY = details.localPosition.dy;
-    _scrubStartPosition = engine.progress;
+    _scrubStartPosition = _scrubPosition ?? engine.progress;
     _previewStop = null;
     _displayedPreviewStop = null;
     _previewVisible = false;
@@ -496,57 +496,44 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     });
   }
 
-  void _finishScrub({bool allowSmallSeek = false}) {
+  void _finishScrub() {
     if (!_scrubbing) return;
     final position = _scrubPosition ?? engine.progress;
-    final moved = (position - _scrubStartPosition).abs();
-    final shouldSeek = allowSmallSeek || moved >= .015;
-
-    final target = shouldSeek ? _nearestStop(position) : null;
-
-    final snapPosition = target == null
-        ? _scrubStartPosition
-        : ((target.commandIndex + 1) / engine.script.commands.length).clamp(
-            0.0,
-            1.0,
-          );
+    final target = _nearestStop(position);
     setState(() {
       _scrubbing = false;
       _fineScrubbing = false;
       _finePull = 0;
       _scrubDragOriginX = null;
       _scrubDragOriginY = null;
-      _scrubPosition = snapPosition;
-      _thumbSnapping = true;
+      if (target == null) _scrubPosition = null;
     });
     _dismissPreview();
-    _thumbSnapTimer?.cancel();
-    _thumbSnapTimer = Timer(const Duration(milliseconds: 300), () {
-      if (!mounted) return;
-      setState(() {
-        if (target == null) _scrubPosition = null;
-        _thumbSnapping = false;
-      });
-    });
-    if (target == null) {
+    if (target == null ||
+        (!_seekFlash && target.commandIndex == _currentStop?.commandIndex)) {
       _revealProgress();
       return;
     }
-    unawaited(_seekWithFlash(target.commandIndex));
+    unawaited(_seekWithFlash(target.commandIndex, preserveScrubPosition: true));
   }
 
   /// 统一的 seek 通道：黑闪 100ms 入 → 确定性重放 → 黑闪 180ms 出（§5-A8）。
   /// 进度条松手、单击轨道与 Log 行跳转共用。
-  Future<void> _seekWithFlash(int commandIndex) {
+  Future<void> _seekWithFlash(
+    int commandIndex, {
+    bool preserveScrubPosition = false,
+  }) {
+    final revision = ++_seekRevision;
+    if (!preserveScrubPosition && !_scrubbing) _scrubPosition = null;
     final previous = _seekQueue;
     final operation = previous == null
-        ? _performSeekWithFlash(commandIndex)
-        : previous.then((_) => _performSeekWithFlash(commandIndex));
+        ? _performSeekWithFlash(commandIndex, revision)
+        : previous.then((_) => _performSeekWithFlash(commandIndex, revision));
     _seekQueue = operation;
     return operation;
   }
 
-  Future<void> _performSeekWithFlash(int commandIndex) async {
+  Future<void> _performSeekWithFlash(int commandIndex, int revision) async {
     if (!mounted) return;
 
     setState(() => _seekFlash = true);
@@ -560,9 +547,9 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
           .showSnackBar(const SnackBar(content: Text('该处剧情暂不支持跳转')));
     }
     setState(() => _seekFlash = false);
-    // 快速连拖时旧回调不得清掉进行中的新拖动位置。
-    if (!mounted || _scrubbing) return;
-    setState(() => _scrubPosition = null);
+    // 快速连拖时旧回调不得清掉新的拖动位置。
+    if (_scrubbing || revision != _seekRevision) return;
+    if (!ok) setState(() => _scrubPosition = null);
     _revealProgress();
   }
 
@@ -735,7 +722,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                         ? null
                         : (details) {
                             // 隐藏态轻点只呼出不跳转（防误触）；
-                            // 显示态轻点才吸附最近停顿点跳转。
+                            // 显示态轻点才跳转到附近的停顿点。
                             if (!_progressActive) {
                               _revealProgress();
                               return;
@@ -747,7 +734,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                               constraints.maxWidth,
                               seekToPointer: true,
                             );
-                            _finishScrub(allowSmallSeek: true);
+                            _finishScrub();
                           },
                     onPanStart: disabled
                         ? null
@@ -801,35 +788,20 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                                   final thumbRadius = thickness <= 10
                                       ? 4 + (thickness - 4) * 2 / 3
                                       : 8 + (thickness - 10) / 6;
-                                  return TweenAnimationBuilder<double>(
-                                    tween: Tween<double>(end: position),
-                                    duration: Duration(
-                                      milliseconds: _thumbSnapping ? 300 : 0,
+                                  return CustomPaint(
+                                    painter: _ProgressTrackPainter(
+                                      value: position,
+                                      disabled: disabled,
+                                      thickness: thickness,
+                                      thumbRadius: thumbRadius,
+                                      // 精细模式刻度点（S2）：随展开淡入。
+                                      tickAlpha: _fineScrubbing ? fineEased : 0,
+                                      tickFractions: [
+                                        for (final stop in stopPoints)
+                                          (stop.commandIndex + 1) /
+                                              engine.script.commands.length,
+                                      ],
                                     ),
-                                    curve: _thumbSnapping
-                                        ? Curves.easeOutBack
-                                        : Curves.linear,
-                                    builder: (context, animatedPosition, _) =>
-                                        CustomPaint(
-                                          painter: _ProgressTrackPainter(
-                                            value: animatedPosition,
-                                            disabled: disabled,
-                                            thickness: thickness,
-                                            thumbRadius: thumbRadius,
-                                            // 精细模式刻度点（S2）：随展开淡入。
-                                            tickAlpha: _fineScrubbing
-                                                ? fineEased
-                                                : 0,
-                                            tickFractions: [
-                                              for (final stop in stopPoints)
-                                                (stop.commandIndex + 1) /
-                                                    engine
-                                                        .script
-                                                        .commands
-                                                        .length,
-                                            ],
-                                          ),
-                                        ),
                                   );
                                 },
                               ),
@@ -1537,7 +1509,6 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   @override
   void dispose() {
     _previewDebounce?.cancel();
-    _thumbSnapTimer?.cancel();
     _previewShowTimer?.cancel();
     _previewDismissTimer?.cancel();
     _progressHideTimer?.cancel();

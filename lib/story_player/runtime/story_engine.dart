@@ -24,7 +24,7 @@ class StoryPreviewCharacter {
   final double brightness;
 }
 
-/// 可供进度条吸附的剧情停顿点。commandIndex 是脚本命令索引，而不是行号。
+/// 进度条可跳转的剧情停顿点。commandIndex 是脚本命令索引，而不是行号。
 class StoryStopPoint {
   const StoryStopPoint({
     required this.commandIndex,
