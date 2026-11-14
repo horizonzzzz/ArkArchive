@@ -85,6 +85,17 @@ class StagePainter extends CustomPainter {
       }
     });
     canvas.restore();
+    _withFocus(
+      canvas,
+      'bg',
+      (c) => paintEffects(
+        c,
+        state.effects,
+        textures,
+        'bgeffect',
+        afterImages: true,
+      ),
+    );
     _withFocus(canvas, 'cg', (c) => _avgDisplays(c, 'cgover'));
     for (final window in state.cutins.values) {
       _cutinWindow(c: canvas, window: window);

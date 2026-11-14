@@ -10,10 +10,19 @@ void paintEffects(
   Canvas canvas,
   List<StageEffect> effects,
   Map<Uri, Image> textures,
-  String group,
-) {
-  final ordered = effects.where((e) => e.group == group).toList()
-    ..sort((a, b) => a.layer.compareTo(b.layer));
+  String group, {
+  bool afterImages = false,
+}) {
+  final ordered =
+      effects
+          .where(
+            (e) =>
+                e.group == group &&
+                (group != 'bgeffect' ||
+                    e.simulation.asset.drawAfterImages == afterImages),
+          )
+          .toList()
+        ..sort((a, b) => a.layer.compareTo(b.layer));
   for (final effect in ordered) {
     canvas.save();
     canvas.translate(640 + effect.offset.dx, 360 - effect.offset.dy);
@@ -74,25 +83,85 @@ void paintEffects(
         canvas.restore();
         continue;
       }
+      final animation = spec.animation?.at(effect.simulation.elapsed);
+      final basis = animation == null
+          ? spec.transform3D
+          : [
+              animation.sublist(0, 3),
+              animation.sublist(3, 6),
+              animation.sublist(6, 9),
+            ];
       final tiles = spec.uv['tiles'] as List? ?? const [1, 1];
       final columns = (tiles[0] as num).toInt(),
           rows = (tiles[1] as num).toInt();
+      final materialFrames = spec.material['frames'] as Map?;
+      var materialRect = Rect.fromLTWH(
+        0,
+        0,
+        image.width.toDouble(),
+        image.height.toDouble(),
+      );
+      if (materialFrames != null) {
+        final count = fxNumber(materialFrames['count']).toInt();
+        final frameColumns = fxNumber(materialFrames['columns']).toInt();
+        final frame =
+            (effect.simulation.elapsed * fxNumber(materialFrames['fps']))
+                .floor()
+                .clamp(0, count - 1);
+        final width = fxNumber(materialFrames['width']);
+        final height = fxNumber(materialFrames['height']);
+        materialRect = Rect.fromLTWH(
+          (frame % frameColumns) * width,
+          (frame ~/ frameColumns) * height,
+          width,
+          height,
+        );
+      }
       for (final p in emitter.particles) {
         final progress = p.progress;
         final size = spec.sizeOverLife?.at(progress, p.seed) ?? 1;
         final sizeY = spec.sizeYOverLife?.at(progress, p.seed) ?? size;
         if (size <= 0) continue;
-        var color = spec.tint;
+        var color = animation == null
+            ? spec.tint
+            : fxColor(animation.sublist(9));
         if (spec.startColor != null) {
           color = _multiply(color, spec.startColor!.at(p.seed));
         }
         if (spec.colorOverLife != null) {
           color = _multiply(color, spec.colorOverLife!.at(progress));
         }
-        paint.colorFilter = ColorFilter.mode(
-          color.withValues(alpha: color.a * effect.alpha),
-          BlendMode.modulate,
-        );
+        final multiplier = fxNumber(
+          spec.material['colorMultiplier'],
+          1,
+        ).clamp(0, 16);
+        paint.colorFilter = multiplier == 1
+            ? ColorFilter.mode(
+                color.withValues(alpha: color.a * effect.alpha),
+                BlendMode.modulate,
+              )
+            : ColorFilter.matrix([
+                color.r * multiplier,
+                0,
+                0,
+                0,
+                0,
+                0,
+                color.g * multiplier,
+                0,
+                0,
+                0,
+                0,
+                0,
+                color.b * multiplier,
+                0,
+                0,
+                0,
+                0,
+                0,
+                color.a * multiplier * effect.alpha,
+                0,
+              ]);
         var frame = 0;
         if (spec.uv['enabled'] == true) {
           final phase = fxNumber(spec.uv['timeMode']) == 1
@@ -103,13 +172,12 @@ void paintEffects(
           frame = ((phase + start) * columns * rows).floor() % (columns * rows);
         }
         final src = Rect.fromLTWH(
-          (frame % columns) * image.width / columns,
-          (frame ~/ columns) * image.height / rows,
-          image.width / columns,
-          image.height / rows,
+          materialRect.left + (frame % columns) * materialRect.width / columns,
+          materialRect.top + (frame ~/ columns) * materialRect.height / rows,
+          materialRect.width / columns,
+          materialRect.height / rows,
         );
-        if (spec.transform3D != null) {
-          final basis = spec.transform3D!;
+        if (basis != null) {
           Offset project(Offset p) => _project(effect, [
             for (var j = 0; j < 3; j++)
               basis[0][j] + basis[1][j] * p.dx + basis[2][j] * p.dy,

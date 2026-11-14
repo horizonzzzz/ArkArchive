@@ -150,6 +150,22 @@ void main() {
       final asset = await loader.load(name);
       expect(asset.name, name);
       expect(asset.emitters, isNotEmpty);
+      if (name == 'avg_079_daoguang01') {
+        final blades = asset.emitters.where((e) => e.geometry != null).toList();
+        expect(blades, hasLength(6));
+        for (final blade in blades) {
+          expect(blade.material['frames']['fps'], 60);
+          expect(blade.geometry!.positions, isNotEmpty);
+        }
+      }
+      if (name == 'avg_072_speech') {
+        expect(asset.drawAfterImages, isTrue);
+        final ring = asset.emitters.firstWhere((e) => e.name == '2');
+        final animation = ring.animation!;
+        expect(animation.at(0)[12], 0);
+        expect(animation.at(3)[12], greaterThan(0));
+        expect(animation.at(12)[12], 0);
+      }
       for (final texture in asset.textures) {
         final codec = await ui.instantiateImageCodec(
           await loader.bytes(asset.textureUri(texture)),
@@ -164,6 +180,22 @@ void main() {
         }
       }
     }
+  });
+  test('发射器动画按时间插值并在结束后保持最后一帧', () {
+    final animation = FxEmitterAnimation({
+      'fps': 2,
+      'frames': [List.filled(13, 0), List.filled(13, 1)],
+    });
+    expect(animation.at(0), everyElement(0));
+    expect(animation.at(.25), everyElement(.5));
+    expect(animation.at(10), everyElement(1));
+    expect(
+      () => FxEmitterAnimation({
+        'fps': 30,
+        'frames': [List.filled(12, 0)],
+      }),
+      throwsFormatException,
+    );
   });
   test('曲线保留 Hermite 切线，随机区间以固定种子插值', () {
     final curve = FxRange.parse({
@@ -334,6 +366,71 @@ void main() {
     expect(await pixels(), isNot(equals(before)));
     effect.alpha = 0;
     expect((await pixels()).every((b) => b == 0), isTrue);
+    texture.dispose();
+  });
+
+  test('粒子材质图集保留贴图网格并按时间切帧和调整颜色', () async {
+    final raw = fixture(loop: false);
+    final spec = (raw['emitters'] as List).single as Map;
+    spec['rate'] = {'scalar': 0};
+    spec['bursts'] = [
+      {
+        'time': 0,
+        'count': {'scalar': 1},
+      },
+    ];
+    spec['speed'] = {'scalar': 0};
+    spec['lifetime'] = {'scalar': 1};
+    spec['uv'] = {
+      'enabled': true,
+      'tiles': [2, 1],
+      'start': {'scalar': .5},
+    };
+    spec['material'] = {
+      'main': 'white.png',
+      'tint': [.25, .5, 1, 1],
+      'colorMultiplier': 2,
+      'frames': {'count': 2, 'columns': 2, 'width': 8, 'height': 8, 'fps': 10},
+    };
+    final asset = FxAsset.parse(raw);
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    for (final (x, color) in [
+      (0.0, const ui.Color(0xffff0000)),
+      (4.0, const ui.Color(0x80808080)),
+      (8.0, const ui.Color(0xff0000ff)),
+      (12.0, const ui.Color(0xff00ff00)),
+    ]) {
+      canvas.drawRect(ui.Rect.fromLTWH(x, 0, 4, 8), ui.Paint()..color = color);
+    }
+    final picture = recorder.endRecording();
+    final texture = await picture.toImage(16, 8);
+    picture.dispose();
+    final sim = FxSimulation(asset)..advance(.05);
+    final effect = StageEffect(sim, group: 'bgeffect', layer: 0);
+    Future<List<int>> center() async {
+      final rec = ui.PictureRecorder();
+      paintEffects(
+        ui.Canvas(rec),
+        [effect],
+        {asset.textureUri('white.png'): texture},
+        'bgeffect',
+      );
+      final p = rec.endRecording();
+      final image = await p.toImage(1280, 720);
+      final bytes = (await image.toByteData())!.buffer.asUint8List();
+      final offset = (360 * 1280 + 640) * 4;
+      final pixel = bytes.sublist(offset, offset + 4);
+      image.dispose();
+      p.dispose();
+      return pixel;
+    }
+
+    expect(await center(), [64, 128, 255, 255]);
+    sim.advance(.1);
+    expect(await center(), [0, 255, 0, 255]);
+    effect.alpha = 0;
+    expect(await center(), [0, 0, 0, 0]);
     texture.dispose();
   });
 

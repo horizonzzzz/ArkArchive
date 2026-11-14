@@ -3,7 +3,14 @@ import 'dart:ui';
 
 /// `tool/avg_fx_extract.py` 生成的版本 1 描述；贴图相对资源目录 URI 加载。
 class FxAsset {
-  FxAsset(this.name, this.base, this.duration, this.loop, this.emitters);
+  FxAsset(
+    this.name,
+    this.base,
+    this.duration,
+    this.loop,
+    this.emitters, {
+    this.drawAfterImages = false,
+  });
 
   factory FxAsset.parse(Map<String, dynamic> json, {Uri? base}) {
     if (json['version'] != 1) throw const FormatException('不支持的特效版本');
@@ -20,6 +27,7 @@ class FxAsset {
       fxNumber(json['duration'], 5).clamp(.01, 120),
       json['isLoop'] == true,
       emitters,
+      drawAfterImages: json['drawAfterImages'] == true,
     );
   }
 
@@ -27,6 +35,7 @@ class FxAsset {
   final Uri base;
   final double duration;
   final bool loop;
+  final bool drawAfterImages;
   final List<FxEmitterSpec> emitters;
   Set<String> get textures => {for (final e in emitters) e.texture};
   Uri textureUri(String file) => base.resolve(file);
@@ -40,6 +49,9 @@ class FxEmitterSpec {
       transform3D = (j['transform3D'] as List?)
           ?.map((p) => [for (final v in p as List) (v as num).toDouble()])
           .toList(),
+      animation = j['animation'] == null
+          ? null
+          : FxEmitterAnimation(j['animation'] as Map),
       alignment = fxNumber(j['alignment']).toInt(),
       pivot = fxOffset(j['pivot']),
       lengthScale = fxNumber(j['lengthScale'], 2),
@@ -125,6 +137,7 @@ class FxEmitterSpec {
   }
 
   final List<List<double>>? transform3D;
+  final FxEmitterAnimation? animation;
   final int alignment;
   final Offset pivot;
   final double lengthScale;
@@ -154,6 +167,41 @@ class FxEmitterSpec {
   bool get additive =>
       const [1.0, 5.0].contains(fxNumber(material['srcBlend'], 5)) &&
       fxNumber(material['dstBlend'], 10) == 1;
+}
+
+class FxEmitterAnimation {
+  FxEmitterAnimation(Map json)
+    : fps = fxNumber(json['fps']),
+      frames = [
+        for (final frame in json['frames'] as List)
+          [for (final value in frame as List) (value as num).toDouble()],
+      ] {
+    if (!fps.isFinite ||
+        fps <= 0 ||
+        fps > 120 ||
+        frames.isEmpty ||
+        frames.length > 1024 ||
+        frames.any(
+          (frame) =>
+              frame.length != 13 || frame.any((value) => !value.isFinite),
+        )) {
+      throw const FormatException('特效动画帧无效');
+    }
+  }
+
+  final double fps;
+  final List<List<double>> frames;
+
+  List<double> at(double elapsed) {
+    final frame = (elapsed * fps).clamp(0, frames.length - 1).toDouble();
+    final first = frame.floor();
+    final second = math.min(first + 1, frames.length - 1);
+    final fraction = frame - first;
+    return [
+      for (var i = 0; i < 13; i++)
+        frames[first][i] + (frames[second][i] - frames[first][i]) * fraction,
+    ];
+  }
 }
 
 class FxMesh {

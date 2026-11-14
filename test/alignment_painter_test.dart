@@ -2,6 +2,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:arknights_story_player/story_player/data/media_catalog.dart';
+import 'package:arknights_story_player/story_player/fx/fx_asset.dart';
+import 'package:arknights_story_player/story_player/fx/fx_simulation.dart';
 import 'package:arknights_story_player/story_player/stage_state.dart';
 import 'package:arknights_story_player/story_player/script.dart';
 import 'package:arknights_story_player/story_player/ui/stage_painter.dart';
@@ -53,6 +55,43 @@ void main() {
     final offset = (y * 1280 + x) * 4;
     return List.generate(4, (i) => bytes.getUint8(offset + i));
   }
+
+  test('背景特效按资源设置绘制在 CG 前面或后面', () async {
+    final red = await solid(const ui.Color(0xffff0000));
+    final green = await solid(const ui.Color(0xff00ff00));
+    Future<List<int>> sample({required bool afterImages}) async {
+      final asset = FxAsset.parse({
+        'version': 1,
+        'name': 'layer_test',
+        'duration': 1,
+        'isLoop': true,
+        if (afterImages) 'drawAfterImages': true,
+        'emitters': [
+          {
+            'name': 'quad',
+            'kind': 'mesh',
+            'scale': [100, 100],
+            'material': {'main': 'red.png', 'srcBlend': 5, 'dstBlend': 10},
+          },
+        ],
+      }, base: Uri.parse('https://example.test/fx/'));
+      final state = StageState()
+        ..images.add(StageImage('color')..fit = 'fill')
+        ..effects.add(
+          StageEffect(FxSimulation(asset), group: 'bgeffect', layer: 0),
+        );
+      return pixel(
+        state,
+        textures: {
+          catalog.image('color'): green,
+          asset.textureUri('red.png'): red,
+        },
+      );
+    }
+
+    expect(await sample(afterImages: false), [0, 255, 0, 255]);
+    expect(await sample(afterImages: true), [255, 0, 0, 255]);
+  });
 
   for (final focus in [false, true]) {
     test(

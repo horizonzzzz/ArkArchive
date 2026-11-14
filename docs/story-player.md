@@ -93,7 +93,7 @@ flutter run -d windows
 
 每组目录结构为 `assets/fx-runtime/<特效小写名>/fx.json` 和同目录 PNG；新增目录时须在 `pubspec.yaml` 分别注册，Flutter 不递归收录所有子目录。开发时可用 `--dart-define=STORY_FX_ROOT=...` 替换默认资源根目录：桌面/移动端接受绝对本地目录或 `file:` URI，Web 可使用 HTTP(S) 地址，服务端需允许跨域。外部覆盖资源未纳入“完整下载”的依赖与完成状态判断；默认打包资源不占用剧情缓存，删除剧情缓存不会删除它们。资源缺失时记录警告并继续对白。
 
-变量按 `story_variables.json` 解析，例如 TL-10「活着的重量」行动后使用 `$eb_smoke_01 → avg_048_smoke_01`（layer 1）及 `$eb_burn → avg_fire_01`（layer 2）。背景特效在背景之后、CG 之前绘制；前景特效在人物之后、遮罩之前绘制，各组内按 layer 从低到高排列。同组同层的新 `bgeffect` 替换旧实例；一次性 `effect` 连续创建独立实例，保留同层刀光的叠加，淡入/淡出按实例调度；无名称且指定 layer 时清除此层，空指令清除该组全部层。`fade=true` 配合 `fadetime` 淡入/淡出，`block=true` 等待结束；`x/y` 使用舞台中心原点、y 向上，三维网格和带 `transform3D` 的粒子按 Unity Z→X→Y 顺序应用 `roz/rox/roy` 再投影；旧描述继续用余弦缩放近似投影。
+变量按 `story_variables.json` 解析，例如 TL-10「活着的重量」行动后使用 `$eb_smoke_01 → avg_048_smoke_01`（layer 1）及 `$eb_burn → avg_fire_01`（layer 2）。背景特效默认在背景之后、CG 之前绘制；资源声明 `drawAfterImages: true` 时改为在 CG 之后绘制，用于太阳光晕等覆盖画面的效果。前景特效在人物之后、遮罩之前绘制，各绘制阶段按 layer 从低到高排列。同组同层的新 `bgeffect` 替换旧实例；一次性 `effect` 连续创建独立实例，保留同层刀光的叠加，淡入/淡出按实例调度；无名称且指定 layer 时清除此层，空指令清除该组全部层。`fade=true` 配合 `fadetime` 淡入/淡出，`block=true` 等待结束；`x/y` 使用舞台中心原点、y 向上，三维网格和带 `transform3D` 的粒子按 Unity Z→X→Y 顺序应用 `roz/rox/roy` 再投影；旧描述继续用余弦缩放近似投影。
 
 粒子共用引擎时钟，暂停时冻结；重播、跳转和断点重建创建新的实例，旧淡出不会移除新实例。重建还原特效是否存在，不追赶已跳过对白的历史粒子时间。Unity 的 prewarm 仅对声明预热的循环发射器执行，最多 10 秒；长帧最多追赶 250 毫秒，粒子数量按发射器上限限制。
 
@@ -106,5 +106,17 @@ uv run --no-project --with pillow python tool/avg_fx_extract.py .temp/unpacked-b
 ```
 
 动态验收以用户提供的 CF-9 录像 22:18–22:20 为参照，截取原片、提取脚本时间轴、固定随机种子，并用 Flutter 实际绘制出现、叠加、消散阶段的帧后并排播放。参考片与绘制结果保留在 `.temp/`，不能用非空图片或单张截图代替动态验收。当前主刀光的方向、刀芯和连续生成已经复现；火星分布、尺寸和亮度仍有偏差。三维发射形状、Noise、HDR 超亮叠加及未支持的 shader 仍需继续校准，不能宣称像素一致。新增效果须先确认其模块和材质是否受支持，再扩展通用转换与绘制能力。
+
+TL-10「活着的重量」行动后的 `$e_snakeslayer → avg_079_daoguang01` 已改用 `battle.ab` 中的同名预制体。六个核心刀光保留三维网格、顶点颜色和粒子生命周期，并将原材质的扭曲、溶解、自定义数据和颜色随时间的变化烘焙为 60fps 图集；其他粒子继续由现有模拟器驱动。`$eb_072cg_solarhalo → avg_072_speech` 保留圆环和星点粒子，并将 Animator 的位置、缩放和颜色轨道采样为 30fps 动画；含 UV 滚动的溶解材质使用 15fps 图集。动画和图集使用同一个特效时钟，暂停时冻结，重建时从新实例开始。两个资源均已随应用打包。
+
+太阳光晕的辅助 Quad 所用 `trail_34.png` 尚未能从原包导出，因此辅助光线暂缺；圆环主体的原始贴图已接入。太阳光晕粒子的面向相机缩放使用近似投影，刀光的亮度和细节与录像仍有偏差。验收时使用 TL-10 录像两段及 `.temp/` 中的连续帧和 Flutter 绘制结果，不能据此宣称逐像素一致。
+
+转换脚本接收已解析共享材质和贴图引用的中间目录；太阳光晕动画另需原始预制体的 typetree。中间目录保留在 `.temp/fx-stage/`，不参与运行时加载：
+
+```sh
+uv run tool/avg_fx_snake_bake.py .temp/fx-stage/avg_079_daoguang01 assets/fx-runtime/avg_079_daoguang01
+uv run --no-project python tool/avg_fx_solar_animation.py .temp/unpacked-missing/avg_072_speech/TT_avg_072_speech.ab.json assets/fx-runtime/avg_072_speech/fx.json
+uv run tool/avg_fx_solar_bake.py .temp/fx-stage/avg_072_speech assets/fx-runtime/avg_072_speech
+```
 
 按当前项目要求，运行时使用的派生 `fx.json` 和主贴图纳入 `assets/` 并随应用打包；原始 AssetBundle、完整 typetree、中间解包结果和验收截图继续保留在忽略的 `.temp/`。游戏素材的版权归属不因转换或打包而改变，也不自动适用项目代码许可证。
