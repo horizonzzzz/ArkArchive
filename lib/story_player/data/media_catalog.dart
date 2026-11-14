@@ -106,8 +106,9 @@ class MediaCatalog {
     if (path.startsWith('@')) return assetBase.resolve(path.substring(1));
     path = path.toLowerCase();
     if (!path.startsWith('sound_beta_2/')) return null;
+    final relative = path.substring('sound_beta_2/'.length);
     return assetBase.resolve(
-      'audio/${path.substring('sound_beta_2/'.length)}.mp3',
+      'audio/${relative.split('/').map(Uri.encodeComponent).join('/')}.mp3',
     );
   }
 

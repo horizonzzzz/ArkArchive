@@ -16,7 +16,7 @@
 
 `MediaCatalog` 通过共享缓存加载 `story_variables.json`、`assets/avg/character.json` 和 `assets/avg/background.json`。资源基础地址为 `https://torappu.prts.wiki/assets/`，背景在 `avg/background/`，CG 在 `avg/images/`；立绘按元数据拼接路径并逐段编码。切入图使用 `media.prts.wiki` 的文件名及 MD5 分桶规则，不能把所有图片统一拼成一个目录。
 
-音频支持 `$` 变量、大小写回退、完整 HTTP 地址和 `@` 资产路径；`Sound_Beta_2/` 映射为小写的 `assets/audio/` MP3 地址。新增指令或资源形式时，同时修改依赖扫描与运行时映射，检查变量解析、中文 URL、表情差分和前奏/循环体。
+音频支持 `$` 变量、大小写回退、完整 HTTP 地址和 `@` 资产路径；`Sound_Beta_2/` 映射为小写的 `assets/audio/` MP3 地址，路径须逐段编码，避免 `#retro` 等名称被解析为 URI 片段。新增指令或资源形式时，同时修改依赖扫描与运行时映射，检查变量解析、中文 URL、表情差分和前奏/循环体。
 
 ## 共享资源与独立剧情
 

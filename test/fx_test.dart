@@ -41,21 +41,71 @@ Map<String, dynamic> fixture({bool loop = true, int max = 20}) => {
   ],
 };
 
-
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-
   test('FxSimulation 可将循环资源覆盖为一次性播放', () {
-    final simulation = FxSimulation(
-      FxAsset.parse(fixture()),
-      loop: false,
-    );
+    final simulation = FxSimulation(FxAsset.parse(fixture()), loop: false);
     for (var i = 0; i < 4; i++) {
       simulation.advance(.25);
     }
     expect(simulation.active, isFalse);
+  });
+  test('瞬时发射在零时刻和重复时间各触发一次，停止发射后仍推进存活粒子', () {
+    final raw = fixture(loop: false);
+    final spec = (raw['emitters'] as List).single as Map;
+    spec['rate'] = {'scalar': 0};
+    spec['bursts'] = [
+      {
+        'time': 0,
+        'count': {'scalar': 2},
+        'cycles': 2,
+        'interval': .1,
+        'probability': 1,
+      },
+    ];
+    final sim = FxSimulation(FxAsset.parse(raw));
+    sim.advance(.05);
+    expect(sim.emitters.single.particles, hasLength(2));
+    sim.advance(.1);
+    expect(sim.emitters.single.particles, hasLength(4));
+    sim.advance(.05);
+    expect(sim.emitters.single.particles, hasLength(4));
+    for (var i = 0; i < 5; i++) {
+      sim.advance(.2);
+    }
+    expect(sim.active, isFalse);
+  });
+
+  testWidgets('同层连续 Effect 叠加且独立淡入，清层可清除全部实例', (tester) async {
+    final start = tester.binding.clock.now();
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[effect(name="test_fx", layer=1, fade=true, fadetime=.2)]
+[effect(name="test_fx", layer=1, fade=true, fadetime=.2)]
+第一句
+[effect(layer=1, fade=true, fadetime=.2, block=true)]
+第二句
+'''),
+      effectAssets: {'test_fx': FxAsset.parse(fixture())},
+      elapsed: () => tester.binding.clock.now().difference(start),
+    );
+    engine.start();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(engine.state.effects, hasLength(2));
+    for (final effect in engine.state.effects) {
+      expect(effect.alpha, greaterThan(0));
+      expect(effect.alpha, lessThan(1));
+    }
+    engine.advance();
+    engine.advance();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+    expect(engine.state.effects, isEmpty);
+    expect(engine.state.text, '第二句');
+    engine.dispose();
   });
   test('seek 重建时不重播前景 Effect，并按目标时刻还原 bgeffect', () async {
     final elapsed = Stopwatch()..start();
@@ -285,6 +335,83 @@ void main() {
     effect.alpha = 0;
     expect((await pixels()).every((b) => b == 0), isTrue);
     texture.dispose();
+  });
+
+  test('动画网格按图集切帧、三维投影并服从透明度', () async {
+    final raw = fixture(loop: false);
+    final spec = (raw['emitters'] as List).single as Map;
+    spec['kind'] = 'mesh';
+    spec['geometry'] = {
+      'positions': [
+        [-20, -20, 0],
+        [20, -20, 0],
+        [0, 20, 0],
+      ],
+      'uv': [
+        [0, 0],
+        [1, 0],
+        [.5, 1],
+      ],
+      'colors': [
+        [255, 255, 255, 255],
+        [255, 255, 255, 255],
+        [255, 255, 255, 255],
+      ],
+      'indices': [0, 1, 2],
+    };
+    spec['material'] = {
+      'main': 'white.png',
+      'frames': {'count': 2, 'columns': 2, 'width': 8, 'height': 8, 'fps': 10},
+    };
+    final asset = FxAsset.parse(raw);
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    canvas.drawRect(
+      const ui.Rect.fromLTWH(0, 0, 8, 8),
+      ui.Paint()..color = const ui.Color(0xffff0000),
+    );
+    canvas.drawRect(
+      const ui.Rect.fromLTWH(8, 0, 8, 8),
+      ui.Paint()..color = const ui.Color(0xff00ff00),
+    );
+    final picture = recorder.endRecording();
+    final texture = await picture.toImage(16, 8);
+    picture.dispose();
+    final sim = FxSimulation(asset);
+    final effect = StageEffect(
+      sim,
+      group: 'effect',
+      layer: 0,
+      rotation3D: const ui.Offset(.4, .6),
+    );
+    Future<List<int>> center() async {
+      final rec = ui.PictureRecorder();
+      paintEffects(
+        ui.Canvas(rec),
+        [effect],
+        {asset.textureUri('white.png'): texture},
+        'effect',
+      );
+      final p = rec.endRecording();
+      final image = await p.toImage(1280, 720);
+      final bytes = (await image.toByteData())!.buffer.asUint8List();
+      final pixel = bytes.sublist(
+        (360 * 1280 + 640) * 4,
+        (360 * 1280 + 640) * 4 + 4,
+      );
+      image.dispose();
+      p.dispose();
+      return pixel;
+    }
+
+    expect(await center(), [255, 0, 0, 255]);
+    sim.advance(.15);
+    expect(await center(), [0, 255, 0, 255]);
+    effect.alpha = 0;
+    expect(await center(), [0, 0, 0, 0]);
+    texture.dispose();
+    (spec['geometry'] as Map)['indices'] = [0, 1, 99];
+    expect(() => FxAsset.parse(raw), throwsFormatException);
   });
 
   test('HTTP 特效描述通过 AssetStore 加载', () async {

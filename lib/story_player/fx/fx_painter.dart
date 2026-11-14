@@ -1,10 +1,11 @@
 import 'dart:math' as math;
 import 'dart:ui';
+import 'dart:typed_data';
 
 import 'fx_asset.dart';
 import 'fx_simulation.dart';
 
-/// 原始主贴图与粒子参数的二维绘制；自定义 shader 的溶解/扭曲尚未复现。
+/// 通用粒子与动画网格绘制；材质动画由离线图集提供，运行时投影三维顶点。
 void paintEffects(
   Canvas canvas,
   List<StageEffect> effects,
@@ -16,8 +17,6 @@ void paintEffects(
   for (final effect in ordered) {
     canvas.save();
     canvas.translate(640 + effect.offset.dx, 360 - effect.offset.dy);
-    canvas.rotate(-effect.rotation);
-    canvas.scale(effect.scale.dx, effect.scale.dy);
     final emitters = effect.simulation.emitters.toList()
       ..sort((a, b) => a.spec.sorting.compareTo(b.spec.sorting));
     for (final emitter in emitters) {
@@ -27,12 +26,18 @@ void paintEffects(
       final paint = Paint()
         ..filterQuality = FilterQuality.low
         ..blendMode = spec.additive ? BlendMode.plus : BlendMode.srcOver;
+      if (spec.geometry != null) {
+        _paintMesh(canvas, effect, emitter, image, paint);
+        continue;
+      }
       if (spec.mesh) {
         if (!effect.simulation.asset.loop &&
             effect.simulation.elapsed >= effect.simulation.asset.duration) {
           continue;
         }
         canvas.save();
+        canvas.rotate(-effect.rotation);
+        canvas.scale(effect.scale.dx, effect.scale.dy);
         canvas.translate(spec.position.dx, -spec.position.dy);
         canvas.rotate(-spec.rotation);
         final rect = Rect.fromCenter(
@@ -75,6 +80,7 @@ void paintEffects(
       for (final p in emitter.particles) {
         final progress = p.progress;
         final size = spec.sizeOverLife?.at(progress, p.seed) ?? 1;
+        final sizeY = spec.sizeYOverLife?.at(progress, p.seed) ?? size;
         if (size <= 0) continue;
         var color = spec.tint;
         if (spec.startColor != null) {
@@ -102,7 +108,78 @@ void paintEffects(
           image.width / columns,
           image.height / rows,
         );
+        if (spec.transform3D != null) {
+          final basis = spec.transform3D!;
+          Offset project(Offset p) => _project(effect, [
+            for (var j = 0; j < 3; j++)
+              basis[0][j] + basis[1][j] * p.dx + basis[2][j] * p.dy,
+          ]);
+          final center = project(p.position);
+          final velocity = project(p.position + p.direction) - center;
+          final angle = spec.stretch && velocity.distanceSquared > 1e-12
+              ? math.atan2(velocity.dx, -velocity.dy)
+              : -p.rotation;
+          final w = p.size * size,
+              h = p.sizeY * sizeY * (spec.stretch ? spec.lengthScale : 1);
+          final corners = <Offset>[];
+          for (final c in const [
+            Offset(-.5, -.5),
+            Offset(.5, -.5),
+            Offset(.5, .5),
+            Offset(-.5, .5),
+          ]) {
+            final x = (c.dx + spec.pivot.dx) * w,
+                y = (c.dy + spec.pivot.dy) * h;
+            if (spec.alignment == 2) {
+              final cos = math.cos(p.rotation), sin = math.sin(p.rotation);
+              corners.add(
+                project(
+                  p.position + Offset(x * cos - y * sin, x * sin + y * cos),
+                ),
+              );
+            } else {
+              final cos = math.cos(angle), sin = math.sin(angle);
+              corners.add(
+                center + Offset(x * cos - y * sin, x * sin + y * cos),
+              );
+            }
+          }
+          final origin = corners[3],
+              dx = corners[2] - origin,
+              dy = corners[0] - origin;
+          canvas.save();
+          canvas.transform(
+            Float64List.fromList([
+              dx.dx,
+              dx.dy,
+              0,
+              0,
+              dy.dx,
+              dy.dy,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              origin.dx,
+              origin.dy,
+              0,
+              1,
+            ]),
+          );
+          canvas.drawImageRect(
+            image,
+            src,
+            const Rect.fromLTWH(0, 0, 1, 1),
+            paint,
+          );
+          canvas.restore();
+          continue;
+        }
         canvas.save();
+        canvas.rotate(-effect.rotation);
+        canvas.scale(effect.scale.dx, effect.scale.dy);
         canvas.translate(p.position.dx, -p.position.dy);
         final rotation = spec.stretch && p.direction.distanceSquared > 0
             ? math.atan2(p.direction.dx, p.direction.dy)
@@ -114,7 +191,7 @@ void paintEffects(
           Rect.fromCenter(
             center: Offset.zero,
             width: p.size * size,
-            height: p.sizeY * size * (spec.stretch ? 2 : 1),
+            height: p.sizeY * sizeY * (spec.stretch ? 2 : 1),
           ),
           paint,
         );
@@ -123,6 +200,70 @@ void paintEffects(
     }
     canvas.restore();
   }
+}
+
+Offset _project(StageEffect effect, List<double> p) {
+  final sx = math.sin(effect.rotation3D.dx),
+      cx = math.cos(effect.rotation3D.dx);
+  final sy = math.sin(effect.rotation3D.dy),
+      cy = math.cos(effect.rotation3D.dy);
+  final sz = math.sin(effect.rotation), cz = math.cos(effect.rotation);
+  // Unity Euler 顺序为 Z、X、Y，旋转后投影到舞台。
+  final x = cz * p[0] - sz * p[1], y = sz * p[0] + cz * p[1];
+  final z = sx * y + cx * p[2];
+  return Offset(cy * x + sy * z, -(cx * y - sx * p[2]));
+}
+
+void _paintMesh(
+  Canvas canvas,
+  StageEffect effect,
+  FxEmitterSim emitter,
+  Image image,
+  Paint paint,
+) {
+  final asset = effect.simulation.asset;
+  if (!asset.loop && effect.simulation.elapsed >= asset.duration) return;
+  final mesh = emitter.spec.geometry!;
+  final positions = [for (final p in mesh.positions) _project(effect, p)];
+  final frames = emitter.spec.material['frames'] as Map?;
+  var frameX = 0.0, frameY = 0.0;
+  var width = image.width.toDouble(), height = image.height.toDouble();
+  if (frames != null) {
+    final count = fxNumber(frames['count']).toInt();
+    final columns = fxNumber(frames['columns']).toInt();
+    final frame = (effect.simulation.elapsed * fxNumber(frames['fps']))
+        .floor()
+        .clamp(0, count - 1);
+    width = fxNumber(frames['width']);
+    height = fxNumber(frames['height']);
+    frameX = (frame % columns) * width;
+    frameY = (frame ~/ columns) * height;
+  }
+  paint.shader = ImageShader(
+    image,
+    TileMode.clamp,
+    TileMode.clamp,
+    Float64List.fromList([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]),
+  );
+  paint.colorFilter = ColorFilter.mode(
+    Color.from(alpha: effect.alpha, red: 1, green: 1, blue: 1),
+    BlendMode.modulate,
+  );
+  final vertices = Vertices(
+    VertexMode.triangles,
+    positions,
+    textureCoordinates: [
+      for (final uv in mesh.uv)
+        Offset(
+          frameX + uv.dx.clamp(0, 1) * (width - 1) + .5,
+          frameY + (1 - uv.dy.clamp(0, 1)) * (height - 1) + .5,
+        ),
+    ],
+    colors: mesh.colors,
+    indices: mesh.indices,
+  );
+  canvas.drawVertices(vertices, BlendMode.modulate, paint);
+  vertices.dispose();
 }
 
 Color _multiply(Color a, Color b) => Color.from(

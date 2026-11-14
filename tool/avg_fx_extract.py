@@ -1,7 +1,7 @@
 """把 ArkUnpacker 的 TT_*.ab.json 和 PNG 转为外部 AVG 特效目录。
 
 用法：uv run --no-project python tool/avg_fx_extract.py <解包目录> <输出目录>
-只用 Python 标准库；原始贴图、typetree 和生成数据均不随代码发布。
+基础转换只用标准库；--prefab 材质烘焙需要 Pillow。原始 AssetBundle 和 typetree 不发布。
 """
 
 import argparse
@@ -53,19 +53,30 @@ def gradient(raw):
                   for ch in ('r', 'g', 'b')], sample(alphas, t, 1)] for t in stops]
 
 
+def particle_gradient(raw):
+    raw = raw or {}
+    if raw.get('minMaxState', 0) == 0:
+        color = raw.get('maxColor', dict(r=1, g=1, b=1, a=1))
+        return [[t, *[color[c] for c in 'rgba']] for t in (0, 1)]
+    return gradient(raw.get('maxGradient'))
+
+
 def path_id(ref):
     # 外部对象的 PathID 不属于当前 bundle，不能误用本地同 ID 对象。
     return str(ref.get('m_PathID')) if ref and not ref.get('m_FileID') else ''
 
 
-def convert(source, output):
-    name = source.name[3:-8].lower()
+def convert(source, output, prefab=None, shaders=None):
+    name = (prefab or source.name[3:-8]).lower()
     if not re.fullmatch(r'[a-z0-9_-]+', name):
         raise ValueError(f'无效特效名：{name}')
     try:
-        tree = next(iter(json.loads(source.read_bytes().decode('utf-8', 'replace')).values()))
+        tree = next(iter(json.loads(source.read_bytes().decode('utf-8', 'surrogateescape')).values()))
     except (OSError, ValueError, StopIteration) as error:
         raise ValueError(f'无法读取 typetree {source}：{error}') from error
+    if prefab:
+        from avg_fx_mesh import select_prefab
+        tree = select_prefab(tree, prefab)
     transforms = {path_id(o.get('m_GameObject')): o for o in tree.values()
                   if 'm_LocalPosition' in o}
     def obj(ref):
@@ -148,18 +159,24 @@ def convert(source, output):
             entry.update(loop=ps.get('looping', True), prewarm=ps.get('prewarm', False),
                          duration=ps.get('lengthInSec', 5), maxParticles=im.get('maxNumParticles', 100),
                          rate=curve(ps['EmissionModule'].get('rateOverTime') if ps['EmissionModule'].get('enabled') else None),
+                         bursts=[{'time': b['time'], 'count': curve(b['countCurve']),
+                                  'cycles': max(1, b.get('cycleCount', 1)),
+                                  'interval': b.get('repeatInterval', 0), 'probability': b.get('probability', 1)}
+                                 for b in ps['EmissionModule'].get('m_Bursts', [])
+                                 if ps['EmissionModule'].get('enabled')],
                          lifetime=curve(im.get('startLifetime')), speed=curve(im.get('startSpeed')),
                          size=curve(im.get('startSize')),
                          sizeY=curve(im.get('startSizeY') if im.get('size3D') else im.get('startSize')),
                          startRotation=curve(im.get('startRotation')),
-                         startColor=gradient(im.get('startColor', {}).get('maxGradient')),
+                         startColor=particle_gradient(im.get('startColor')),
                          gravity=curve(im.get('gravityModifier')),
                          shape={'enabled': shape.get('enabled', False), 'type': shape.get('type', 0),
                                 'radius': radius, 'thickness': shape.get('radiusThickness', 1),
                                 'angle': shape.get('angle', 0),
                                 'scale': [shscale.get('x', 1), shscale.get('y', 1)]},
                          sizeOverLife=curve(size.get('curve')) if size.get('enabled') else None,
-                         colorOverLife=gradient(color.get('gradient', {}).get('maxGradient')) if color.get('enabled') else None,
+                         sizeYOverLife=curve(size.get('y')) if size.get('enabled') and size.get('separateAxes') else None,
+                         colorOverLife=particle_gradient(color.get('gradient')) if color.get('enabled') else None,
                          rotationOverLife=curve(rot.get('curve')) if rot.get('enabled') else None,
                          uv={'enabled': uv.get('enabled', False), 'tiles': [uv.get('tilesX', 1), uv.get('tilesY', 1)],
                              'timeMode': uv.get('timeMode', 0), 'fps': uv.get('fps', 30),
@@ -174,16 +191,21 @@ def convert(source, output):
     emitters.sort(key=lambda e: e['sorting'])
     meta = next((o for o in tree.values() if '_effectDuration' in o), {})
     data = {'version': 1, 'name': name, 'duration': meta.get('_effectDuration', 5),
-            'isLoop': meta.get('_isLoop', True), 'emitters': emitters,
+            'isLoop': meta.get('_isLoop', not bool(prefab)), 'emitters': emitters,
             'sourceSha256': hashlib.sha256(source.read_bytes()).hexdigest()}
     target = output / name
     target.mkdir(parents=True, exist_ok=True)
-    used_names = set(used)
-    for stale in target.glob('*.png'):
-        if stale.name not in used_names:
-            stale.unlink()
     for filename in sorted(used):
         shutil.copyfile(source.parent / filename, target / filename)
+    if prefab:
+        from avg_fx_mesh import convert_meshes
+        if shaders is None:
+            raise ValueError('--prefab 需要 --shaders 指定 shader typetree')
+        convert_meshes(tree, source, data, target, shaders)
+    used = {e['material']['main'] for e in emitters}
+    for stale in target.glob('*.png'):
+        if stale.name not in used:
+            stale.unlink()
     # 禁止 NaN/Infinity，避免输出只能被部分 JSON 实现读取的描述。
     (target / 'fx.json').write_text(json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
     print(f'{name}: {len(emitters)} emitters, {len(used)} textures')
@@ -194,12 +216,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source', type=Path)
     parser.add_argument('output', type=Path)
+    parser.add_argument('--prefab', help='从复合 bundle 中选择预制体并转换动画网格（需要 Pillow）')
+    parser.add_argument('--shaders', type=Path, help='Shader bundle 的 TT_*.ab.json')
     args = parser.parse_args()
+    if args.prefab and not args.shaders:
+        parser.error('--prefab 需要 --shaders')
+    try:
+        shaders = next(iter(json.loads(args.shaders.read_bytes().decode('utf8', 'surrogateescape')).values())) if args.shaders else None
+    except (OSError, ValueError, StopIteration) as error:
+        parser.error(f'无法读取 shader typetree：{error}')
     sources = sorted(args.source.rglob('TT_*.ab.json')) if args.source.is_dir() else [args.source]
     if not sources:
         parser.error('未找到 TT_*.ab.json')
     for source in sources:
-        convert(source, args.output)
+        convert(source, args.output, args.prefab, shaders)
 
 
 if __name__ == '__main__':

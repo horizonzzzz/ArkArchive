@@ -80,7 +80,7 @@ flutter test test/reference_live_test.dart --dart-define=STORY_REFERENCE_URL=htt
 `bgeffect` / `effect` 使用通用的描述解析、粒子模拟和二维绘制管线。首批 `avg_fire_01`（8 个粒子发射器和 1 个烟雾网格）与 `avg_048_smoke_01`（4 个发射器）的 `fx.json` 和主贴图位于 `assets/fx-runtime/`，已在 `pubspec.yaml` 注册，默认通过 Flutter `rootBundle` 离线加载，无需配置外部目录。
 本次根据剧情变量表补充 `avg_036_daoguang_01`、`avg_042_fire_01`、`avg_061_glow_01`、`avg_062_smoke_01`、`avg_072_speech` 和 `avg_079_daoguang01`；`avg_058_tyndall_01` 与 `avg_mohu_zhengyan_01` 仅包含当前管线尚未支持的自定义/后处理材质，因此不生成不可播放的空描述。
 
-`tool/avg_fx_extract.py` 将 ArkUnpacker 的 `TT_*.ab.json` 转换为版本 1 描述，保留来源 SHA-256、独立渲染组件、父级二维变换、材质颜色、发射速率、随机寿命/速度/尺寸、Hermite 曲线、颜色渐变和网格翻页。转换器和模拟测试使用合成数据；打包加载测试直接读取仓库内的两组资源，不要求安装游戏。
+`tool/avg_fx_extract.py` 将 ArkUnpacker 的 `TT_*.ab.json` 转换为版本 1 描述，保留来源 SHA-256、独立渲染组件、父级二维变换、材质颜色、发射速率、随机寿命/速度/尺寸、Hermite 曲线、颜色渐变和网格翻页。转换器和模拟测试使用合成数据；打包加载测试直接读取仓库内的八组资源，不要求安装游戏。
 `fx.json` 保留解包出的 Transform 投影坐标；运行时仅将粒子速度、粒子尺寸和粒子运动参数按 100 像素/单位换算，网格位置与尺寸沿用导出坐标。发射器绘制顺序使用解包出的 `sorting`。
 
 ```sh
@@ -93,10 +93,18 @@ flutter run -d windows
 
 每组目录结构为 `assets/fx-runtime/<特效小写名>/fx.json` 和同目录 PNG；新增目录时须在 `pubspec.yaml` 分别注册，Flutter 不递归收录所有子目录。开发时可用 `--dart-define=STORY_FX_ROOT=...` 替换默认资源根目录：桌面/移动端接受绝对本地目录或 `file:` URI，Web 可使用 HTTP(S) 地址，服务端需允许跨域。外部覆盖资源未纳入“完整下载”的依赖与完成状态判断；默认打包资源不占用剧情缓存，删除剧情缓存不会删除它们。资源缺失时记录警告并继续对白。
 
-变量按 `story_variables.json` 解析，例如 TL-10「活着的重量」行动后使用 `$eb_smoke_01 → avg_048_smoke_01`（layer 1）及 `$eb_burn → avg_fire_01`（layer 2）。背景特效在背景之后、CG 之前绘制；前景特效在人物之后、遮罩之前绘制，各组内按 layer 从低到高排列。同组同层的新指令替换旧实例；无名称且指定 layer 时清除此层，空指令清除该组全部层。`fade=true` 配合 `fadetime` 淡入/淡出，`block=true` 等待结束；`x/y` 使用舞台中心原点、y 向上，`roz` 控制平面旋转，`rox/roy` 仅用余弦缩放近似投影。这些层级与投影规则是当前播放器的实现约定，尚未以游戏运行时逐帧验证。
+变量按 `story_variables.json` 解析，例如 TL-10「活着的重量」行动后使用 `$eb_smoke_01 → avg_048_smoke_01`（layer 1）及 `$eb_burn → avg_fire_01`（layer 2）。背景特效在背景之后、CG 之前绘制；前景特效在人物之后、遮罩之前绘制，各组内按 layer 从低到高排列。同组同层的新 `bgeffect` 替换旧实例；一次性 `effect` 连续创建独立实例，保留同层刀光的叠加，淡入/淡出按实例调度；无名称且指定 layer 时清除此层，空指令清除该组全部层。`fade=true` 配合 `fadetime` 淡入/淡出，`block=true` 等待结束；`x/y` 使用舞台中心原点、y 向上，三维网格和带 `transform3D` 的粒子按 Unity Z→X→Y 顺序应用 `roz/rox/roy` 再投影；旧描述继续用余弦缩放近似投影。
 
 粒子共用引擎时钟，暂停时冻结；重播、跳转和断点重建创建新的实例，旧淡出不会移除新实例。重建还原特效是否存在，不追赶已跳过对白的历史粒子时间。Unity 的 prewarm 仅对声明预热的循环发射器执行，最多 10 秒；长帧最多追赶 250 毫秒，粒子数量按发射器上限限制。
 
-这套实现可复用已有粒子模块和材质规则，但没有复现 Unity 自定义 shader。当前溶解、扭曲、多重噪声、三维发射形状及火花拉伸仍近似，不能据此宣称与原版像素一致。后续效果如果只使用已支持模块，可提取转换、登记资源并验收；遇到新模块、网格或 shader，必须补充对应 Dart 或 Flutter shader 实现。
+复合 bundle 可用 `--prefab` 选择子树，并用 `--shaders` 提供同版本 shader typetree；此路径通过临时的 `uv --with pillow` 烘焙材质图集，无需给 Flutter 增加依赖。`tool/avg_fx_mesh.py` 保留三维网格、UV、顶点色和 renderer 材质动画，读取 streamed/dense/constant 轨道；支持的材质族为 `Torappu/Particles/Additive`、`Dissolve Add`、`Dissolve AB`，按原 shader pass 的混合状态和溶解方程生成 30fps 图集。运行时不按特效名称分支，也不为每个粒子运行 fragment shader。
 
-按当前项目要求，运行时使用的派生 `fx.json` 和主贴图纳入 `assets/` 并随应用打包；原始 AssetBundle、完整 typetree、中间解包结果和验收截图继续保留在忽略的 `.temp/`。这两组资源合计约 349.5 KiB，无需 Git LFS。游戏素材的版权归属不因转换或打包而改变，也不自动适用项目代码许可证。
+`avg_036_daoguang_01` 已重新从 `battle.ab` 中的同名预制体提取，修正此前误用其他预制体资源的问题。CF-9 行动后连续四组、每组两个同层 `Effect`，分别具有不同 `rox/roy`，不能当成同层替换。转换还保留 burst、尺寸 X/Y 独立曲线、常量粒子颜色、渲染枢轴与局部变换；预制体根位置由脚本 `x/y` 接管。
+
+```sh
+uv run --no-project --with pillow python tool/avg_fx_extract.py .temp/unpacked-battle/TT_battle.ab.json assets/fx-runtime --prefab AVG_036_daoguang_01 --shaders ".temp/unpacked-android-shaders/TT_[uc]shaders.ab.json"
+```
+
+动态验收以用户提供的 CF-9 录像 22:18–22:20 为参照，截取原片、提取脚本时间轴、固定随机种子，并用 Flutter 实际绘制出现、叠加、消散阶段的帧后并排播放。参考片与绘制结果保留在 `.temp/`，不能用非空图片或单张截图代替动态验收。当前主刀光的方向、刀芯和连续生成已经复现；火星分布、尺寸和亮度仍有偏差。三维发射形状、Noise、HDR 超亮叠加及未支持的 shader 仍需继续校准，不能宣称像素一致。新增效果须先确认其模块和材质是否受支持，再扩展通用转换与绘制能力。
+
+按当前项目要求，运行时使用的派生 `fx.json` 和主贴图纳入 `assets/` 并随应用打包；原始 AssetBundle、完整 typetree、中间解包结果和验收截图继续保留在忽略的 `.temp/`。游戏素材的版权归属不因转换或打包而改变，也不自动适用项目代码许可证。

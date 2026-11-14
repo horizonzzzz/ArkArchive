@@ -404,6 +404,35 @@ void main() {
     await cancelled;
   });
 
+  test('音频路径中的特殊字符不成为 URI 片段或查询参数', () {
+    final catalog = MediaCatalog(
+      variables: {
+        'slash': 'Sound_Beta_2/CustomSE/act24side#retro/act24side_p_imp_MHdualswords_1',
+        'special': 'Sound_Beta_2/AVG/a b?c%d',
+      },
+      characters: {},
+      backgroundPpu: {},
+    );
+    final slash = catalog.audio(r'$slash')!;
+    expect(
+      slash.toString(),
+      'https://torappu.prts.wiki/assets/audio/customse/act24side%23retro/act24side_p_imp_mhdualswords_1.mp3',
+    );
+    expect(slash.fragment, isEmpty);
+    expect(
+      catalog.audio(r'$special')!.toString(),
+      'https://torappu.prts.wiki/assets/audio/avg/a%20b%3Fc%25d.mp3',
+    );
+    final warnings = <String>[];
+    expect(
+      catalog.dependencies(
+        StoryScript.parse(r'[PlaySound(key="$slash")]'),
+        warnings,
+      ),
+      contains(slash),
+    );
+    expect(warnings, isEmpty);
+  });
   test('音频查找忽略大小写，但不改变剧情文本变量表', () {
     final catalog = MediaCatalog(
       variables: {

@@ -36,6 +36,16 @@ class FxEmitterSpec {
   FxEmitterSpec(Map<String, dynamic> j)
     : name = j['name'] as String,
       mesh = j['kind'] == 'mesh',
+      geometry = j['geometry'] == null ? null : FxMesh(j['geometry'] as Map),
+      transform3D = (j['transform3D'] as List?)
+          ?.map((p) => [for (final v in p as List) (v as num).toDouble()])
+          .toList(),
+      alignment = fxNumber(j['alignment']).toInt(),
+      pivot = fxOffset(j['pivot']),
+      lengthScale = fxNumber(j['lengthScale'], 2),
+      bursts = [
+        for (final b in j['bursts'] as List? ?? const []) FxBurst(b as Map),
+      ],
       sorting = fxNumber(j['sorting']).toInt(),
       position = fxOffset(j['position']),
       scale = fxOffset(j['scale'], const Offset(1, 1)),
@@ -56,6 +66,9 @@ class FxEmitterSpec {
       sizeOverLife = j['sizeOverLife'] == null
           ? null
           : FxRange.parse(j['sizeOverLife']),
+      sizeYOverLife = j['sizeYOverLife'] == null
+          ? null
+          : FxRange.parse(j['sizeYOverLife']),
       colorOverLife = FxGradient.parse(j['colorOverLife']),
       rotationOverLife = FxRange.parse(j['rotationOverLife']),
       shape = (j['shape'] as Map? ?? const {}).cast<String, dynamic>(),
@@ -63,6 +76,13 @@ class FxEmitterSpec {
       velocity = (j['velocity'] as Map? ?? const {}).cast<String, dynamic>(),
       noise = FxRange.parse(j['noise']),
       stretch = j['stretch'] == true {
+    if (transform3D != null &&
+        (transform3D!.length != 3 ||
+            transform3D!.any(
+              (p) => p.length != 3 || p.any((v) => !v.isFinite),
+            ))) {
+      throw const FormatException('特效三维变换无效');
+    }
     if (!RegExp(r'^[a-zA-Z0-9_-]+\.png$').hasMatch(texture)) {
       throw const FormatException('特效贴图文件名无效');
     }
@@ -79,8 +99,37 @@ class FxEmitterSpec {
         tiles.any((v) => fxNumber(v) < 1 || fxNumber(v) > 16)) {
       throw const FormatException('特效贴图网格无效');
     }
+    final frames = material['frames'] as Map?;
+    if (frames != null &&
+        (fxNumber(frames['count']) < 1 ||
+            fxNumber(frames['count']) > 512 ||
+            fxNumber(frames['columns']) < 1 ||
+            fxNumber(frames['columns']) > 16 ||
+            fxNumber(frames['fps']) <= 0 ||
+            fxNumber(frames['fps']) > 120 ||
+            fxNumber(frames['width']) < 1 ||
+            fxNumber(frames['height']) < 1 ||
+            ['count', 'columns', 'width', 'height'].any(
+              (key) =>
+                  frames[key] is! num ||
+                  !(frames[key] as num).isFinite ||
+                  (frames[key] as num) % 1 != 0,
+            ) ||
+            fxNumber(frames['width']) * fxNumber(frames['columns']) > 8192 ||
+            fxNumber(frames['height']) *
+                    (fxNumber(frames['count']) / fxNumber(frames['columns']))
+                        .ceil() >
+                8192)) {
+      throw const FormatException('特效材质图集无效');
+    }
   }
 
+  final List<List<double>>? transform3D;
+  final int alignment;
+  final Offset pivot;
+  final double lengthScale;
+  final FxMesh? geometry;
+  final List<FxBurst> bursts;
   final String name;
   final bool mesh, loop, prewarm, stretch;
   final Offset position, scale;
@@ -97,14 +146,83 @@ class FxEmitterSpec {
       gravity,
       rotationOverLife,
       noise;
-  final FxRange? sizeOverLife;
+  final FxRange? sizeOverLife, sizeYOverLife;
   final FxGradient? startColor, colorOverLife;
   String get texture => material['main'] as String;
   Color get tint => fxColor(material['tint']);
   Color get mainColor => fxColor(material['mainColor']);
   bool get additive =>
-      fxNumber(material['srcBlend'], 5) == 1 &&
+      const [1.0, 5.0].contains(fxNumber(material['srcBlend'], 5)) &&
       fxNumber(material['dstBlend'], 10) == 1;
+}
+
+class FxMesh {
+  FxMesh(Map j)
+    : positions = [
+        for (final p in j['positions'] as List)
+          [for (final v in p as List) (v as num).toDouble()],
+      ],
+      uv = [for (final p in j['uv'] as List) fxOffset(p)],
+      colors = [
+        for (final c in j['colors'] as List)
+          Color.fromARGB(
+            (c[3] as num).toInt(),
+            (c[0] as num).toInt(),
+            (c[1] as num).toInt(),
+            (c[2] as num).toInt(),
+          ),
+      ],
+      indices = [for (final i in j['indices'] as List) (i as num).toInt()] {
+    bool finiteNumber(dynamic v) => v is num && v.isFinite;
+    if ((j['uv'] as List).any(
+          (p) => p is! List || p.length != 2 || p.any((v) => !finiteNumber(v)),
+        ) ||
+        (j['colors'] as List).any(
+          (c) =>
+              c is! List ||
+              c.length != 4 ||
+              c.any((v) => !finiteNumber(v) || v < 0 || v > 255 || v % 1 != 0),
+        ) ||
+        (j['indices'] as List).any((v) => !finiteNumber(v) || v % 1 != 0)) {
+      throw const FormatException('特效网格属性无效');
+    }
+    if (positions.isEmpty ||
+        positions.length > 4096 ||
+        uv.length != positions.length ||
+        colors.length != positions.length ||
+        positions.any((p) => p.length != 3 || p.any((v) => !v.isFinite)) ||
+        indices.isEmpty ||
+        indices.length > 24576 ||
+        indices.length % 3 != 0 ||
+        indices.any((i) => i < 0 || i >= positions.length)) {
+      throw const FormatException('特效网格无效');
+    }
+  }
+  final List<List<double>> positions;
+  final List<Offset> uv;
+  final List<Color> colors;
+  final List<int> indices;
+}
+
+class FxBurst {
+  FxBurst(Map j)
+    : time = fxNumber(j['time']),
+      count = FxRange.parse(j['count']),
+      cycles = fxNumber(j['cycles'], 1).toInt(),
+      interval = fxNumber(j['interval']),
+      probability = fxNumber(j['probability'], 1) {
+    if (time < 0 ||
+        cycles < 1 ||
+        cycles > 100 ||
+        interval < 0 ||
+        probability < 0 ||
+        probability > 1) {
+      throw const FormatException('特效瞬时发射无效');
+    }
+  }
+  final double time, interval, probability;
+  final int cycles;
+  final FxRange count;
 }
 
 /// Unity MinMaxCurve：0 常量、1 曲线、2 双曲线、3 双常量。

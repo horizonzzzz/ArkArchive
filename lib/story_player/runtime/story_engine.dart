@@ -875,7 +875,7 @@ class StoryEngine extends ChangeNotifier {
       Future<void> clear(StageEffect effect) async {
         final alpha = effect.alpha;
         await animate(
-          'fx:$group:${effect.layer}',
+          'fx:$group:${effect.layer}:${identityHashCode(effect)}',
           fades ? seconds : 0,
           (t) => effect.alpha = alpha * (1 - t),
         );
@@ -903,25 +903,33 @@ class StoryEngine extends ChangeNotifier {
       warn('第 ${c.line} 行：特效 $resolved 未加载（未打包或资源加载失败）');
       return;
     }
-    _cancelAnimation(key);
-    state.effects.removeWhere((e) => e.group == group && e.layer == layer);
+    if (group == 'bgeffect') {
+      final replaced = state.effects
+          .where((e) => e.group == group && e.layer == layer)
+          .toList();
+      for (final previous in replaced) {
+        _cancelAnimation('$key:${identityHashCode(previous)}');
+        state.effects.remove(previous);
+      }
+    }
     final effect = StageEffect(
-      FxSimulation(
-        asset,
-        seed: c.line,
-        loop: group == 'effect' ? false : null,
-      ),
+      FxSimulation(asset, seed: c.line, loop: group == 'effect' ? false : null),
       group: group,
       layer: layer,
       offset: Offset(c.number('x'), c.number('y')),
       rotation: c.number('roz') * math.pi / 180,
+      rotation3D: Offset(c.number('rox'), c.number('roy')) * (math.pi / 180),
       scale: Offset(
         math.cos(c.number('roy') * math.pi / 180),
         math.cos(c.number('rox') * math.pi / 180),
       ),
     );
     state.effects.add(effect);
-    final done = animate(key, fades ? seconds : 0, (t) => effect.alpha = t);
+    final done = animate(
+      '$key:${identityHashCode(effect)}',
+      fades ? seconds : 0,
+      (t) => effect.alpha = t,
+    );
     if (c.flag('block')) {
       await done;
     } else {

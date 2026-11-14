@@ -61,6 +61,36 @@ class FxEmitterSim {
       _advanceParticle(p, dt * (1 - (i + 1) / math.max(1, count)));
       if (p.age < p.life) particles.add(p);
     }
+    if (emit) {
+      final firstCycle = spec.loop ? (before / spec.duration).floor() : 0;
+      final lastCycle = spec.loop ? (age / spec.duration).floor() : 0;
+      for (var cycle = firstCycle; cycle <= lastCycle; cycle++) {
+        for (final burst in spec.bursts) {
+          for (var repeat = 0; repeat < burst.cycles; repeat++) {
+            final time =
+                cycle * spec.duration + burst.time + repeat * burst.interval;
+            if (time < before ||
+                time >= age ||
+                random.nextDouble() >= burst.probability) {
+              continue;
+            }
+            final count = burst.count
+                .sample(random)
+                .round()
+                .clamp(0, spec.maxParticles);
+            for (
+              var i = 0;
+              i < count && particles.length < spec.maxParticles;
+              i++
+            ) {
+              final p = _spawn((time % spec.duration) / spec.duration);
+              _advanceParticle(p, age - time);
+              if (p.age < p.life) particles.add(p);
+            }
+          }
+        }
+      }
+    }
   }
 
   void _advanceParticle(FxParticle p, double dt) {
@@ -150,8 +180,8 @@ class FxEmitterSim {
 
 class FxSimulation {
   FxSimulation(FxAsset asset, {int seed = 0, bool? loop})
-      : asset = asset,
-        _loop = loop ?? asset.loop {
+    : asset = asset,
+      _loop = loop ?? asset.loop {
     for (final spec in asset.emitters) {
       final emitter = FxEmitterSim(spec, seed + emitters.length * 7919);
       emitters.add(emitter);
@@ -194,11 +224,12 @@ class StageEffect {
     this.offset = Offset.zero,
     this.rotation = 0,
     this.scale = const Offset(1, 1),
+    this.rotation3D = Offset.zero,
   });
   final FxSimulation simulation;
   final String group;
   final int layer;
-  final Offset offset, scale;
+  final Offset offset, scale, rotation3D;
   final double rotation;
   double alpha = 1;
 }
