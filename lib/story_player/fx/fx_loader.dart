@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:flutter/services.dart';
 
 import '../data/asset_store.dart';
@@ -65,13 +67,26 @@ class FxLoader {
     if (!RegExp(r'^[a-z0-9_-]+$').hasMatch(name)) {
       throw const FormatException('无效特效名');
     }
-    final base = root.resolve('$name/');
-    final asset = FxAsset.parse(
-      jsonDecode(utf8.decode(await bytes(base.resolve('fx.json'))))
-          as Map<String, dynamic>,
-      base: base,
-    );
-    if (asset.name != name) throw const FormatException('特效名称与目录不一致');
-    return asset;
+    final candidates =
+        root.scheme == 'asset' && root.path == '/assets/fx-runtime/'
+        ? ['particle', 'baked'].map((group) => root.resolve('$group/$name/'))
+        : [root.resolve('$name/')];
+    Object? lastError;
+    for (final base in candidates) {
+      Uint8List description;
+      try {
+        description = await bytes(base.resolve('fx.json'));
+      } on FlutterError catch (error) {
+        lastError = error;
+        continue;
+      }
+      final json = jsonDecode(utf8.decode(description)) as Map<String, dynamic>;
+      final asset = FxAsset.parse(json, base: base);
+      if (asset.name != name) {
+        throw const FormatException('特效名称与目录不一致');
+      }
+      return asset;
+    }
+    Error.throwWithStackTrace(lastError!, StackTrace.current);
   }
 }

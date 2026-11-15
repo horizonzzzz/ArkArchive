@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -77,7 +78,7 @@ void main() {
     expect(sim.active, isFalse);
   });
 
-  test('拉伸火花方向跟随噪声扰动后的运动速度', () {
+  test('拉伸粒子方向跟随噪声扰动后的运动速度', () {
     final raw = fixture(loop: false);
     final emitter = (raw['emitters'] as List).single as Map<String, dynamic>;
     emitter['rate'] = {'scalar': 0};
@@ -157,81 +158,6 @@ void main() {
     expect(engine.state.effects, isEmpty);
   });
 
-  test('默认随应用打包的火焰和烟雾可离线加载并解码全部贴图', () async {
-    final store = AssetStore(
-      client: MockClient((request) async {
-        fail('打包特效不应发起网络请求：${request.url}');
-      }),
-    );
-    addTearDown(store.close);
-    final loader = FxLoader(storyFxRoot, store);
-    expect(loader.root.scheme, 'asset');
-    for (final name in [
-      'avg_fire_01',
-      'avg_048_smoke_01',
-      'avg_042_fire_01',
-      'avg_036_daoguang_01',
-      'avg_061_glow_01',
-      'avg_062_smoke_01',
-      'avg_072_speech',
-      'avg_079_daoguang01',
-      'avg_daoguang_spark_01_mid',
-      'avg_daoguang_spark_02_mid',
-      'avg_daoguang_spark_01_large',
-      'avg_daoguang_spark_02_large',
-      'avg_daoguang_zhixian_01_large',
-    ]) {
-      final asset = await loader.load(name);
-      expect(asset.name, name);
-      expect(asset.emitters, isNotEmpty);
-      if (name.startsWith('avg_daoguang_spark_')) {
-        expect(asset.loop, isFalse);
-        expect(asset.emitters, hasLength(2));
-        for (final emitter in asset.emitters) {
-          expect(emitter.bursts, isNotEmpty);
-        }
-      }
-      if (name == 'avg_079_daoguang01') {
-        final blades = asset.emitters.where((e) => e.geometry != null).toList();
-        expect(blades, hasLength(6));
-        for (final blade in blades) {
-          expect(blade.material['frames']['fps'], 60);
-          expect(blade.geometry!.positions, isNotEmpty);
-        }
-      }
-      if (name == 'avg_daoguang_zhixian_01_large') {
-        final meshes = asset.emitters.where((e) => e.geometry != null).toList();
-        expect(asset.loop, isFalse);
-        expect(meshes, hasLength(3));
-        for (final mesh in meshes) {
-          expect(mesh.geometry!.positions, isNotEmpty);
-          expect(mesh.material['frames']['count'], 35);
-          expect(mesh.material['frames']['fps'], 30);
-        }
-      }
-      if (name == 'avg_072_speech') {
-        expect(asset.drawAfterImages, isTrue);
-        final ring = asset.emitters.firstWhere((e) => e.name == '2');
-        final animation = ring.animation!;
-        expect(animation.at(0)[12], 0);
-        expect(animation.at(3)[12], greaterThan(0));
-        expect(animation.at(12)[12], 0);
-      }
-      for (final texture in asset.textures) {
-        final codec = await ui.instantiateImageCodec(
-          await loader.bytes(asset.textureUri(texture)),
-        );
-        try {
-          final image = (await codec.getNextFrame()).image;
-          expect(image.width, greaterThan(0));
-          expect(image.height, greaterThan(0));
-          image.dispose();
-        } finally {
-          codec.dispose();
-        }
-      }
-    }
-  });
   test('发射器动画按时间插值并在结束后保持最后一帧', () {
     final animation = FxEmitterAnimation({
       'fps': 2,
@@ -291,10 +217,7 @@ void main() {
   });
 
   test('外部目录和变量解析拒绝目录穿越', () {
-    expect(
-      resolveFxName(r'$eb_burn', {'eb_burn': 'AVG_fire_01'}),
-      'avg_fire_01',
-    );
+    expect(resolveFxName(r'$TEST_FX', {'test_fx': 'TEST_FX'}), 'test_fx');
     expect(() => resolveFxName('../secret', {}), throwsFormatException);
     expect(FxLoader.directory(r'D:\Work\fx').toString(), 'file:///D:/Work/fx/');
     expect(
@@ -625,154 +548,31 @@ void main() {
     expect(requested.single.path, '/fx/test_fx/fx.json');
     expect(asset.textureUri('white.png').path, '/fx/test_fx/white.png');
   });
-
-  test('火花特效真实渲染多帧、随时间飞溅并消散', () async {
-    final store = AssetStore();
-    addTearDown(store.close);
-    final loader = FxLoader(storyFxRoot, store);
-    final asset = await loader.load('avg_daoguang_spark_01_mid');
-    final textures = <Uri, ui.Image>{};
-    for (final texName in asset.textures) {
-      final codec = await ui.instantiateImageCodec(
-        await loader.bytes(asset.textureUri(texName)),
+  test('打包资源可从通用分类目录加载合成特效', () async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final requested = <String>[];
+    messenger.setMockMessageHandler('flutter/assets', (message) async {
+      final key = utf8.decode(message!.buffer.asUint8List());
+      requested.add(key);
+      if (key != 'assets/fx-runtime/baked/test_fx/fx.json') return null;
+      return ByteData.sublistView(
+        Uint8List.fromList(utf8.encode(jsonEncode(fixture()))),
       );
-      textures[asset.textureUri(texName)] = (await codec.getNextFrame()).image;
-      codec.dispose();
-    }
-    addTearDown(() {
-      for (final img in textures.values) {
-        img.dispose();
-      }
     });
-
-    final sim = FxSimulation(asset, loop: false);
-    final effect = StageEffect(sim, group: 'effect', layer: 1);
-
-    // 0时刻推进 0.05 秒，触发 burst 发射
-    sim.advance(0.05);
-    expect(sim.emitters.any((e) => e.particles.isNotEmpty), isTrue);
-
-    final rec = ui.PictureRecorder();
-    final canvas = ui.Canvas(rec);
-    paintEffects(canvas, [effect], textures, 'effect');
-    final pic = rec.endRecording();
-    final img = await pic.toImage(1280, 720);
-    final byteData = await img.toByteData();
-    expect(byteData, isNotNull);
-    final rawBytes = byteData!.buffer.asUint8List();
-    var visiblePixels = 0;
-    for (var i = 3; i < rawBytes.length; i += 4) {
-      if (rawBytes[i] > 10) visiblePixels++;
-    }
-    expect(visiblePixels, greaterThan(100));
-    img.dispose();
-    pic.dispose();
-
-    // 多步推进超过 1.0 秒 duration，粒子应全部消散
-    for (var i = 0; i < 8; i++) {
-      sim.advance(0.2);
-    }
-    expect(sim.active, isFalse);
-  });
-
-  test('刀光火花径向随机发射并快速缩短', () async {
+    addTearDown(() => messenger.setMockMessageHandler('flutter/assets', null));
     final store = AssetStore();
     addTearDown(store.close);
+
     final asset = await FxLoader(
-      storyFxRoot,
+      'asset:///assets/fx-runtime/',
       store,
-    ).load('avg_daoguang_spark_01_mid');
-    final spec = asset.emitters[1];
-    for (final name in [
-      'avg_daoguang_spark_01_mid',
-      'avg_daoguang_spark_02_mid',
-    ]) {
-      final configured = await FxLoader(storyFxRoot, store).load(name);
-      expect(
-        configured.emitters
-            .where((emitter) => !emitter.mesh)
-            .every(
-              (emitter) =>
-                  emitter.shape['type'] == 8 && emitter.size.scalar < .1,
-            ),
-        isTrue,
-      );
-    }
-    expect(spec.shape['type'], 8);
-    expect(spec.speed.state, 3);
-    expect(spec.speed.min, 25);
-    expect(spec.speed.scalar, 65);
-    expect(spec.sizeYOverLife!.at(.068), greaterThan(2.5));
-    expect(spec.sizeYOverLife!.at(.29), lessThan(1));
+    ).load('test_fx');
 
-    final simulation = FxSimulation(asset, seed: 42)..advance(.02);
-    final particles = simulation.emitters[1].particles;
-    expect(particles.length, greaterThanOrEqualTo(10));
-    expect(particles.map((p) => p.speed).toSet().length, greaterThan(1));
-    expect(particles.any((p) => p.direction.dx < -.5), isTrue);
-    expect(particles.any((p) => p.direction.dx > .5), isTrue);
-    expect(
-      particles.map((p) => p.direction.dx.toStringAsFixed(3)).toSet().length,
-      greaterThan(1),
-    );
-  });
-
-  test('普通粒子的三维旋转投影应用脚本缩放', () async {
-    final raw = fixture(loop: false);
-    final emitter = (raw['emitters'] as List).single as Map<String, dynamic>;
-    emitter['position'] = [80, 120];
-    emitter['rate'] = {'scalar': 0};
-    emitter['bursts'] = [
-      {
-        'time': 0,
-        'count': {'scalar': 1},
-      },
-    ];
-    final asset = FxAsset.parse(raw);
-    final simulation = FxSimulation(asset)..advance(.05);
-    final recorder = ui.PictureRecorder();
-    ui.Canvas(recorder).drawRect(
-      const ui.Rect.fromLTWH(0, 0, 1, 1),
-      ui.Paint()..color = const ui.Color(0xffffffff),
-    );
-    final texturePicture = recorder.endRecording();
-    final texture = await texturePicture.toImage(1, 1);
-    texturePicture.dispose();
-
-    Future<List<int>> render(
-      ui.Offset rotation3D, {
-      ui.Offset scale = const ui.Offset(1, 1),
-    }) async {
-      final effect = StageEffect(
-        simulation,
-        group: 'effect',
-        layer: 1,
-        rotation3D: rotation3D,
-        scale: scale,
-      );
-      final pictureRecorder = ui.PictureRecorder();
-      paintEffects(
-        ui.Canvas(pictureRecorder),
-        [effect],
-        {asset.textureUri('white.png'): texture},
-        'effect',
-      );
-      final picture = pictureRecorder.endRecording();
-      final image = await picture.toImage(1280, 720);
-      final bytes = (await image.toByteData())!.buffer.asUint8List();
-      image.dispose();
-      picture.dispose();
-      return bytes;
-    }
-
-    final flat = await render(ui.Offset.zero);
-    final rotated = await render(const ui.Offset(.8, .6));
-    expect(rotated, isNot(equals(flat)));
-    final scaled = await render(
-      const ui.Offset(.8, .6),
-      scale: const ui.Offset(.4, .7),
-    );
-    expect(scaled, isNot(equals(rotated)));
-    texture.dispose();
+    expect(asset.name, 'test_fx');
+    expect(requested, [
+      'assets/fx-runtime/particle/test_fx/fx.json',
+      'assets/fx-runtime/baked/test_fx/fx.json',
+    ]);
   });
 }

@@ -83,19 +83,19 @@ flutter:
     - assets/images/prts_ui/
     - assets/characters/
     - assets/characters/details/
-    - assets/fx-runtime/avg_fire_01/
-    - assets/fx-runtime/avg_048_smoke_01/
-    - assets/fx-runtime/avg_042_fire_01/
-    - assets/fx-runtime/avg_036_daoguang_01/
-    - assets/fx-runtime/avg_061_glow_01/
-    - assets/fx-runtime/avg_062_smoke_01/
-    - assets/fx-runtime/avg_072_speech/
-    - assets/fx-runtime/avg_079_daoguang01/
-    - assets/fx-runtime/avg_daoguang_spark_01_mid/
-    - assets/fx-runtime/avg_daoguang_spark_02_mid/
-    - assets/fx-runtime/avg_daoguang_spark_01_large/
-    - assets/fx-runtime/avg_daoguang_spark_02_large/
-    - assets/fx-runtime/avg_daoguang_zhixian_01_large/
+    - assets/fx-runtime/particle/avg_fire_01/
+    - assets/fx-runtime/particle/avg_048_smoke_01/
+    - assets/fx-runtime/particle/avg_042_fire_01/
+    - assets/fx-runtime/baked/avg_036_daoguang_01/
+    - assets/fx-runtime/particle/avg_061_glow_01/
+    - assets/fx-runtime/particle/avg_062_smoke_01/
+    - assets/fx-runtime/baked/avg_072_speech/
+    - assets/fx-runtime/baked/avg_079_daoguang01/
+    - assets/fx-runtime/particle/avg_daoguang_spark_01_mid/
+    - assets/fx-runtime/particle/avg_daoguang_spark_02_mid/
+    - assets/fx-runtime/particle/avg_daoguang_spark_01_large/
+    - assets/fx-runtime/particle/avg_daoguang_spark_02_large/
+    - assets/fx-runtime/baked/avg_daoguang_zhixian_01_large/
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
   shaders:

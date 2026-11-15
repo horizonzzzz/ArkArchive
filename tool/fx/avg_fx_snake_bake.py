@@ -9,13 +9,12 @@ from importlib import import_module
 
 np = import_module('numpy')
 Image = import_module('PIL.Image')
-sys.path.insert(0,'tool')
 from avg_fx_mesh import mesh_geometry,ref
 from avg_fx_extract import curve
 from avg_fx_json import dumps
 
 if len(sys.argv) != 3:
- raise SystemExit('用法: uv run tool/avg_fx_snake_bake.py <已归一化源目录> <已转换目标目录>')
+ raise SystemExit('用法: uv run tool/fx/avg_fx_snake_bake.py <已归一化源目录> <已转换目标目录>')
 source=Path(sys.argv[1])
 target=Path(sys.argv[2])
 try:

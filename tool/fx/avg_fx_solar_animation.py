@@ -119,5 +119,5 @@ def convert(source, target):
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
-        raise SystemExit('用法: uv run python tool/avg_fx_solar_animation.py <原始 typetree.json> <转换后的 fx.json>')
+        raise SystemExit('用法: uv run python tool/fx/avg_fx_solar_animation.py <原始 typetree.json> <转换后的 fx.json>')
     convert(Path(sys.argv[1]), Path(sys.argv[2]))

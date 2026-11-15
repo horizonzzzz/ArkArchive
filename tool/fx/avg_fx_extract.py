@@ -1,6 +1,6 @@
 """把 ArkUnpacker 的 TT_*.ab.json 和 PNG 转为外部 AVG 特效目录。
 
-用法：uv run --no-project python tool/avg_fx_extract.py <解包目录> <输出目录>
+用法：uv run --no-project python tool/fx/avg_fx_extract.py <解包目录> <输出目录>
 基础转换只用标准库；--prefab 材质烘焙需要 Pillow。原始 AssetBundle 和 typetree 不发布。
 """
 

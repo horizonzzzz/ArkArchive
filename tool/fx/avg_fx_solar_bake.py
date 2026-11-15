@@ -98,5 +98,5 @@ def bake(source, target):
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
-        raise SystemExit('用法: uv run tool/avg_fx_solar_bake.py <已归一化源目录> <已转换目标目录>')
+        raise SystemExit('用法: uv run tool/fx/avg_fx_solar_bake.py <已归一化源目录> <已转换目标目录>')
     bake(Path(sys.argv[1]), Path(sys.argv[2]))

@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-/// `tool/avg_fx_extract.py` 生成的版本 1 描述；贴图相对资源目录 URI 加载。
+/// `tool/fx/avg_fx_extract.py` 生成的版本 1 描述；贴图相对资源目录 URI 加载。
 class FxAsset {
   FxAsset(
     this.name,
