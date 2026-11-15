@@ -24,6 +24,7 @@ void paintEffects(
           .toList()
         ..sort((a, b) => a.layer.compareTo(b.layer));
   for (final effect in ordered) {
+    if (effect.delayRemaining > 0) continue;
     canvas.save();
     canvas.translate(640 + effect.offset.dx, 360 - effect.offset.dy);
     final emitters = effect.simulation.emitters.toList()
@@ -177,13 +178,18 @@ void paintEffects(
           materialRect.width / columns,
           materialRect.height / rows,
         );
-        if (basis != null) {
-          Offset project(Offset p) => _project(effect, [
-            for (var j = 0; j < 3; j++)
-              basis[0][j] + basis[1][j] * p.dx + basis[2][j] * p.dy,
-          ]);
+        if (basis != null || effect.rotation3D != Offset.zero) {
+          Offset project(Offset p) => _project(
+            effect,
+            basis == null
+                ? [p.dx, p.dy, 0]
+                : [
+                    for (var j = 0; j < 3; j++)
+                      basis[0][j] + basis[1][j] * p.dx + basis[2][j] * p.dy,
+                  ],
+          );
           final center = project(p.position);
-          final velocity = project(p.position + p.direction) - center;
+          final velocity = project(p.position + p.velocity) - center;
           final angle = spec.stretch && velocity.distanceSquared > 1e-12
               ? math.atan2(velocity.dx, -velocity.dy)
               : -p.rotation;
@@ -249,18 +255,22 @@ void paintEffects(
         canvas.rotate(-effect.rotation);
         canvas.scale(effect.scale.dx, effect.scale.dy);
         canvas.translate(p.position.dx, -p.position.dy);
-        final rotation = spec.stretch && p.direction.distanceSquared > 0
-            ? math.atan2(p.direction.dx, p.direction.dy)
+        final direction = p.velocity.distanceSquared > 1e-12
+            ? p.velocity
+            : p.direction;
+        final rotation = spec.stretch && direction.distanceSquared > 0
+            ? math.atan2(direction.dx, direction.dy)
             : -p.rotation;
         canvas.rotate(rotation);
+        final w = p.size * size;
+        final h = p.sizeY * sizeY * (spec.stretch ? spec.lengthScale.abs() : 1);
+        final center = spec.stretch
+            ? Offset(spec.pivot.dx * w, spec.pivot.dy * h)
+            : Offset.zero;
         canvas.drawImageRect(
           image,
           src,
-          Rect.fromCenter(
-            center: Offset.zero,
-            width: p.size * size,
-            height: p.sizeY * sizeY * (spec.stretch ? 2 : 1),
-          ),
+          Rect.fromCenter(center: center, width: w, height: h),
           paint,
         );
         canvas.restore();
@@ -277,7 +287,8 @@ Offset _project(StageEffect effect, List<double> p) {
       cy = math.cos(effect.rotation3D.dy);
   final sz = math.sin(effect.rotation), cz = math.cos(effect.rotation);
   // Unity Euler 顺序为 Z、X、Y，旋转后投影到舞台。
-  final x = cz * p[0] - sz * p[1], y = sz * p[0] + cz * p[1];
+  final px = p[0] * effect.scale.dx, py = p[1] * effect.scale.dy;
+  final x = cz * px - sz * py, y = sz * px + cz * py;
   final z = sx * y + cx * p[2];
   return Offset(cy * x + sy * z, -(cx * y - sx * p[2]));
 }

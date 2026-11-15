@@ -17,6 +17,7 @@ class FxParticle {
   );
   Offset position;
   final Offset direction;
+  Offset velocity = Offset.zero;
   final double life, size, sizeY, speed, gravity, seed;
   double age = 0, rotation;
   double get progress => (age / life).clamp(0, 1);
@@ -116,12 +117,10 @@ class FxEmitterSim {
           math.cos(p.seed * 40 + p.age),
         ) *
         noise;
+    final gravity = -9.81 * pixelsPerUnit * p.gravity;
+    p.velocity = velocity + Offset(0, gravity * p.age);
     p.position +=
-        velocity * dt +
-        Offset(
-          0,
-          -9.81 * pixelsPerUnit * p.gravity * (p.age * dt + dt * dt / 2),
-        );
+        velocity * dt + Offset(0, gravity * (p.age * dt + dt * dt / 2));
     p.rotation += spec.rotationOverLife.at(progress, p.seed) * dt;
     p.age += dt;
   }
@@ -225,11 +224,13 @@ class StageEffect {
     this.rotation = 0,
     this.scale = const Offset(1, 1),
     this.rotation3D = Offset.zero,
+    this.delayRemaining = 0,
   });
   final FxSimulation simulation;
   final String group;
   final int layer;
   final Offset offset, scale, rotation3D;
   final double rotation;
+  double delayRemaining;
   double alpha = 1;
 }

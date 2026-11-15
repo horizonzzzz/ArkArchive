@@ -77,6 +77,35 @@ void main() {
     expect(sim.active, isFalse);
   });
 
+  test('拉伸火花方向跟随噪声扰动后的运动速度', () {
+    final raw = fixture(loop: false);
+    final emitter = (raw['emitters'] as List).single as Map<String, dynamic>;
+    emitter['rate'] = {'scalar': 0};
+    emitter['bursts'] = [
+      {
+        'time': 0,
+        'count': {'scalar': 1},
+      },
+    ];
+    emitter['noise'] = {
+      'state': 1,
+      'scalar': 1,
+      'curve': [
+        [0, 1],
+        [1, 1],
+      ],
+    };
+
+    final simulation = FxSimulation(FxAsset.parse(raw), seed: 1)..advance(.05);
+    final particle = simulation.emitters.single.particles.single;
+    final cross =
+        (particle.direction.dx * particle.velocity.dy -
+                particle.direction.dy * particle.velocity.dx)
+            .abs();
+
+    expect(cross, greaterThan(.01));
+  });
+
   testWidgets('同层连续 Effect 叠加且独立淡入，清层可清除全部实例', (tester) async {
     final start = tester.binding.clock.now();
     final engine = StoryEngine(
@@ -146,16 +175,38 @@ void main() {
       'avg_062_smoke_01',
       'avg_072_speech',
       'avg_079_daoguang01',
+      'avg_daoguang_spark_01_mid',
+      'avg_daoguang_spark_02_mid',
+      'avg_daoguang_spark_01_large',
+      'avg_daoguang_spark_02_large',
+      'avg_daoguang_zhixian_01_large',
     ]) {
       final asset = await loader.load(name);
       expect(asset.name, name);
       expect(asset.emitters, isNotEmpty);
+      if (name.startsWith('avg_daoguang_spark_')) {
+        expect(asset.loop, isFalse);
+        expect(asset.emitters, hasLength(2));
+        for (final emitter in asset.emitters) {
+          expect(emitter.bursts, isNotEmpty);
+        }
+      }
       if (name == 'avg_079_daoguang01') {
         final blades = asset.emitters.where((e) => e.geometry != null).toList();
         expect(blades, hasLength(6));
         for (final blade in blades) {
           expect(blade.material['frames']['fps'], 60);
           expect(blade.geometry!.positions, isNotEmpty);
+        }
+      }
+      if (name == 'avg_daoguang_zhixian_01_large') {
+        final meshes = asset.emitters.where((e) => e.geometry != null).toList();
+        expect(asset.loop, isFalse);
+        expect(meshes, hasLength(3));
+        for (final mesh in meshes) {
+          expect(mesh.geometry!.positions, isNotEmpty);
+          expect(mesh.material['frames']['count'], 35);
+          expect(mesh.material['frames']['fps'], 30);
         }
       }
       if (name == 'avg_072_speech') {
@@ -298,6 +349,49 @@ void main() {
       expect(engine.state.effects, hasLength(3));
       expect(engine.state.effects.contains(first), isFalse);
       expect(engine.warnings, isEmpty);
+    } finally {
+      engine.dispose();
+    }
+  });
+  testWidgets('特效 delay 错开粒子启动并允许清除待启动实例', (tester) async {
+    final start = tester.binding.clock.now();
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[effect(name="test_fx", layer=1, delay=.01)]
+[effect(name="test_fx", layer=2, delay=.1)]
+[effect(name="test_fx", layer=3, delay=.25)]
+第一句
+[effect(layer=3)]
+第二句
+'''),
+      effectAssets: {'test_fx': FxAsset.parse(fixture())},
+      elapsed: () => tester.binding.clock.now().difference(start),
+    );
+    try {
+      await engine.start();
+      expect(engine.state.text, '第一句');
+      final effects = {
+        for (final effect in engine.state.effects) effect.layer: effect,
+      };
+      expect(effects, hasLength(3));
+
+      await tester.pump(const Duration(milliseconds: 64));
+      expect(effects[1]!.simulation.elapsed, greaterThan(0));
+      expect(effects[2]!.simulation.elapsed, 0);
+      expect(effects[3]!.simulation.elapsed, 0);
+
+      await tester.pump(const Duration(milliseconds: 80));
+      expect(effects[2]!.simulation.elapsed, greaterThan(0));
+      expect(effects[3]!.simulation.elapsed, 0);
+
+      await engine.advance();
+      expect(engine.state.text, '第二句');
+      expect(
+        engine.state.effects.map((effect) => effect.layer),
+        containsAll([1, 2]),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(engine.state.effects.any((effect) => effect.layer == 3), isFalse);
     } finally {
       engine.dispose();
     }
@@ -530,5 +624,155 @@ void main() {
     ).load('test_fx');
     expect(requested.single.path, '/fx/test_fx/fx.json');
     expect(asset.textureUri('white.png').path, '/fx/test_fx/white.png');
+  });
+
+  test('火花特效真实渲染多帧、随时间飞溅并消散', () async {
+    final store = AssetStore();
+    addTearDown(store.close);
+    final loader = FxLoader(storyFxRoot, store);
+    final asset = await loader.load('avg_daoguang_spark_01_mid');
+    final textures = <Uri, ui.Image>{};
+    for (final texName in asset.textures) {
+      final codec = await ui.instantiateImageCodec(
+        await loader.bytes(asset.textureUri(texName)),
+      );
+      textures[asset.textureUri(texName)] = (await codec.getNextFrame()).image;
+      codec.dispose();
+    }
+    addTearDown(() {
+      for (final img in textures.values) {
+        img.dispose();
+      }
+    });
+
+    final sim = FxSimulation(asset, loop: false);
+    final effect = StageEffect(sim, group: 'effect', layer: 1);
+
+    // 0时刻推进 0.05 秒，触发 burst 发射
+    sim.advance(0.05);
+    expect(sim.emitters.any((e) => e.particles.isNotEmpty), isTrue);
+
+    final rec = ui.PictureRecorder();
+    final canvas = ui.Canvas(rec);
+    paintEffects(canvas, [effect], textures, 'effect');
+    final pic = rec.endRecording();
+    final img = await pic.toImage(1280, 720);
+    final byteData = await img.toByteData();
+    expect(byteData, isNotNull);
+    final rawBytes = byteData!.buffer.asUint8List();
+    var visiblePixels = 0;
+    for (var i = 3; i < rawBytes.length; i += 4) {
+      if (rawBytes[i] > 10) visiblePixels++;
+    }
+    expect(visiblePixels, greaterThan(100));
+    img.dispose();
+    pic.dispose();
+
+    // 多步推进超过 1.0 秒 duration，粒子应全部消散
+    for (var i = 0; i < 8; i++) {
+      sim.advance(0.2);
+    }
+    expect(sim.active, isFalse);
+  });
+
+  test('刀光火花径向随机发射并快速缩短', () async {
+    final store = AssetStore();
+    addTearDown(store.close);
+    final asset = await FxLoader(
+      storyFxRoot,
+      store,
+    ).load('avg_daoguang_spark_01_mid');
+    final spec = asset.emitters[1];
+    for (final name in [
+      'avg_daoguang_spark_01_mid',
+      'avg_daoguang_spark_02_mid',
+    ]) {
+      final configured = await FxLoader(storyFxRoot, store).load(name);
+      expect(
+        configured.emitters
+            .where((emitter) => !emitter.mesh)
+            .every(
+              (emitter) =>
+                  emitter.shape['type'] == 8 && emitter.size.scalar < .1,
+            ),
+        isTrue,
+      );
+    }
+    expect(spec.shape['type'], 8);
+    expect(spec.speed.state, 3);
+    expect(spec.speed.min, 25);
+    expect(spec.speed.scalar, 65);
+    expect(spec.sizeYOverLife!.at(.068), greaterThan(2.5));
+    expect(spec.sizeYOverLife!.at(.29), lessThan(1));
+
+    final simulation = FxSimulation(asset, seed: 42)..advance(.02);
+    final particles = simulation.emitters[1].particles;
+    expect(particles.length, greaterThanOrEqualTo(10));
+    expect(particles.map((p) => p.speed).toSet().length, greaterThan(1));
+    expect(particles.any((p) => p.direction.dx < -.5), isTrue);
+    expect(particles.any((p) => p.direction.dx > .5), isTrue);
+    expect(
+      particles.map((p) => p.direction.dx.toStringAsFixed(3)).toSet().length,
+      greaterThan(1),
+    );
+  });
+
+  test('普通粒子的三维旋转投影应用脚本缩放', () async {
+    final raw = fixture(loop: false);
+    final emitter = (raw['emitters'] as List).single as Map<String, dynamic>;
+    emitter['position'] = [80, 120];
+    emitter['rate'] = {'scalar': 0};
+    emitter['bursts'] = [
+      {
+        'time': 0,
+        'count': {'scalar': 1},
+      },
+    ];
+    final asset = FxAsset.parse(raw);
+    final simulation = FxSimulation(asset)..advance(.05);
+    final recorder = ui.PictureRecorder();
+    ui.Canvas(recorder).drawRect(
+      const ui.Rect.fromLTWH(0, 0, 1, 1),
+      ui.Paint()..color = const ui.Color(0xffffffff),
+    );
+    final texturePicture = recorder.endRecording();
+    final texture = await texturePicture.toImage(1, 1);
+    texturePicture.dispose();
+
+    Future<List<int>> render(
+      ui.Offset rotation3D, {
+      ui.Offset scale = const ui.Offset(1, 1),
+    }) async {
+      final effect = StageEffect(
+        simulation,
+        group: 'effect',
+        layer: 1,
+        rotation3D: rotation3D,
+        scale: scale,
+      );
+      final pictureRecorder = ui.PictureRecorder();
+      paintEffects(
+        ui.Canvas(pictureRecorder),
+        [effect],
+        {asset.textureUri('white.png'): texture},
+        'effect',
+      );
+      final picture = pictureRecorder.endRecording();
+      final image = await picture.toImage(1280, 720);
+      final bytes = (await image.toByteData())!.buffer.asUint8List();
+      image.dispose();
+      picture.dispose();
+      return bytes;
+    }
+
+    final flat = await render(ui.Offset.zero);
+    final rotated = await render(const ui.Offset(.8, .6));
+    expect(rotated, isNot(equals(flat)));
+    final scaled = await render(
+      const ui.Offset(.8, .6),
+      scale: const ui.Offset(.4, .7),
+    );
+    expect(scaled, isNot(equals(rotated)));
+    texture.dispose();
   });
 }

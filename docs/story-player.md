@@ -78,10 +78,11 @@ flutter test test/reference_live_test.dart --dart-define=STORY_REFERENCE_URL=htt
 ## 解包资源驱动的粒子特效
 
 `bgeffect` / `effect` 使用通用的描述解析、粒子模拟和二维绘制管线。首批 `avg_fire_01`（8 个粒子发射器和 1 个烟雾网格）与 `avg_048_smoke_01`（4 个发射器）的 `fx.json` 和主贴图位于 `assets/fx-runtime/`，已在 `pubspec.yaml` 注册，默认通过 Flutter `rootBundle` 离线加载，无需配置外部目录。
-本次根据剧情变量表补充 `avg_036_daoguang_01`、`avg_042_fire_01`、`avg_061_glow_01`、`avg_062_smoke_01`、`avg_072_speech` 和 `avg_079_daoguang01`；`avg_058_tyndall_01` 与 `avg_mohu_zhengyan_01` 仅包含当前管线尚未支持的自定义/后处理材质，因此不生成不可播放的空描述。
+本次根据剧情变量表补充 `avg_036_daoguang_01`、`avg_042_fire_01`、`avg_061_glow_01`、`avg_062_smoke_01`、`avg_072_speech` 和 `avg_079_daoguang01`；针对第一优先级物理打击火花，接入了 `battle.ab` 中的 P0 火花 4 兄弟（`avg_daoguang_spark_01_mid`、`avg_daoguang_spark_02_mid`、`avg_daoguang_spark_01_large`、`avg_daoguang_spark_02_large`，对应变量 `$e_spark_01_mid`、`$e_spark_02_mid`、`$e_spark_01_large`、`$e_spark_02_large`），用于 14-11、BB-8、14-13 等高频拼刀与重创演出；`avg_058_tyndall_01` 与 `avg_mohu_zhengyan_01` 仅包含当前管线尚未支持的自定义/后处理材质，因此不生成不可播放的空描述。
+为贴近 14-11 录屏中的向外放射火星，两个 mid spark 的运行时描述将锥形发射改为全周向随机；速度、贴图与纵向寿命曲线沿用解包资源，横向尺寸压窄以形成细线。这是视觉近似，不是原版 Shape 的逐项复刻。当前打包的四个 spark 只覆盖火花层，不等同于对应场景的完整演出：14-11 和 BB-8 还调用 `$e_bladeline_01_large`，14-13 还叠加 `$e_slash_02_l` 与全屏白色 `Blocker`。这些刀光预制体尚未打包；验收须复现完整脚本叠层与时间线，不能用孤立火花帧宣称完整还原。
 
-`tool/avg_fx_extract.py` 将 ArkUnpacker 的 `TT_*.ab.json` 转换为版本 1 描述，保留来源 SHA-256、独立渲染组件、父级二维变换、材质颜色、发射速率、随机寿命/速度/尺寸、Hermite 曲线、颜色渐变和网格翻页。转换器和模拟测试使用合成数据；打包加载测试直接读取仓库内的八组资源，不要求安装游戏。
-`fx.json` 保留解包出的 Transform 投影坐标；运行时仅将粒子速度、粒子尺寸和粒子运动参数按 100 像素/单位换算，网格位置与尺寸沿用导出坐标。发射器绘制顺序使用解包出的 `sorting`。
+`tool/avg_fx_extract.py` 将 ArkUnpacker 的 `TT_*.ab.json` 转换为版本 1 描述，保留来源 SHA-256、独立渲染组件、父级二维变换、材质颜色、发射速率、随机寿命/速度/尺寸、Hermite 曲线、颜色渐变和网格翻页。支持通过 `--prefab` 从复合 bundle（如 `battle.ab`）中选择纯粒子预制体或配合 `--shaders` 烘焙网格材质。转换器和模拟测试使用合成数据；打包加载测试直接读取仓库内的一组资源，不要求安装游戏。
+`fx.json` 保留解包出的 Transform 投影坐标；运行时仅将粒子速度、粒子尺寸和粒子运动参数按 100 像素/单位换算，网格位置与尺寸沿用导出坐标。发射器绘制顺序使用解包出的 `sorting`；粒子的位置和飞行方向按脚本的 `rox/roy/roz` 使用 Unity Z→X→Y 顺序投影，Stretched Billboard 沿投影后的运动方向按速度/长度比例拉伸。
 
 ```sh
 uv run --no-project python tool/avg_fx_extract.py .temp/unpacked-fire-smoke assets/fx-runtime
@@ -93,6 +94,7 @@ flutter run -d windows
 
 每组目录结构为 `assets/fx-runtime/<特效小写名>/fx.json` 和同目录 PNG；新增目录时须在 `pubspec.yaml` 分别注册，Flutter 不递归收录所有子目录。开发时可用 `--dart-define=STORY_FX_ROOT=...` 替换默认资源根目录：桌面/移动端接受绝对本地目录或 `file:` URI，Web 可使用 HTTP(S) 地址，服务端需允许跨域。外部覆盖资源未纳入“完整下载”的依赖与完成状态判断；默认打包资源不占用剧情缓存，删除剧情缓存不会删除它们。资源缺失时记录警告并继续对白。
 
+特效指令中的 `delay` 以秒计并按播放速度缩放；延迟期间不绘制或推进粒子，`fade` 与实际显示时刻对齐。清除尚未启动的实例会立即取消。
 变量按 `story_variables.json` 解析，例如 TL-10「活着的重量」行动后使用 `$eb_smoke_01 → avg_048_smoke_01`（layer 1）及 `$eb_burn → avg_fire_01`（layer 2）。背景特效默认在背景之后、CG 之前绘制；资源声明 `drawAfterImages: true` 时改为在 CG 之后绘制，用于太阳光晕等覆盖画面的效果。前景特效在人物之后、遮罩之前绘制，各绘制阶段按 layer 从低到高排列。同组同层的新 `bgeffect` 替换旧实例；一次性 `effect` 连续创建独立实例，保留同层刀光的叠加，淡入/淡出按实例调度；无名称且指定 layer 时清除此层，空指令清除该组全部层。`fade=true` 配合 `fadetime` 淡入/淡出，`block=true` 等待结束；`x/y` 使用舞台中心原点、y 向上，三维网格和带 `transform3D` 的粒子按 Unity Z→X→Y 顺序应用 `roz/rox/roy` 再投影；旧描述继续用余弦缩放近似投影。
 
 粒子共用引擎时钟，暂停时冻结；重播、跳转和断点重建创建新的实例，旧淡出不会移除新实例。重建还原特效是否存在，不追赶已跳过对白的历史粒子时间。Unity 的 prewarm 仅对声明预热的循环发射器执行，最多 10 秒；长帧最多追赶 250 毫秒，粒子数量按发射器上限限制。

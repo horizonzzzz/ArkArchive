@@ -119,11 +119,17 @@ def convert(source, output, prefab=None, shaders=None):
             c = colors.get(key, dict(r=1, g=1, b=1, a=1))
             return [c[k] for k in ('r', 'g', 'b', 'a')]
         uv = colors.get('_UVTween', {})
+        mat_name = raw.get('m_Name', '').lower()
+        src_blend = floats.get('_SrcBlend', 5)
+        dst_blend = floats.get('_DstBlend', 10)
+        if '_add' in mat_name or 'star' in mat_name or 'spark' in mat_name:
+            src_blend = 1.0
+            dst_blend = 1.0
         return {'main': filename, 'tint': color('_TintColor'),
                 'mainColor': color('_MainColor'),
                 'uvScroll': [uv.get('r', 0), uv.get('g', 0)],
-                'srcBlend': floats.get('_SrcBlend', 5),
-                'dstBlend': floats.get('_DstBlend', 10)}
+                'srcBlend': src_blend,
+                'dstBlend': dst_blend}
     systems = {path_id(o.get('m_GameObject')): o for o in tree.values() if 'InitialModule' in o}
     emitters = []
     for renderer in tree.values():
@@ -184,12 +190,24 @@ def convert(source, output, prefab=None, shaders=None):
                              'cycles': uv.get('cycles', 1)},
                          velocity={'enabled': vel.get('enabled', False), 'x': curve(vel.get('x')), 'y': curve(vel.get('y'))},
                          noise=curve(noise.get('strength')) if noise.get('enabled') else None,
-                         stretch=renderer.get('m_RenderMode') == 1)
+                         stretch=renderer.get('m_RenderMode') == 1,
+                         lengthScale=renderer.get('m_LengthScale', 1.0),
+                         pivot=[renderer.get('m_Pivot', {}).get(c, 0.0) for c in 'xy'])
         emitters.append(entry)
     if not emitters:
         raise ValueError(f'{source}：未找到可绘制发射器')
     emitters.sort(key=lambda e: e['sorting'])
-    meta = next((o for o in tree.values() if '_effectDuration' in o), {})
+    meta = {}
+    if prefab:
+        roots = [k for k, o in tree.items() if o.get('m_Name') == prefab and 'm_Component' in o]
+        if roots:
+            for c in tree[roots[0]].get('m_Component', []):
+                co = obj(c.get('component'))
+                if '_effectDuration' in co:
+                    meta = co
+                    break
+    if not meta:
+        meta = next((o for o in tree.values() if '_effectDuration' in o), {})
     data = {'version': 1, 'name': name, 'duration': meta.get('_effectDuration', 5),
             'isLoop': meta.get('_isLoop', not bool(prefab)), 'emitters': emitters,
             'sourceSha256': hashlib.sha256(source.read_bytes()).hexdigest()}
@@ -197,10 +215,11 @@ def convert(source, output, prefab=None, shaders=None):
     target.mkdir(parents=True, exist_ok=True)
     for filename in sorted(used):
         shutil.copyfile(source.parent / filename, target / filename)
-    if prefab:
+    has_mesh = any('m_Mesh' in o and 'm_GameObject' in o and 'm_Materials' not in o for o in tree.values())
+    if prefab and has_mesh:
         from avg_fx_mesh import convert_meshes
         if shaders is None:
-            raise ValueError('--prefab 需要 --shaders 指定 shader typetree')
+            raise ValueError('--prefab 包含网格动画，需要 --shaders 指定 shader typetree')
         convert_meshes(tree, source, data, target, shaders)
     used = {e['material']['main'] for e in emitters}
     for stale in target.glob('*.png'):
@@ -219,12 +238,12 @@ def main():
     parser.add_argument('--prefab', help='从复合 bundle 中选择预制体并转换动画网格（需要 Pillow）')
     parser.add_argument('--shaders', type=Path, help='Shader bundle 的 TT_*.ab.json')
     args = parser.parse_args()
-    if args.prefab and not args.shaders:
-        parser.error('--prefab 需要 --shaders')
-    try:
-        shaders = next(iter(json.loads(args.shaders.read_bytes().decode('utf8', 'surrogateescape')).values())) if args.shaders else None
-    except (OSError, ValueError, StopIteration) as error:
-        parser.error(f'无法读取 shader typetree：{error}')
+    shaders = None
+    if args.shaders:
+        try:
+            shaders = next(iter(json.loads(args.shaders.read_bytes().decode('utf8', 'surrogateescape')).values()))
+        except (OSError, ValueError, StopIteration) as error:
+            parser.error(f'无法读取 shader typetree：{error}')
     sources = sorted(args.source.rglob('TT_*.ab.json')) if args.source.is_dir() else [args.source]
     if not sources:
         parser.error('未找到 TT_*.ab.json')

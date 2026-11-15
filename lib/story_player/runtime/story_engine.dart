@@ -645,7 +645,14 @@ class StoryEngine extends ChangeNotifier {
     if (paused || _disposed || _rebuilding) return;
     var changed = false;
     for (final effect in state.effects.toList()) {
-      effect.simulation.advance(dt / 1000);
+      final delayMs = effect.delayRemaining * 1000;
+      final advanceMs = math.max(0.0, dt - delayMs).toDouble();
+      effect.delayRemaining = math.max(0.0, delayMs - dt).toDouble() / 1000;
+      if (delayMs > 0 && advanceMs == 0) {
+        changed = true;
+        continue;
+      }
+      effect.simulation.advance(advanceMs / 1000);
       changed = true;
       if (!effect.simulation.active) state.effects.remove(effect);
     }
@@ -862,6 +869,7 @@ class StoryEngine extends ChangeNotifier {
     final name = c.value('name');
     final seconds = scaled(c.number('fadetime', .3));
     final fades = c.flag('fade');
+    final delay = math.max(0.0, scaled(c.number('delay'))).toDouble();
     final key = 'fx:$group:$layer';
     if (_rebuilding && group == 'effect') return;
     if (name.isEmpty) {
@@ -873,6 +881,14 @@ class StoryEngine extends ChangeNotifier {
           )
           .toList();
       Future<void> clear(StageEffect effect) async {
+        if (effect.delayRemaining > 0) {
+          _cancelAnimation(
+            'fx:${effect.group}:${effect.layer}:${identityHashCode(effect)}',
+          );
+          state.effects.remove(effect);
+          _changed();
+          return;
+        }
         final alpha = effect.alpha;
         await animate(
           'fx:$group:${effect.layer}:${identityHashCode(effect)}',
@@ -919,6 +935,7 @@ class StoryEngine extends ChangeNotifier {
       offset: Offset(c.number('x'), c.number('y')),
       rotation: c.number('roz') * math.pi / 180,
       rotation3D: Offset(c.number('rox'), c.number('roy')) * (math.pi / 180),
+      delayRemaining: delay,
       scale: Offset(
         math.cos(c.number('roy') * math.pi / 180),
         math.cos(c.number('rox') * math.pi / 180),
@@ -929,8 +946,12 @@ class StoryEngine extends ChangeNotifier {
       '$key:${identityHashCode(effect)}',
       fades ? seconds : 0,
       (t) => effect.alpha = t,
+      delay: delay,
     );
     if (c.flag('block')) {
+      if (!fades && delay > 0) {
+        await animate('$key:start:${identityHashCode(effect)}', delay, (_) {});
+      }
       await done;
     } else {
       unawaited(done);
