@@ -575,4 +575,75 @@ void main() {
       'assets/fx-runtime/baked/test_fx/fx.json',
     ]);
   });
+  test('五组雪效资源可从打包目录加载，停用的窗口雪幕不生成粒子', () async {
+    final store = AssetStore();
+    addTearDown(store.close);
+    final loader = FxLoader('asset:///assets/fx-runtime/', store);
+    const names = [
+      'avg_snowstorm_01',
+      'avg_snow_02',
+      'avg_058_snow_01',
+      'avg_snow_01',
+      'avg_072_snow',
+    ];
+    for (final name in names) {
+      final asset = await loader.load(name);
+      expect(asset.emitters, isNotEmpty, reason: name);
+      if (name == 'avg_snow_02') {
+        expect(asset.emitters.map((emitter) => emitter.name), [
+          'xuehua',
+          'chenai',
+        ]);
+      }
+      for (final emitter in asset.emitters) {
+        final tint = emitter.material['tint'] as List;
+        expect(
+          tint.take(3),
+          everyElement(1.0),
+          reason: '$name/${emitter.name}',
+        );
+      }
+      for (final texture in asset.textures) {
+        final codec = await ui.instantiateImageCodec(
+          await loader.bytes(asset.textureUri(texture)),
+        );
+        final frame = await codec.getNextFrame();
+        expect(frame.image.width, greaterThan(0), reason: '$name/$texture');
+        frame.image.dispose();
+        codec.dispose();
+      }
+    }
+
+    final lightsnow = await loader.load('avg_snow_02');
+    final lightSimulation = FxSimulation(lightsnow, seed: 17);
+    final lightYs =
+        lightSimulation.emitters.first.particles
+            .map((particle) => particle.position.dy)
+            .toList()
+          ..sort();
+    expect(lightYs.last - lightYs.first, greaterThan(500));
+
+    final snowpowder = await loader.load('avg_058_snow_01');
+    final powderSimulation = FxSimulation(snowpowder, seed: 17);
+    powderSimulation.advance(1);
+    final powderXs =
+        powderSimulation.emitters
+            .expand((emitter) => emitter.particles)
+            .map((particle) => particle.position.dx)
+            .toList()
+          ..sort();
+    expect(powderXs.last - powderXs.first, greaterThan(800));
+    final snow = await loader.load('avg_snow_01');
+    expect(
+      snow.emitters.where(
+        (emitter) => emitter.mesh && emitter.geometry == null,
+      ),
+      isEmpty,
+    );
+
+    final simulation = FxSimulation(await loader.load('avg_072_snow'));
+    simulation.advance(.05);
+    expect(simulation.emitters.single.particles, isEmpty);
+    expect(simulation.active, isFalse);
+  });
 }
