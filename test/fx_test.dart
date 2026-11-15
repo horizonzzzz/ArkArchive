@@ -107,6 +107,23 @@ void main() {
     expect(cross, greaterThan(.01));
   });
 
+  testWidgets('三维特效仅按旋转投影一次，不额外用余弦压扁', (tester) async {
+    final raw = fixture();
+    ((raw['emitters'] as List).single as Map)['transform3D'] = [
+      [0, 0, 0],
+      [1, 0, 0],
+      [0, 1, 0],
+    ];
+    final engine = StoryEngine(
+      StoryScript.parse('[effect(name="test_fx", rox=90, roy=90)]\n正文'),
+      effectAssets: {'test_fx': FxAsset.parse(raw)},
+    );
+    engine.start();
+    await tester.pump();
+    expect(engine.state.effects.single.scale, const ui.Offset(1, 1));
+    engine.dispose();
+  });
+
   testWidgets('同层连续 Effect 叠加且独立淡入，清层可清除全部实例', (tester) async {
     final start = tester.binding.clock.now();
     final engine = StoryEngine(
@@ -498,20 +515,28 @@ void main() {
       layer: 0,
       rotation3D: const ui.Offset(.4, .6),
     );
-    Future<List<int>> center() async {
+    Future<List<int>> center([
+      StageEffect? selected,
+      int x = 640,
+      bool foreground = false,
+    ]) async {
       final rec = ui.PictureRecorder();
       paintEffects(
         ui.Canvas(rec),
-        [effect],
-        {asset.textureUri('white.png'): texture},
+        [selected ?? effect],
+        {
+          (selected ?? effect).simulation.asset.textureUri('white.png'):
+              texture,
+        },
         'effect',
+        afterBlocker: foreground,
       );
       final p = rec.endRecording();
       final image = await p.toImage(1280, 720);
       final bytes = (await image.toByteData())!.buffer.asUint8List();
       final pixel = bytes.sublist(
-        (360 * 1280 + 640) * 4,
-        (360 * 1280 + 640) * 4 + 4,
+        (360 * 1280 + x) * 4,
+        (360 * 1280 + x) * 4 + 4,
       );
       image.dispose();
       p.dispose();
@@ -523,6 +548,26 @@ void main() {
     expect(await center(), [0, 255, 0, 255]);
     effect.alpha = 0;
     expect(await center(), [0, 0, 0, 0]);
+    raw['drawAfterBlocker'] = true;
+    spec['animation'] = {
+      'fps': 10,
+      'frames': [
+        [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1],
+        [100, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, .5],
+      ],
+    };
+    final animated = StageEffect(
+      FxSimulation(FxAsset.parse(raw)),
+      group: 'effect',
+      layer: 1,
+    );
+    expect(await center(animated), [0, 0, 0, 0]);
+    expect(await center(animated, 640, true), [255, 0, 0, 255]);
+    animated.simulation.advance(.15);
+    expect(await center(animated, 640, true), [0, 0, 0, 0]);
+    final moved = await center(animated, 740, true);
+    expect(moved[1], closeTo(128, 1));
+    expect(moved[3], closeTo(128, 1));
     texture.dispose();
     (spec['geometry'] as Map)['indices'] = [0, 1, 99];
     expect(() => FxAsset.parse(raw), throwsFormatException);

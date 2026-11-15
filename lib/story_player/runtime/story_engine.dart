@@ -936,10 +936,18 @@ class StoryEngine extends ChangeNotifier {
       rotation: c.number('roz') * math.pi / 180,
       rotation3D: Offset(c.number('rox'), c.number('roy')) * (math.pi / 180),
       delayRemaining: delay,
-      scale: Offset(
-        math.cos(c.number('roy') * math.pi / 180),
-        math.cos(c.number('rox') * math.pi / 180),
-      ),
+      scale:
+          asset.emitters.any(
+            (e) =>
+                e.geometry != null ||
+                e.transform3D != null ||
+                e.animation != null,
+          )
+          ? const Offset(1, 1)
+          : Offset(
+              math.cos(c.number('roy') * math.pi / 180),
+              math.cos(c.number('rox') * math.pi / 180),
+            ),
     );
     state.effects.add(effect);
     final done = animate(

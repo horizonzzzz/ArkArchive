@@ -12,12 +12,15 @@ void paintEffects(
   Map<Uri, Image> textures,
   String group, {
   bool afterImages = false,
+  bool afterBlocker = false,
 }) {
   final ordered =
       effects
           .where(
             (e) =>
                 e.group == group &&
+                (group != 'effect' ||
+                    e.simulation.asset.drawAfterBlocker == afterBlocker) &&
                 (group != 'bgeffect' ||
                     e.simulation.asset.drawAfterImages == afterImages),
           )
@@ -303,7 +306,22 @@ void _paintMesh(
   final asset = effect.simulation.asset;
   if (!asset.loop && effect.simulation.elapsed >= asset.duration) return;
   final mesh = emitter.spec.geometry!;
-  final positions = [for (final p in mesh.positions) _project(effect, p)];
+  final animation = emitter.spec.animation?.at(effect.simulation.elapsed);
+  final positions = [
+    for (final p in mesh.positions)
+      _project(
+        effect,
+        animation == null
+            ? p
+            : [
+                for (var j = 0; j < 3; j++)
+                  animation[j] +
+                      animation[3 + j] * p[0] +
+                      animation[6 + j] * p[1] +
+                      animation[9 + j] * p[2],
+              ],
+      ),
+  ];
   final frames = emitter.spec.material['frames'] as Map?;
   var frameX = 0.0, frameY = 0.0;
   var width = image.width.toDouble(), height = image.height.toDouble();
@@ -325,7 +343,12 @@ void _paintMesh(
     Float64List.fromList([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]),
   );
   paint.colorFilter = ColorFilter.mode(
-    Color.from(alpha: effect.alpha, red: 1, green: 1, blue: 1),
+    Color.from(
+      alpha: effect.alpha * (animation?[15] ?? 1),
+      red: 1,
+      green: 1,
+      blue: 1,
+    ),
     BlendMode.modulate,
   );
   final vertices = Vertices(

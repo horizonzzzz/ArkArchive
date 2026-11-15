@@ -59,13 +59,17 @@ void main() {
   test('背景特效按资源设置绘制在 CG 前面或后面', () async {
     final red = await solid(const ui.Color(0xffff0000));
     final green = await solid(const ui.Color(0xff00ff00));
-    Future<List<int>> sample({required bool afterImages}) async {
+    Future<List<int>> sample({
+      required bool afterImages,
+      bool afterBlocker = false,
+    }) async {
       final asset = FxAsset.parse({
         'version': 1,
         'name': 'layer_test',
         'duration': 1,
         'isLoop': true,
         if (afterImages) 'drawAfterImages': true,
+        'drawAfterBlocker': afterBlocker,
         'emitters': [
           {
             'name': 'quad',
@@ -91,6 +95,47 @@ void main() {
 
     expect(await sample(afterImages: false), [0, 255, 0, 255]);
     expect(await sample(afterImages: true), [255, 0, 0, 255]);
+    expect(await sample(afterImages: false, afterBlocker: true), [
+      0,
+      255,
+      0,
+      255,
+    ]);
+    expect(await sample(afterImages: true, afterBlocker: true), [
+      255,
+      0,
+      0,
+      255,
+    ]);
+  });
+
+  test('声明前景的刀光在完整黑幕上绘制，普通特效仍受遮罩覆盖', () async {
+    final red = await solid(const ui.Color(0xffff0000));
+    for (final foreground in [false, true]) {
+      final asset = FxAsset.parse({
+        'version': 1,
+        'name': 'slash',
+        'duration': 1,
+        'isLoop': false,
+        'drawAfterBlocker': foreground,
+        'emitters': [
+          {
+            'name': 'quad',
+            'kind': 'mesh',
+            'scale': [100, 100],
+            'material': {'main': 'red.png', 'srcBlend': 5, 'dstBlend': 10},
+          },
+        ],
+      });
+      final state = StageState()..blockerAlpha = 1;
+      state.effects.add(
+        StageEffect(FxSimulation(asset), group: 'effect', layer: 1),
+      );
+      expect(
+        await pixel(state, textures: {asset.textureUri('red.png'): red}),
+        foreground ? [255, 0, 0, 255] : [0, 0, 0, 255],
+      );
+    }
   });
 
   for (final focus in [false, true]) {

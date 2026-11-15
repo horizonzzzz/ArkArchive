@@ -125,6 +125,7 @@ class StagePainter extends CustomPainter {
     }
     canvas.restore();
     _blocker(canvas);
+    paintEffects(canvas, state.effects, textures, 'effect', afterBlocker: true);
     for (final stamp in state.stamps) {
       _stamp(canvas, stamp);
     }

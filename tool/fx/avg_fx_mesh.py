@@ -55,9 +55,21 @@ def animation_tracks(clip):
     for value in packed['m_ConstantClip']['data']:
         tracks.append([(0, [0, 0, 0, value])])
     bindings = clip['m_ClipBindingConstant']['genericBindings']
-    if len(tracks) != len(bindings) or any(b['typeID'] != 23 or b['customType'] != 22 for b in bindings):
-        raise ValueError('当前转换器只支持 renderer 材质数值轨道，不能静默丢弃其他动画')
-    return list(zip(bindings, tracks))
+    result, index = [], 0
+    for binding in bindings:
+        kind, attribute = binding['typeID'], binding['attribute']
+        if kind == 4 and attribute in (1, 2, 3, 4):
+            width = 4 if attribute == 2 else 3
+        elif (kind == 23 and binding['customType'] == 22) or kind == 1:
+            width = 1
+        else:
+            raise ValueError(f'不支持的动画绑定：{binding}')
+        for axis in range(width):
+            result.append((dict(binding, axis=axis), tracks[index + axis]))
+        index += width
+    if index != len(tracks):
+        raise ValueError('动画绑定与数值轨道数量不符')
+    return result
 
 
 def evaluate(track, time):
@@ -81,7 +93,7 @@ def property_values(material, tracks, path, time):
     crc = lambda s: zlib.crc32(s.encode()) & 0x0fffffff
     path_hash = zlib.crc32(path.encode())
     for binding, track in tracks:
-        if binding['path'] != path_hash:
+        if binding['typeID'] != 23 or binding['path'] != path_hash:
             continue
         attribute = binding['attribute']
         kind, hashed = attribute >> 28, attribute & 0x0fffffff
@@ -145,7 +157,7 @@ def bake_material(material, shader, tracks, path, tree, source, target, filename
     from importlib import import_module
     Image = import_module('PIL.Image')
     shader_name = shader['m_ParsedForm']['m_Name']
-    supported = {'Torappu/Particles/Dissolve/Dissolve Add', 'Torappu/Particles/Dissolve/Dissolve AB', 'Torappu/Particles/Additive'}
+    supported = {'Torappu/Particles/Dissolve/Dissolve Add', 'Torappu/Particles/Dissolve/Dissolve AB', 'Torappu/Particles/Dissolve/Dissolve AB UVTween', 'Torappu/Particles/Additive', 'Torappu/Particles/AlphaBlend'}
     if shader_name not in supported:
         raise ValueError(f'尚未实现材质转换：{shader_name}')
     props = dict(material['m_SavedProperties']['m_TexEnvs'])
@@ -172,7 +184,9 @@ def bake_material(material, shader, tracks, path, tree, source, target, filename
         for y in range(height):
             for x in range(width):
                 u, v = (x + .5) / width, 1 - (y + .5) / height
-                color = sample(main, u*main_st[0]+main_st[2], v*main_st[1]+main_st[3])
+                uv_tween = vectors.get('_UVTween', [0, 0, 0, 0])
+                color = sample(main, u*main_st[0]+main_st[2]+uv_tween[0]*frame/fps,
+                               v*main_st[1]+main_st[3]+uv_tween[1]*frame/fps)
                 channel = round(floats.get('_MainTexChannel', 0))
                 if channel:
                     component = {1: 0, 2: 1, 3: 2}.get(channel)
@@ -184,22 +198,100 @@ def bake_material(material, shader, tracks, path, tree, source, target, filename
                     mask = sample(dissolve, u*mask_st[0]+mask_st[2], v*mask_st[1]+mask_st[3])[0] / 255
                     # 原版 GLSL：clamp((mask-amount+border*(1-roundEven(amount+.5)))/border,0,1)。
                     alpha = max(0, min(1, (mask-amount+border*(1-round(amount+.5))) / border))
-                pixels.append(tuple(round(max(0, min(255, color[c] * 2 * tint[c] * (alpha if c == 3 else 1)))) for c in range(4)))
+                pixels.append(tuple(round(max(0, min(255, color[c] * (1 if shader_name == 'Torappu/Particles/AlphaBlend' else 2) * tint[c] * (alpha if c == 3 else 1)))) for c in range(4)))
         tile = Image.new('RGBA', (width, height))
         tile.putdata(pixels)
         atlas.paste(tile, ((frame % columns)*width, (frame // columns)*height))
     atlas.save(target / filename)
     state = shader['m_ParsedForm']['m_SubShaders'][0]['m_Passes'][0]['m_State']['rtBlend0']
+    def blend(key):
+        value = state[key]
+        property_name = value.get('name', '<noninit>')
+        if property_name != '<noninit>':
+            values = dict(material['m_SavedProperties'].get('m_Floats', []))
+            if property_name not in values:
+                raise ValueError(f'材质缺少混合属性：{property_name}')
+            return values[property_name]
+        return value['val']
     return dict(main=filename, tint=[1]*4, mainColor=[1]*4, uvScroll=[0, 0],
-                srcBlend=state['srcBlend']['val'], dstBlend=state['destBlend']['val'],
+                srcBlend=blend('srcBlend'), dstBlend=blend('destBlend'),
                 frames=dict(count=count, columns=columns, fps=fps, width=width, height=height))
+
+def attach_animation(entry, tree, chain, tracks, duration, mesh=False):
+    if not tracks:
+        return
+    frames = []
+    for frame in range(math.ceil(duration * 60) + 1):
+        origin, basis, visible = sample_transform(tree, chain, tracks, frame / 60)
+        axes = basis if mesh else basis[:2]
+        frames.append([*origin, *[v for axis in axes for v in axis], 1, 1, 1, int(visible)])
+    entry['animation'] = dict(fps=60, frames=frames)
+
+
+
+def prefab_tracks(tree, name):
+    clips = []
+    for obj in tree.values():
+        if 'm_GameObject' not in obj or 'm_Controller' not in obj:
+            continue
+        controller = tree.get(ref(obj['m_Controller']))
+        if controller is None:
+            raise ValueError('Animator Controller 引用缺失')
+        clips.extend(tree[ref(item)] for item in controller.get('m_AnimationClips', []))
+    if not clips:
+        clips = [o for o in tree.values() if o.get('m_Name', '').lower() == name and 'm_MuscleClip' in o]
+    if len(clips) > 1:
+        raise ValueError('当前转换器需要单一动画，不能静默忽略状态切换')
+    return animation_tracks(clips[0]) if clips else []
+
+
+def sample_transform(tree, chain, tracks, time):
+    import copy
+    sampled, visible = [], True
+    for transform in chain:
+        node = ref(transform['m_GameObject'])
+        names, current = [], node
+        by_go = {ref(o.get('m_GameObject')): o for o in tree.values() if 'm_LocalPosition' in o}
+        while current in by_go:
+            names.append(tree[current]['m_Name'])
+            current = ref(tree.get(ref(by_go[current].get('m_Father')), {}).get('m_GameObject'))
+        path_hash = zlib.crc32('/'.join(reversed(names[:-1])).encode())
+        value = copy.deepcopy(transform)
+        euler = None
+        active = tree[node].get('m_IsActive', 1)
+        for binding, track in tracks:
+            if binding['path'] != path_hash:
+                continue
+            kind, attribute = binding['typeID'], binding['attribute']
+            if kind == 1:
+                active = evaluate(track, time)
+            elif kind == 4:
+                axis = binding['axis']
+                if attribute == 4:
+                    if euler is None:
+                        euler = [0, 0, 0]
+                    euler[axis] = evaluate(track, time)
+                else:
+                    key = {1: 'm_LocalPosition', 2: 'm_LocalRotation', 3: 'm_LocalScale'}[attribute]
+                    value[key]['xyzw'[axis]] = evaluate(track, time)
+        if euler is not None:
+            # Unity Euler 使用 Z→X→Y，转换为四元数供同一父变换链采样。
+            x, y, z = [math.radians(v) / 2 for v in euler]
+            sx, cx, sy, cy, sz, cz = math.sin(x), math.cos(x), math.sin(y), math.cos(y), math.sin(z), math.cos(z)
+            value['m_LocalRotation'] = dict(x=sx*cy*cz+cx*sy*sz, y=cx*sy*cz-sx*cy*sz,
+                                           z=cx*cy*sz-sx*sy*cz, w=cx*cy*cz+sx*sy*sz)
+        visible = visible and active >= .5
+        sampled.append(value)
+    origin = transform_point([0, 0, 0], sampled)
+    basis = [[v-origin[j] for j, v in enumerate(transform_point(p, sampled))]
+             for p in ([1, 0, 0], [0, 1, 0], [0, 0, 1])]
+    return origin, basis, visible
 
 
 def convert_meshes(tree, source, data, target, shaders):
     transforms = {ref(o.get('m_GameObject')): o for o in tree.values() if 'm_LocalPosition' in o}
     filters = {ref(o.get('m_GameObject')): o for o in tree.values() if 'm_Mesh' in o and 'm_GameObject' in o and 'm_Materials' not in o}
-    clips = [o for o in tree.values() if o.get('m_Name', '').lower() == data['name'] and 'm_MuscleClip' in o]
-    tracks = animation_tracks(clips[0]) if clips else []
+    tracks = prefab_tracks(tree, data['name'])
     def hierarchy(go):
         result = []
         while go in transforms:
@@ -223,6 +315,7 @@ def convert_meshes(tree, source, data, target, shaders):
                      transform3D=[origin, *basis], alignment=renderer.get('m_RenderAlignment', 0),
                      pivot=[renderer.get('m_Pivot', {}).get(c, 0) for c in 'xy'],
                      lengthScale=renderer.get('m_LengthScale', 1))
+        attach_animation(entry, tree, chain, tracks, data['duration'])
         material = tree[ref(renderer['m_Materials'][0])]
         shader = shaders[str(material['m_Shader']['m_PathID'])]
         entry['material'] = bake_material(material, shader, [], '', tree, source, target,
@@ -241,6 +334,7 @@ def convert_meshes(tree, source, data, target, shaders):
         path = '/'.join(tree[ref(t['m_GameObject'])]['m_Name'] for t in reversed(chain[:-1]))
         material = tree[ref(renderer['m_Materials'][0])]
         shader = shaders[str(material['m_Shader']['m_PathID'])]
-        entry['geometry'] = mesh_geometry(mesh, chain[:-1])
+        entry['geometry'] = mesh_geometry(mesh, [] if tracks else chain[:-1])
+        attach_animation(entry, tree, chain[:-1], tracks, data['duration'], mesh=True)
         entry['material'] = bake_material(material, shader, tracks, path, tree, source, target,
                                            f'mesh_{len([e for e in data["emitters"] if "geometry" in e])}.png', data['duration'])

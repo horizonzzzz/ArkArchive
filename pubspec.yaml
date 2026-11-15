@@ -96,6 +96,9 @@ flutter:
     - assets/fx-runtime/particle/avg_daoguang_spark_01_large/
     - assets/fx-runtime/particle/avg_daoguang_spark_02_large/
     - assets/fx-runtime/baked/avg_daoguang_zhixian_01_large/
+    - assets/fx-runtime/baked/avg_daoguang_attack_01_large/
+    - assets/fx-runtime/baked/avg_daoguang_attack_02_large/
+    - assets/fx-runtime/baked/avg_dao_attack_guiji_01/
     - assets/fx-runtime/particle/avg_058_snow_01/
     - assets/fx-runtime/particle/avg_072_snow/
     - assets/fx-runtime/particle/avg_snow_01/

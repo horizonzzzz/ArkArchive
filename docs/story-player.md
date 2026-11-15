@@ -80,7 +80,22 @@ flutter test test/reference_live_test.dart --dart-define=STORY_REFERENCE_URL=htt
 `bgeffect` / `effect` 使用通用的描述解析、粒子模拟和二维绘制管线。首批 `avg_fire_01`（8 个粒子发射器和 1 个烟雾网格）与 `avg_048_smoke_01`（4 个发射器）的 `fx.json` 和主贴图位于各自的 `assets/fx-runtime/particle/` 或 `assets/fx-runtime/baked/` 特效目录，已在 `pubspec.yaml` 注册，默认通过 Flutter `rootBundle` 离线加载，无需配置外部目录。
 本次根据剧情变量表补充 `avg_036_daoguang_01`、`avg_042_fire_01`、`avg_061_glow_01`、`avg_062_smoke_01`、`avg_072_speech` 和 `avg_079_daoguang01`；针对第一优先级物理打击火花，接入了 `battle.ab` 中的 P0 火花 4 兄弟（`avg_daoguang_spark_01_mid`、`avg_daoguang_spark_02_mid`、`avg_daoguang_spark_01_large`、`avg_daoguang_spark_02_large`，对应变量 `$e_spark_01_mid`、`$e_spark_02_mid`、`$e_spark_01_large`、`$e_spark_02_large`），用于 14-11、BB-8、14-13 等高频拼刀与重创演出；`avg_058_tyndall_01` 与 `avg_mohu_zhengyan_01` 仅包含当前管线尚未支持的自定义/后处理材质，因此不生成不可播放的空描述。
 本次按 `weather-effects-index.md` 与对应 AssetBundle 接入 `$eb_blizzard → avg_snowstorm_01`、`$eb_lightsnow → avg_snow_02`、`$eb_snowpowder → avg_058_snow_01`、`$eb_snow → avg_snow_01` 和 `$eb_072cg_snowcoverwindow → avg_072_snow`。四种常规雪效以解包粒子与贴图为基础；大雪省略依赖不支持溶解 shader 且无法重建网格的冰面 mesh，避免被当作矩形绘制。`AVG_072_snow` 依赖当前 Flutter 管线不支持的外置自定义 shader；按用户反馈，`$eb_072cg_snowcoverwindow → avg_072_snow` 保留空粒子占位，不绘制误导性的雪幕近似。
-为贴近 14-11 录屏中的向外放射火星，两个 mid spark 的运行时描述将锥形发射改为全周向随机；速度、贴图与纵向寿命曲线沿用解包资源，横向尺寸压窄以形成细线。这是视觉近似，不是原版 Shape 的逐项复刻。当前打包的四个 spark 只覆盖火花层，不等同于对应场景的完整演出：14-11 和 BB-8 还调用 `$e_bladeline_01_large`，14-13 还叠加 `$e_slash_02_l` 与全屏白色 `Blocker`。这些刀光预制体尚未打包；验收须复现完整脚本叠层与时间线，不能用孤立火花帧宣称完整还原。
+为贴近 14-11 录屏中的向外放射火星，两个 mid spark 的运行时描述将锥形发射改为全周向随机；速度、贴图与纵向寿命曲线沿用解包资源，横向尺寸压窄以形成细线。这是视觉近似，不是原版 Shape 的逐项复刻。当前四个 spark 与本次新增三种主斩击共同构成物理战斗刀光层，但剧情里的 `Blocker`、其他背景/前景特效仍独立按脚本叠加，验收时须保留其时间线。
+本轮依据 `.temp/unpacked-battle/TT_battle.ab.json` 接入三种物理斩击：`$e_slash_01_l → avg_daoguang_attack_01_large`（正手弧斩，5 个网格烘焙层）、`$e_slash_02_l → avg_daoguang_attack_02_large`（反手弧斩，3 个网格烘焙层）、`$e_slash_cross → avg_dao_attack_guiji_01`（交叉斩，3 个网格烘焙层及 1 个粒子层）。派生资源位于 `assets/fx-runtime/baked/` 并已逐目录注册；脚本中的位置、旋转和图层参数继续由现有运行时处理。
+
+三种刀光通过 Animator → Controller → AnimationClip 引用取动画，不能依赖 clip 与预制体同名。转换器保留 streamed/dense/constant 轨道，按每个绑定的实际宽度解析 Transform（位置、四元数、Euler 角、缩放）、GameObject 显隐和材质属性；变换以 60fps 采样。网格动画每帧为 16 个数（原点、XYZ 基向量、RGBA），粒子动画保留原有 13 个数（原点、XY 基向量、RGBA）。网格保留局部坐标，运行时先应用动画再应用剧情三维旋转；不能再乘旧二维余弦缩放，否则大倾角刀光会被重复压扁。
+
+这三种资源声明 `drawAfterBlocker: true`，普通 `effect` 则保留遮罩前绘制。该字段只作用于 `effect`；`bgeffect` 继续按 `drawAfterImages` 选择背景绘制阶段，不会因该字段被过滤。该资源声明用于 15-17 行动后黑幕中的连续斩击，也避免 14-13 白闪遮住交叉斩；它是针对已核对片段的图层选择，不能据此把全部特效移到遮罩上方。14-13 的缺失点是 W 发出“阿斯卡纶，把这个金毛脑袋摘下来给我……”之前的两次 `$e_slash_cross`，其动画还包含旋转和节点显隐。
+
+可在项目根目录重建：
+
+```sh
+uv run --no-project --with pillow python tool/fx/avg_fx_physical.py
+```
+
+输入需包含 `.temp/unpacked-battle/TT_battle.ab.json`、`.temp/unpacked-fx-shared/` 下的共享 typetree 与同目录 PNG，以及 `.temp/unpacked-avg-shaders/TT_[uc]shaders.ab.json`、`.temp/unpacked-android-shaders/TT_[uc]shaders.ab.json`。脚本解析材质、纹理、Controller 和 clip 引用，生成中间 `.temp/fx-stage/`，并更新上述三个打包目录；未解析的动画或缺失贴图会中止转换。
+
+剧情缓存中可用于优先对比的命中点：主线 14-11（`obt/main/level_main_14-10_beg`）、14-13（`obt/main/level_st_14-02`）、11-19（`obt/main/level_main_11-17_beg`）、15-17（`obt/main/level_main_15-15_end`）；活动 IS-2、IS-6、ZT-10、BB-8/BB-9，以及 EP-5 至 EP-8。14-13 同段包含连续 `$e_slash_02_l` 与 `$e_slash_cross`，BB-8 连续触发两次正手大斩击，适合检查多实例叠加；交叉斩另可对比 RS-1、BP-3。该列表按本地缓存剧本中对三个变量的扫描归纳，不代表全部调用点；完整频次见 `docs/fx-coverage-analysis.md`。首次接入未做视频核对；随后按用户提供的 `QQ20261115-214239-HD.mp4` 密集取帧，修复 Animator 动画漏采，并用最终资源在黑幕上连续渲染检查展开与消散。亮度、Bloom 和交叉斩周围的其他未接入特效仍有偏差，不能视为完整原版复现。
 
 `tool/fx/avg_fx_extract.py` 将 ArkUnpacker 的 `TT_*.ab.json` 转换为版本 1 描述，支持纯粒子和复合 bundle 网格资源。测试使用合成描述验证解析与模拟；打包资源不通过特效名称硬编码到测试中。
 `fx.json` 保留解包出的 Transform 投影坐标；运行时仅将粒子速度、粒子尺寸和粒子运动参数按 100 像素/单位换算，网格位置与尺寸沿用导出坐标。发射器绘制顺序使用解包出的 `sorting`；粒子的位置和飞行方向按脚本的 `rox/roy/roz` 使用 Unity Z→X→Y 顺序投影，Stretched Billboard 沿投影后的运动方向按速度/长度比例拉伸。
@@ -96,11 +111,11 @@ flutter run -d windows
 每组资源目录为 `assets/fx-runtime/particle/<特效小写名>/` 或 `assets/fx-runtime/baked/<特效小写名>/`，并在 `pubspec.yaml` 注册；Flutter 不递归收录目录。含材质烘焙帧或采样动画的资源归入 `baked/`，其余归入 `particle/`，烘焙资源仍可同时包含 Dart 粒子模拟。开发时可用 `--dart-define=STORY_FX_ROOT=...` 替换默认资源根目录：桌面/移动端接受绝对本地目录或 `file:` URI，Web 可使用 HTTP(S) 地址，服务端需允许跨域。外部覆盖资源未纳入“完整下载”的依赖与完成状态判断；默认打包资源不占用剧情缓存，删除剧情缓存不会删除它们。资源缺失时记录警告并继续对白。
 
 特效指令中的 `delay` 以秒计并按播放速度缩放；延迟期间不绘制或推进粒子，`fade` 与实际显示时刻对齐。清除尚未启动的实例会立即取消。
-变量按 `story_variables.json` 解析，例如 TL-10「活着的重量」行动后使用 `$eb_smoke_01 → avg_048_smoke_01`（layer 1）及 `$eb_burn → avg_fire_01`（layer 2）。背景特效默认在背景之后、CG 之前绘制；资源声明 `drawAfterImages: true` 时改为在 CG 之后绘制，用于太阳光晕等覆盖画面的效果。前景特效在人物之后、遮罩之前绘制，各绘制阶段按 layer 从低到高排列。同组同层的新 `bgeffect` 替换旧实例；一次性 `effect` 连续创建独立实例，保留同层刀光的叠加，淡入/淡出按实例调度；无名称且指定 layer 时清除此层，空指令清除该组全部层。`fade=true` 配合 `fadetime` 淡入/淡出，`block=true` 等待结束；`x/y` 使用舞台中心原点、y 向上，三维网格和带 `transform3D` 的粒子按 Unity Z→X→Y 顺序应用 `roz/rox/roy` 再投影；旧描述继续用余弦缩放近似投影。
+变量按 `story_variables.json` 解析，例如 TL-10「活着的重量」行动后使用 `$eb_smoke_01 → avg_048_smoke_01`（layer 1）及 `$eb_burn → avg_fire_01`（layer 2）。背景特效默认在背景之后、CG 之前绘制；资源声明 `drawAfterImages: true` 时改为在 CG 之后绘制，用于太阳光晕等覆盖画面的效果。前景特效默认在人物之后、遮罩之前绘制；资源声明 `drawAfterBlocker: true` 时在遮罩之后绘制，各绘制阶段按 layer 从低到高排列。同组同层的新 `bgeffect` 替换旧实例；一次性 `effect` 连续创建独立实例，保留同层刀光的叠加，淡入/淡出按实例调度；无名称且指定 layer 时清除此层，空指令清除该组全部层。`fade=true` 配合 `fadetime` 淡入/淡出，`block=true` 等待结束；`x/y` 使用舞台中心原点、y 向上，三维网格和带 `transform3D` 的粒子按 Unity Z→X→Y 顺序应用 `roz/rox/roy` 再投影；旧描述继续用余弦缩放近似投影。
 
 粒子共用引擎时钟，暂停时冻结；重播、跳转和断点重建创建新的实例，旧淡出不会移除新实例。重建还原特效是否存在，不追赶已跳过对白的历史粒子时间。Unity 的 prewarm 仅对声明预热的循环发射器执行，最多 10 秒；长帧最多追赶 250 毫秒，粒子数量按发射器上限限制。
 
-复合 bundle 可用 `--prefab` 选择子树，并用 `--shaders` 提供同版本 shader typetree；此路径通过临时的 `uv --with pillow` 烘焙材质图集，无需给 Flutter 增加依赖。`tool/fx/avg_fx_mesh.py` 保留三维网格、UV、顶点色和 renderer 材质动画，读取 streamed/dense/constant 轨道；支持的材质族为 `Torappu/Particles/Additive`、`Dissolve Add`、`Dissolve AB`，按原 shader pass 的混合状态和溶解方程生成 30fps 图集。运行时不按特效名称分支，也不为每个粒子运行 fragment shader。
+复合 bundle 可用 `--prefab` 选择子树，并用 `--shaders` 提供同版本 shader typetree；此路径通过临时的 `uv --with pillow` 烘焙材质图集，无需给 Flutter 增加依赖。`tool/fx/avg_fx_mesh.py` 保留三维网格、UV、顶点色和 renderer 材质动画，读取 streamed/dense/constant 轨道；支持的材质族为 `Torappu/Particles/Additive`、`AlphaBlend`、`Dissolve Add`、`Dissolve AB` 和 `Dissolve AB UVTween`，按 shader pass 混合状态、溶解方程与 UV 滚动生成 30fps 图集；`AlphaBlend` 使用不乘二的颜色系数，混合因子若由 shader 属性引用（如 `_PremultiplyAlpha`）指定，须读取材质实际值，不能把 typetree 中的占位 `val=0` 当作最终混合方式。运行时不按特效名称分支，也不为每个粒子运行 fragment shader。
 
 `avg_036_daoguang_01` 已重新从 `battle.ab` 中的同名预制体提取，修正此前误用其他预制体资源的问题。CF-9 行动后连续四组、每组两个同层 `Effect`，分别具有不同 `rox/roy`，不能当成同层替换。转换还保留 burst、尺寸 X/Y 独立曲线、常量粒子颜色、渲染枢轴与局部变换；预制体根位置由脚本 `x/y` 接管。
 

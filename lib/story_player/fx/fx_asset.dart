@@ -10,6 +10,7 @@ class FxAsset {
     this.loop,
     this.emitters, {
     this.drawAfterImages = false,
+    this.drawAfterBlocker = false,
   });
 
   factory FxAsset.parse(Map<String, dynamic> json, {Uri? base}) {
@@ -28,6 +29,7 @@ class FxAsset {
       json['isLoop'] == true,
       emitters,
       drawAfterImages: json['drawAfterImages'] == true,
+      drawAfterBlocker: json['drawAfterBlocker'] == true,
     );
   }
 
@@ -36,6 +38,7 @@ class FxAsset {
   final double duration;
   final bool loop;
   final bool drawAfterImages;
+  final bool drawAfterBlocker;
   final List<FxEmitterSpec> emitters;
   Set<String> get textures => {for (final e in emitters) e.texture};
   Uri textureUri(String file) => base.resolve(file);
@@ -51,7 +54,10 @@ class FxEmitterSpec {
           .toList(),
       animation = j['animation'] == null
           ? null
-          : FxEmitterAnimation(j['animation'] as Map),
+          : FxEmitterAnimation(
+              j['animation'] as Map,
+              width: j['geometry'] == null ? 13 : 16,
+            ),
       alignment = fxNumber(j['alignment']).toInt(),
       pivot = fxOffset(j['pivot']),
       lengthScale = fxNumber(j['lengthScale'], 2),
@@ -170,7 +176,7 @@ class FxEmitterSpec {
 }
 
 class FxEmitterAnimation {
-  FxEmitterAnimation(Map json)
+  FxEmitterAnimation(Map json, {int width = 13})
     : fps = fxNumber(json['fps']),
       frames = [
         for (final frame in json['frames'] as List)
@@ -183,7 +189,7 @@ class FxEmitterAnimation {
         frames.length > 1024 ||
         frames.any(
           (frame) =>
-              frame.length != 13 || frame.any((value) => !value.isFinite),
+              frame.length != width || frame.any((value) => !value.isFinite),
         )) {
       throw const FormatException('特效动画帧无效');
     }
@@ -198,7 +204,7 @@ class FxEmitterAnimation {
     final second = math.min(first + 1, frames.length - 1);
     final fraction = frame - first;
     return [
-      for (var i = 0; i < 13; i++)
+      for (var i = 0; i < frames.first.length; i++)
         frames[first][i] + (frames[second][i] - frames[first][i]) * fraction,
     ];
   }
