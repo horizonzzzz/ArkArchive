@@ -67,6 +67,9 @@ class FxEmitterSpec {
       sorting = fxNumber(j['sorting']).toInt(),
       position = fxOffset(j['position']),
       scale = fxOffset(j['scale'], const Offset(1, 1)),
+      emissionBasis = (j['emissionBasis'] as List?)
+          ?.map((p) => fxOffset(p))
+          .toList(),
       rotation = fxNumber(j['rotation']),
       material = (j['material'] as Map).cast<String, dynamic>(),
       loop = j['loop'] != false,
@@ -94,6 +97,24 @@ class FxEmitterSpec {
       velocity = (j['velocity'] as Map? ?? const {}).cast<String, dynamic>(),
       noise = FxRange.parse(j['noise']),
       stretch = j['stretch'] == true {
+    if (emissionBasis != null) {
+      final raw = j['emissionBasis'] as List;
+      if (raw.length != 3 ||
+          raw.any(
+            (p) =>
+                p is! List ||
+                p.length != 2 ||
+                p.any((v) => v is! num || !v.isFinite),
+          )) {
+        throw const FormatException('粒子发射投影无效');
+      }
+      final dimensions = shape['scale'];
+      if (dimensions is! List ||
+          dimensions.length != 3 ||
+          dimensions.any((v) => v is! num || !v.isFinite)) {
+        throw const FormatException('三维发射形状尺寸无效');
+      }
+    }
     if (transform3D != null &&
         (transform3D!.length != 3 ||
             transform3D!.any(
@@ -143,6 +164,7 @@ class FxEmitterSpec {
   }
 
   final List<List<double>>? transform3D;
+  final List<Offset>? emissionBasis;
   final FxEmitterAnimation? animation;
   final int alignment;
   final Offset pivot;

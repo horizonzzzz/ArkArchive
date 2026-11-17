@@ -58,6 +58,9 @@ def particle_gradient(raw):
     if raw.get('minMaxState', 0) == 0:
         color = raw.get('maxColor', dict(r=1, g=1, b=1, a=1))
         return [[t, *[color[c] for c in 'rgba']] for t in (0, 1)]
+    if raw.get('minMaxState') == 2:
+        return [[t, *[raw[key][c] for c in 'rgba']]
+                for t, key in [(0, 'minColor'), (1, 'maxColor')]]
     return gradient(raw.get('maxGradient'))
 
 
@@ -66,7 +69,7 @@ def path_id(ref):
     return str(ref.get('m_PathID')) if ref and not ref.get('m_FileID') else ''
 
 
-def convert(source, output, prefab=None, shaders=None):
+def convert(source, output, prefab=None, shaders=None, project_particles=False):
     name = (prefab or source.name[3:-8]).lower()
     if not re.fullmatch(r'[a-z0-9_-]+', name):
         raise ValueError(f'无效特效名：{name}')
@@ -112,7 +115,7 @@ def convert(source, output, prefab=None, shaders=None):
         filename = tex.get('m_Name', '') + '.png' if tex else ''
         if not filename or Path(filename).name != filename:
             raise ValueError(f'{name}：材质 {raw.get("m_Name")} 缺少本地 MainTex')
-        if filename in UNSUPPORTED_MAIN_TEXTURES:
+        if filename in UNSUPPORTED_MAIN_TEXTURES and not project_particles:
             raise ValueError(f'{name}：当前未实现 shader 辅助贴图 {filename}')
         used.add(filename)
         def color(key):
@@ -146,6 +149,8 @@ def convert(source, output, prefab=None, shaders=None):
         try:
             mat = material(mats[0])
         except ValueError as error:
+            if project_particles:
+                raise
             print(f'{source}: 跳过不支持的材质：{error}')
             continue
         entry = {'name': tree.get(go, {}).get('m_Name', ''),
@@ -155,6 +160,18 @@ def convert(source, output, prefab=None, shaders=None):
                  'sorting': renderer.get('m_SortingOrder', 0)}
         if ps:
             im = ps['InitialModule']
+            if project_particles:
+                from avg_fx_mesh import transform_point
+                chain, t = [], transforms[go]
+                while t:
+                    chain.append(t)
+                    t = obj(t.get('m_Father'))
+                origin = transform_point([0, 0, 0], chain)
+                basis = [[v - origin[j] for j, v in enumerate(transform_point(p, chain))]
+                         for p in ([1, 0, 0], [0, 1, 0], [0, 0, 1])]
+                entry.update(position=origin[:2], rotation=0,
+                             scale=[math.sqrt(sum(v*v for v in axis)) for axis in basis[:2]],
+                             emissionBasis=[axis[:2] for axis in basis])
             shape, uv = ps['ShapeModule'], ps['UVModule']
             radius = shape.get('radius', 0)
             if isinstance(radius, dict):
@@ -193,6 +210,9 @@ def convert(source, output, prefab=None, shaders=None):
                          stretch=renderer.get('m_RenderMode') == 1,
                          lengthScale=renderer.get('m_LengthScale', 1.0),
                          pivot=[renderer.get('m_Pivot', {}).get(c, 0.0) for c in 'xy'])
+            if project_particles:
+                entry['shape']['scale'].append(shscale.get('z', 1))
+                entry['velocity'].update(z=curve(vel.get('z')), world=vel.get('inWorldSpace', False))
         emitters.append(entry)
     if not emitters:
         raise ValueError(f'{source}：未找到可绘制发射器')
@@ -216,10 +236,10 @@ def convert(source, output, prefab=None, shaders=None):
     for filename in sorted(used):
         shutil.copyfile(source.parent / filename, target / filename)
     has_mesh = any('m_Mesh' in o and 'm_GameObject' in o and 'm_Materials' not in o for o in tree.values())
-    if prefab and has_mesh:
+    if (prefab and has_mesh) or project_particles:
         from avg_fx_mesh import convert_meshes
         if shaders is None:
-            raise ValueError('--prefab 包含网格动画，需要 --shaders 指定 shader typetree')
+            raise ValueError('网格或三维粒子转换需要 --shaders 指定 shader typetree')
         convert_meshes(tree, source, data, target, shaders)
     used = {e['material']['main'] for e in emitters}
     for stale in target.glob('*.png'):
@@ -237,6 +257,7 @@ def main():
     parser.add_argument('output', type=Path)
     parser.add_argument('--prefab', help='从复合 bundle 中选择预制体并转换动画网格（需要 Pillow）')
     parser.add_argument('--shaders', type=Path, help='Shader bundle 的 TT_*.ab.json')
+    parser.add_argument('--project-particles', action='store_true', help='保留三维发射形状和速度在舞台上的投影')
     args = parser.parse_args()
     shaders = None
     if args.shaders:
@@ -248,7 +269,7 @@ def main():
     if not sources:
         parser.error('未找到 TT_*.ab.json')
     for source in sources:
-        convert(source, args.output, args.prefab, shaders)
+        convert(source, args.output, args.prefab, shaders, project_particles=args.project_particles)
 
 
 if __name__ == '__main__':

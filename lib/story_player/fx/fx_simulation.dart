@@ -39,6 +39,13 @@ class FxEmitterSim {
   );
   Offset _scale(Offset p) => Offset(p.dx * spec.scale.dx, p.dy * spec.scale.dy);
 
+  Offset _projectLocal(Offset p, double z) {
+    final basis = spec.emissionBasis;
+    return basis == null
+        ? _rotate(_scale(p))
+        : basis[0] * p.dx + basis[1] * p.dy + basis[2] * z;
+  }
+
   void advance(double dt, {bool emit = true}) {
     final before = age;
     age += dt;
@@ -98,15 +105,17 @@ class FxEmitterSim {
     final progress = p.progress;
     var velocity = p.direction * p.speed;
     if (spec.velocity['enabled'] == true) {
+      final local = Offset(
+        FxRange.parse(spec.velocity['x']).at(progress, p.seed),
+        FxRange.parse(spec.velocity['y']).at(progress, p.seed),
+      );
       velocity +=
-          _rotate(
-            _scale(
-              Offset(
-                FxRange.parse(spec.velocity['x']).at(progress, p.seed),
-                FxRange.parse(spec.velocity['y']).at(progress, p.seed),
-              ),
-            ),
-          ) *
+          (spec.velocity['world'] == true
+              ? local
+              : _projectLocal(
+                  local,
+                  FxRange.parse(spec.velocity['z']).at(progress, p.seed),
+                )) *
           pixelsPerUnit;
     }
     final noise = spec.noise.at(progress, p.seed) * pixelsPerUnit;
@@ -130,6 +139,9 @@ class FxEmitterSim {
     final shape = spec.shape;
     var origin = Offset.zero;
     var direction = const Offset(0, 1);
+    var originZ = 0.0;
+    var directionZ = spec.emissionBasis == null ? 0.0 : 1.0;
+    if (spec.emissionBasis != null) direction = Offset.zero;
     if (shape['enabled'] == true) {
       final radius = fxNumber(shape['radius']);
       final shapeScale = fxOffset(shape['scale'], const Offset(1, 1));
@@ -139,6 +151,11 @@ class FxEmitterSim {
           (random.nextDouble() - .5) * shapeScale.dx,
           (random.nextDouble() - .5) * shapeScale.dy,
         );
+        if (spec.emissionBasis != null) {
+          originZ =
+              (random.nextDouble() - .5) *
+              fxNumber((shape['scale'] as List? ?? const [1, 1, 1])[2], 1);
+        }
       } else {
         final angle = random.nextDouble() * math.pi * 2;
         final thickness = fxNumber(shape['thickness'], 1).clamp(0, 1);
@@ -153,6 +170,7 @@ class FxEmitterSim {
           math.sin(angle) * r * shapeScale.dy,
         );
         if (type == 8) direction = Offset(math.cos(angle), math.sin(angle));
+        if (type == 8) directionZ = 0;
         if (type == 4) {
           final spread =
               (random.nextDouble() - .5) *
@@ -160,12 +178,18 @@ class FxEmitterSim {
               math.pi /
               180;
           direction = Offset(math.sin(spread), math.cos(spread));
+          if (spec.emissionBasis != null) {
+            final polar = random.nextDouble() * math.pi * 2;
+            direction =
+                Offset(math.cos(polar), math.sin(polar)) * math.sin(spread);
+            directionZ = math.cos(spread);
+          }
         }
       }
     }
     return FxParticle(
-      spec.position + _rotate(_scale(origin)) * pixelsPerUnit,
-      _rotate(_scale(direction)),
+      spec.position + _projectLocal(origin, originZ) * pixelsPerUnit,
+      _projectLocal(direction, directionZ),
       spec.lifetime.at(phase, seed).clamp(.01, 120),
       spec.size.at(phase, seed).abs() * pixelsPerUnit * spec.scale.dx.abs(),
       spec.sizeY.at(phase, seed).abs() * pixelsPerUnit * spec.scale.dy.abs(),
@@ -222,6 +246,7 @@ class StageEffect {
     required this.layer,
     this.offset = Offset.zero,
     this.rotation = 0,
+    this.flip = 0,
     this.scale = const Offset(1, 1),
     this.rotation3D = Offset.zero,
     this.delayRemaining = 0,
@@ -230,6 +255,7 @@ class StageEffect {
   final String group;
   final int layer;
   final Offset offset, scale, rotation3D;
+  final int flip;
   final double rotation;
   double delayRemaining;
   double alpha = 1;

@@ -95,7 +95,7 @@ uv run --no-project --with pillow python tool/fx/avg_fx_physical.py
 
 输入需包含 `.temp/unpacked-battle/TT_battle.ab.json`、`.temp/unpacked-fx-shared/` 下的共享 typetree 与同目录 PNG，以及 `.temp/unpacked-avg-shaders/TT_[uc]shaders.ab.json`、`.temp/unpacked-android-shaders/TT_[uc]shaders.ab.json`。脚本解析材质、纹理、Controller 和 clip 引用，生成中间 `.temp/fx-stage/`，并更新上述三个打包目录；未解析的动画或缺失贴图会中止转换。
 
-剧情缓存中可用于优先对比的命中点：主线 14-11（`obt/main/level_main_14-10_beg`）、14-13（`obt/main/level_st_14-02`）、11-19（`obt/main/level_main_11-17_beg`）、15-17（`obt/main/level_main_15-15_end`）；活动 IS-2、IS-6、ZT-10、BB-8/BB-9，以及 EP-5 至 EP-8。14-13 同段包含连续 `$e_slash_02_l` 与 `$e_slash_cross`，BB-8 连续触发两次正手大斩击，适合检查多实例叠加；交叉斩另可对比 RS-1、BP-3。该列表按本地缓存剧本中对三个变量的扫描归纳，不代表全部调用点；完整频次见 `docs/fx-coverage-analysis.md`。首次接入未做视频核对；随后按用户提供的 `QQ20261115-214239-HD.mp4` 密集取帧，修复 Animator 动画漏采，并用最终资源在黑幕上连续渲染检查展开与消散。亮度、Bloom 和交叉斩周围的其他未接入特效仍有偏差，不能视为完整原版复现。
+剧情缓存中可用于优先对比的命中点：主线 14-11（`obt/main/level_main_14-10_beg`）、14-13（`obt/main/level_st_14-02`）、11-19（`obt/main/level_main_11-17_beg`）、15-17（`obt/main/level_main_15-15_end`）；活动 IS-2、IS-6、ZT-10、BB-8/BB-9，以及 EP-5 至 EP-8。14-13 同段包含连续 `$e_slash_02_l` 与 `$e_slash_cross`，BB-8 连续触发两次正手大斩击，适合检查多实例叠加；交叉斩另可对比 RS-1、BP-3。该列表按本地缓存剧本中对三个变量的扫描归纳，不代表全部调用点。首次接入未做视频核对；随后按用户提供的 `QQ20261115-214239-HD.mp4` 密集取帧，修复 Animator 动画漏采，并用最终资源在黑幕上连续渲染检查展开与消散。亮度、Bloom 和交叉斩周围的其他未接入特效仍有偏差，不能视为完整原版复现。
 
 `tool/fx/avg_fx_extract.py` 将 ArkUnpacker 的 `TT_*.ab.json` 转换为版本 1 描述，支持纯粒子和复合 bundle 网格资源。测试使用合成描述验证解析与模拟；打包资源不通过特效名称硬编码到测试中。
 `fx.json` 保留解包出的 Transform 投影坐标；运行时仅将粒子速度、粒子尺寸和粒子运动参数按 100 像素/单位换算，网格位置与尺寸沿用导出坐标。发射器绘制顺序使用解包出的 `sorting`；粒子的位置和飞行方向按脚本的 `rox/roy/roz` 使用 Unity Z→X→Y 顺序投影，Stretched Billboard 沿投影后的运动方向按速度/长度比例拉伸。
@@ -115,7 +115,7 @@ flutter run -d windows
 
 粒子共用引擎时钟，暂停时冻结；重播、跳转和断点重建创建新的实例，旧淡出不会移除新实例。重建还原特效是否存在，不追赶已跳过对白的历史粒子时间。Unity 的 prewarm 仅对声明预热的循环发射器执行，最多 10 秒；长帧最多追赶 250 毫秒，粒子数量按发射器上限限制。
 
-复合 bundle 可用 `--prefab` 选择子树，并用 `--shaders` 提供同版本 shader typetree；此路径通过临时的 `uv --with pillow` 烘焙材质图集，无需给 Flutter 增加依赖。`tool/fx/avg_fx_mesh.py` 保留三维网格、UV、顶点色和 renderer 材质动画，读取 streamed/dense/constant 轨道；支持的材质族为 `Torappu/Particles/Additive`、`AlphaBlend`、`Dissolve Add`、`Dissolve AB` 和 `Dissolve AB UVTween`，按 shader pass 混合状态、溶解方程与 UV 滚动生成 30fps 图集；`AlphaBlend` 使用不乘二的颜色系数，混合因子若由 shader 属性引用（如 `_PremultiplyAlpha`）指定，须读取材质实际值，不能把 typetree 中的占位 `val=0` 当作最终混合方式。运行时不按特效名称分支，也不为每个粒子运行 fragment shader。
+复合 bundle 可用 `--prefab` 选择子树，并用 `--shaders` 提供同版本 shader typetree；此路径通过临时的 `uv --with pillow` 烘焙材质图集，无需给 Flutter 增加依赖。`tool/fx/avg_fx_mesh.py` 保留三维网格、UV、顶点色和 renderer 材质动画，读取 streamed/dense/constant 轨道；支持的材质族为 `Torappu/Particles/Additive`、`AlphaBlend`、`Dissolve Add`、`Dissolve AB` 和 `Dissolve AB UVTween`，按 shader pass 混合状态、溶解方程与 UV 滚动生成 30fps 图集；既有烘焙资源保留原颜色系数；三维天气粒子在运行时乘二以对应 shader 的顶点颜色计算，混合因子若由 shader 属性引用（如 `_PremultiplyAlpha`）指定，须读取材质实际值，不能把 typetree 中的占位 `val=0` 当作最终混合方式。运行时不按特效名称分支，也不为每个粒子运行 fragment shader。
 
 `avg_036_daoguang_01` 已重新从 `battle.ab` 中的同名预制体提取，修正此前误用其他预制体资源的问题。CF-9 行动后连续四组、每组两个同层 `Effect`，分别具有不同 `rox/roy`，不能当成同层替换。转换还保留 burst、尺寸 X/Y 独立曲线、常量粒子颜色、渲染枢轴与局部变换；预制体根位置由脚本 `x/y` 接管。
 
@@ -138,3 +138,18 @@ uv run tool/fx/avg_fx_solar_bake.py .temp/fx-stage/avg_072_speech assets/fx-runt
 ```
 
 按当前项目要求，运行时使用的派生 `fx.json` 和主贴图纳入 `assets/` 并随应用打包；原始 AssetBundle、完整 typetree、中间解包结果和验收截图继续保留在忽略的 `.temp/`。游戏素材的版权归属不因转换或打包而改变，也不自动适用项目代码许可证。
+
+P1 天气特效包括 `$eb_rain → avg_rain_02`、`$eb_dust_01 → avg_043_yanchen_01`、`$eb_sand02 → avg_53_fengsha_01` 和 `$e_sandfall_01 → avg_035_sandfall_01`。前三种来自独立 AB；落沙从 `battle.ab` 的 `AVG_035_sandfall_01` 预制体解析 `sharedbattle` 材质与贴图。三维粒子转换使用可选的 `emissionBasis` 保留父级四元数、XYZ 发射形状与局部速度在舞台上的投影；不能把局部 Z 速度丢弃或统一镜像 Y 轴，否则会出现雨和落沙不可见、风沙粒子停在右侧等错误。未声明该字段的既有资源沿用原模拟方式。
+
+天气资源按 shader pass 解析透明混合；粒子颜色由运行时保留 `_TintColor × startColor × colorOverLife × 2`，溶解蒙版与主贴图的 UV 滚动分别烘焙。循环图集按统一特效时钟取模，不在最后一帧停住；风沙 mesh 保留真实三维顶点、UV 与顶点色。剧情 `flip` 的位 1、位 2 分别镜像舞台 X、Y，独立于资源内局部发射方向。
+
+重建前先用 ArkUnpacker 导出对应 typetree、PNG 与 shader。雨、扬尘、风沙分别以 `.temp/unpacked-p1-rain`、`.temp/unpacked-p1-yanchen`、`.temp/unpacked-p1-fengsha` 为输入执行：
+
+```sh
+uv run --no-project --with pillow python tool/fx/avg_fx_extract.py <解包目录> assets/fx-runtime/particle --project-particles --shaders ".temp/unpacked-avg-shaders/TT_[uc]shaders.ab.json"
+uv run --no-project --with pillow python tool/fx/avg_fx_sandfall.py
+```
+
+落沙还需 `.temp/unpacked-battle/` 与 `.temp/unpacked-fx-shared/`。四组资源均随应用打包。参考片段为 14-11 行动前 00:41–00:43、TL-9 行动后 01:03:50–01:03:55、TD-ST-2 00:24–00:27、TO-4 行动后 18:27–18:30；它们用于核对方向、覆盖和形态，不代表所有剧情的调用参数。连续帧必须使用 Flutter 实际资源、正确的 `effect`/`bgeffect` 分组及脚本参数；不能在已经含原版特效的视频截图上叠画后据此宣称一致。
+
+按上述四段参考导出了每种效果 6 秒、15fps 的 Flutter 连续帧，并将原片与中性背景上的实际绘制并排检查。雨与两种落尘均向下进入画面，风沙粒子由右向左穿过舞台，落沙按一次性实例停止发射；随机初始颜色及透明度保留 `TwoColors` 两端值，避免生成默认不透明白色。密度和亮度会随随机种子、剧情时刻与背景改变；Unity Noise 和 HDR/Bloom 仍为近似，细颗粒与原片尚有差异，不能据此宣称逐像素一致。

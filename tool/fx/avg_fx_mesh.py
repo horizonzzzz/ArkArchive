@@ -153,7 +153,7 @@ def mesh_geometry(mesh, hierarchy):
     return dict(positions=positions, uv=uvs, colors=colors, indices=indices)
 
 
-def bake_material(material, shader, tracks, path, tree, source, target, filename, duration):
+def bake_material(material, shader, tracks, path, tree, source, target, filename, duration, particle=False) -> dict:
     from importlib import import_module
     Image = import_module('PIL.Image')
     shader_name = shader['m_ParsedForm']['m_Name']
@@ -162,12 +162,30 @@ def bake_material(material, shader, tracks, path, tree, source, target, filename
         raise ValueError(f'尚未实现材质转换：{shader_name}')
     props = dict(material['m_SavedProperties']['m_TexEnvs'])
     def texture(name):
-        tex = tree[ref(props[name]['m_Texture'])]
-        return Image.open(source.parent / (tex['m_Name'] + '.png')).convert('RGBA')
+        pid = ref(props[name]['m_Texture'])
+        if pid != '0':
+            tex = tree[pid]
+            return Image.open(source.parent / (tex['m_Name'] + '.png')).convert('RGBA')
+        defaults = shader['m_ParsedForm']['m_PropInfo']['m_Props']
+        default = next(p['m_DefTexture']['m_DefaultName'] for p in defaults if p['m_Name'] == name)
+        if default not in ('white', 'black'):
+            raise ValueError(f'不支持的默认纹理：{name}={default}')
+        return Image.new('RGBA', (1, 1), (255 if default == 'white' else 0,) * 3 + (255,))
     main = texture('_MainTex')
     dissolve = texture('_DissolveTex') if '_DissolveTex' in props else None
+    loop = False
+    if particle and shader_name.endswith(' UVTween'):
+        from fractions import Fraction
+        _, vectors = property_values(material, [], '', 0)
+        rates = [Fraction(v).limit_denominator(1000) for v in vectors.get('_UVTween', []) if v]
+        if rates:
+            denominator = math.lcm(*(r.denominator for r in rates))
+            duration = denominator / math.gcd(*(abs(r.numerator) * (denominator // r.denominator) for r in rates))
+            if duration > 16:
+                raise ValueError('UVTween 循环超过图集容量')
+            loop = True
     fps, columns = 30, 8 if duration > 0 else 1
-    count = math.ceil(duration * fps) + 1
+    count = math.ceil(duration * fps) + (0 if loop else 1)
     width, height = min(512, main.width), min(128, main.height)
     atlas = Image.new('RGBA', (width * columns, height * math.ceil(count / columns)))
     def sample(image, u, v):
@@ -176,7 +194,7 @@ def bake_material(material, shader, tracks, path, tree, source, target, filename
                                int(((1-v) % 1) * image.height) % image.height))
     for frame in range(count):
         floats, vectors = property_values(material, tracks, path, frame / fps)
-        tint = vectors.get('_TintColor', [1]*4)
+        tint = [1]*4 if particle else vectors.get('_TintColor', [1]*4)
         main_st = vectors.get('_MainTex_ST', [1, 1, 0, 0])
         mask_st = vectors.get('_DissolveTex_ST', [1, 1, 0, 0])
         amount, border = floats.get('_Amount', 0), max(1e-6, floats.get('_BorderWidth', 0.01))
@@ -195,10 +213,10 @@ def bake_material(material, shader, tracks, path, tree, source, target, filename
                     color = (color[component],) * 4
                 alpha = 1
                 if dissolve:
-                    mask = sample(dissolve, u*mask_st[0]+mask_st[2], v*mask_st[1]+mask_st[3])[0] / 255
+                    mask = sample(dissolve, u*mask_st[0]+mask_st[2]+uv_tween[2]*frame/fps, v*mask_st[1]+mask_st[3]+uv_tween[3]*frame/fps)[0] / 255
                     # 原版 GLSL：clamp((mask-amount+border*(1-roundEven(amount+.5)))/border,0,1)。
                     alpha = max(0, min(1, (mask-amount+border*(1-round(amount+.5))) / border))
-                pixels.append(tuple(round(max(0, min(255, color[c] * (1 if shader_name == 'Torappu/Particles/AlphaBlend' else 2) * tint[c] * (alpha if c == 3 else 1)))) for c in range(4)))
+                pixels.append(tuple(round(max(0, min(255, color[c] * (1 if particle or shader_name == 'Torappu/Particles/AlphaBlend' else 2) * tint[c] * (alpha if c == 3 else 1)))) for c in range(4)))
         tile = Image.new('RGBA', (width, height))
         tile.putdata(pixels)
         atlas.paste(tile, ((frame % columns)*width, (frame // columns)*height))
@@ -213,9 +231,10 @@ def bake_material(material, shader, tracks, path, tree, source, target, filename
                 raise ValueError(f'材质缺少混合属性：{property_name}')
             return values[property_name]
         return value['val']
-    return dict(main=filename, tint=[1]*4, mainColor=[1]*4, uvScroll=[0, 0],
+    return dict(main=filename, tint=property_values(material, [], '', 0)[1].get('_TintColor', [1]*4) if particle else [1]*4, mainColor=[1]*4, uvScroll=[0, 0],
                 srcBlend=blend('srcBlend'), dstBlend=blend('destBlend'),
-                frames=dict(count=count, columns=columns, fps=fps, width=width, height=height))
+                colorMultiplier=2 if particle else 1,
+                frames=dict(count=count, columns=columns, fps=fps, width=width, height=height, loop=loop))
 
 def attach_animation(entry, tree, chain, tracks, duration, mesh=False):
     if not tracks:
@@ -307,19 +326,20 @@ def convert_meshes(tree, source, data, target, shaders):
         if not entries:
             continue
         entry = entries[0]
-        chain = hierarchy(go)[:-1]
-        origin = transform_point([0, 0, 0], chain)
-        basis = [[v-origin[j] for j, v in enumerate(transform_point(p, chain))]
-                 for p in ([1, 0, 0], [0, 1, 0])]
-        entry.update(position=[0, 0], scale=[1, 1], rotation=0,
-                     transform3D=[origin, *basis], alignment=renderer.get('m_RenderAlignment', 0),
-                     pivot=[renderer.get('m_Pivot', {}).get(c, 0) for c in 'xy'],
-                     lengthScale=renderer.get('m_LengthScale', 1))
-        attach_animation(entry, tree, chain, tracks, data['duration'])
+        if 'emissionBasis' not in entry:
+            chain = hierarchy(go)[:-1]
+            origin = transform_point([0, 0, 0], chain)
+            basis = [[v-origin[j] for j, v in enumerate(transform_point(p, chain))]
+                     for p in ([1, 0, 0], [0, 1, 0])]
+            entry.update(position=[0, 0], scale=[1, 1], rotation=0,
+                         transform3D=[origin, *basis], alignment=renderer.get('m_RenderAlignment', 0),
+                         pivot=[renderer.get('m_Pivot', {}).get(c, 0) for c in 'xy'],
+                         lengthScale=renderer.get('m_LengthScale', 1))
+            attach_animation(entry, tree, chain, tracks, data['duration'])
         material = tree[ref(renderer['m_Materials'][0])]
         shader = shaders[str(material['m_Shader']['m_PathID'])]
         entry['material'] = bake_material(material, shader, [], '', tree, source, target,
-                                          f'particle_{go.replace("-", "n")}.png', 0)
+                                          f'particle_{go.replace("-", "n")}.png', 0, particle='emissionBasis' in entry)
     for renderer in tree.values():
         go = ref(renderer.get('m_GameObject'))
         if go not in filters or not renderer.get('m_Materials'):
@@ -337,4 +357,4 @@ def convert_meshes(tree, source, data, target, shaders):
         entry['geometry'] = mesh_geometry(mesh, [] if tracks else chain[:-1])
         attach_animation(entry, tree, chain[:-1], tracks, data['duration'], mesh=True)
         entry['material'] = bake_material(material, shader, tracks, path, tree, source, target,
-                                           f'mesh_{len([e for e in data["emitters"] if "geometry" in e])}.png', data['duration'])
+                                           f'mesh_{len([e for e in data["emitters"] if "geometry" in e])}.png', 0 if not tracks and any('emissionBasis' in e for e in data['emitters']) else data['duration'])

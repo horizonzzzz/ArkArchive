@@ -932,6 +932,7 @@ class StoryEngine extends ChangeNotifier {
       FxSimulation(asset, seed: c.line, loop: group == 'effect' ? false : null),
       group: group,
       layer: layer,
+      flip: c.number('flip').toInt(),
       offset: Offset(c.number('x'), c.number('y')),
       rotation: c.number('roz') * math.pi / 180,
       rotation3D: Offset(c.number('rox'), c.number('roy')) * (math.pi / 180),

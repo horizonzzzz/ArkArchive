@@ -19,8 +19,8 @@ def ref(pid, file=0):
 
 def transform(go, parent=0, position=(0, 0), scale=(1, 1), angle=0.0):
     return {'m_GameObject': ref(go), 'm_Father': ref(parent),
-            'm_LocalPosition': dict(x=position[0], y=position[1]),
-            'm_LocalScale': dict(x=scale[0], y=scale[1]),
+            'm_LocalPosition': dict(x=position[0], y=position[1], z=0),
+            'm_LocalScale': dict(x=scale[0], y=scale[1], z=1),
             'm_LocalRotation': dict(x=0, y=0, z=math.sin(angle/2), w=math.cos(angle/2))}
 
 
@@ -34,7 +34,7 @@ class ExtractTest(unittest.TestCase):
                 '3': transform(1, scale=(2, 2), angle=math.pi/2),
                 '4': transform(2, parent=3, position=(10, 0)), '5': ps,
                 '6': {'m_GameObject': ref(2), 'm_Materials': [ref(7)]},
-                '7': {'m_SavedProperties': {'m_TexEnvs': [['_MainTex', {'m_Texture': ref(8)}]]}},
+                '7': {'m_SavedProperties': {'m_TexEnvs': [['_MainTex', {'m_Texture': ref(8), 'm_Scale': dict(x=1, y=1), 'm_Offset': dict(x=0, y=0)}]]}},
                 '8': {'m_Name': 'synthetic'}, '9': {'_effectDuration': 2, '_isLoop': True}}
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -45,12 +45,33 @@ class ExtractTest(unittest.TestCase):
                 result = convert(source, root / 'out')
             e = result['emitters'][0]
             self.assertEqual(e['kind'], 'particle')
+            self.assertNotIn('emissionBasis', e)
             self.assertAlmostEqual(e['position'][0], 0)
             self.assertAlmostEqual(e['position'][1], 20)
             self.assertEqual(e['sizeY'], e['size'])
             self.assertEqual(e['scale'], [2, 2])
             self.assertEqual((root / 'out/test_fx/synthetic.png').read_bytes(), b'fixture-only')
             self.assertEqual(len(result['sourceSha256']), 64)
+            from importlib import import_module
+            Image = import_module('PIL.Image')
+            Image.new('RGBA', (2, 2), 'white').save(root / 'synthetic.png')
+            tree['4']['m_LocalRotation'] = dict(x=math.sqrt(.5), y=0, z=0, w=math.sqrt(.5))
+            ps['ShapeModule'] = dict(enabled=True, type=5, m_Scale=dict(x=4, y=0, z=6))
+            ps['VelocityModule'] = dict(enabled=True, z=dict(scalar=2))
+            tree['7']['m_Shader'] = ref(10)
+            shader = {'m_ParsedForm': dict(m_Name='Torappu/Particles/AlphaBlend',
+                      m_SubShaders=[{'m_Passes': [{'m_State': {'rtBlend0': {
+                      'srcBlend': dict(val=5), 'destBlend': dict(val=10)}}}]}])}
+            source.write_text(json.dumps({'asset': tree}), encoding='utf-8')
+            with contextlib.redirect_stdout(io.StringIO()):
+                projected = convert(source, root / 'projected', shaders={'10': shader}, project_particles=True)
+            p = projected['emitters'][0]
+            self.assertAlmostEqual(p['emissionBasis'][2][0], 2)
+            self.assertAlmostEqual(p['emissionBasis'][2][1], 0)
+            self.assertEqual(p['shape']['scale'], [4, 0, 6])
+            self.assertEqual(p['velocity']['z']['scalar'], 2)
+            self.assertEqual(p['material']['dstBlend'], 10)
+            self.assertEqual(p['material']['colorMultiplier'], 2)
             (root / 'synthetic.png').unlink()
             with self.assertRaises(FileNotFoundError), contextlib.redirect_stdout(io.StringIO()):
                 convert(source, root / 'other')
@@ -72,6 +93,12 @@ class ExtractTest(unittest.TestCase):
     def test_constant_particle_color_is_not_replaced_with_white_gradient(self):
         self.assertEqual(particle_gradient({'minMaxState': 0, 'maxColor': dict(r=1, g=0, b=0, a=.5)}),
                          [[0, 1, 0, 0, .5], [1, 1, 0, 0, .5]])
+
+    def test_two_start_colors_preserve_transparency_and_tint(self):
+        self.assertEqual(particle_gradient({
+            'minMaxState': 2, 'minColor': dict(r=.4, g=.3, b=.2, a=.25),
+            'maxColor': dict(r=1, g=.9, b=.7, a=.6)}),
+            [[0, .4, .3, .2, .25], [1, 1, .9, .7, .6]])
 
     def test_dense_material_track_interpolates_between_samples(self):
         clip = {'m_MuscleClip': {'m_Clip': {'data': {
@@ -181,6 +208,32 @@ class ExtractTest(unittest.TestCase):
                           root / 'source.json', target, 'alpha.png', 0)
             self.assertEqual(Image.open(target / 'alpha.png').getpixel((0, 0)), (100, 0, 0, 255))
             self.assertEqual(result['srcBlend'], 5)
+
+    def test_particle_dissolve_scrolls_mask_and_repeats_without_clamping(self):
+        from importlib import import_module
+        Image = import_module('PIL.Image')
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            Image.new('RGBA', (2, 2), 'white').save(root / 'main.png')
+            mask = Image.new('RGBA', (1, 2))
+            mask.putdata([(0, 0, 0, 255), (255, 255, 255, 255)])
+            mask.save(root / 'mask.png')
+            material = {'m_SavedProperties': {
+                'm_TexEnvs': [[name, {'m_Texture': ref(pid), 'm_Scale': dict(x=1, y=1), 'm_Offset': dict(x=0, y=0)}] for name, pid in [('_MainTex', 1), ('_DissolveTex', 2)]],
+                'm_Floats': [['_Amount', .5], ['_BorderWidth', .1]],
+                'm_Colors': [['_UVTween', dict(r=0, g=0, b=0, a=.5)],
+                             ['_TintColor', dict(r=.5, g=.4, b=.3, a=.2)]]}}
+            shader = {'m_ParsedForm': {'m_Name': 'Torappu/Particles/Dissolve/Dissolve AB UVTween',
+                'm_SubShaders': [{'m_Passes': [{'m_State': {'rtBlend0': {
+                    'srcBlend': {'val': 5}, 'destBlend': {'val': 10}}}}]}]}}
+            result = bake_material(material, shader, [], '', {'1': {'m_Name': 'main'}, '2': {'m_Name': 'mask'}},
+                                   root / 'source.json', root, 'atlas.png', 0, particle=True)
+            self.assertEqual(result['frames']['count'], 60)
+            self.assertTrue(result['frames']['loop'])
+            self.assertEqual(result['tint'], [.5, .4, .3, .2])
+            self.assertEqual(result['colorMultiplier'], 2)
+            atlas = Image.open(root / 'atlas.png')
+            self.assertNotEqual(atlas.getpixel((0, 0))[3], atlas.getpixel((12, 6))[3])
 
 if __name__ == '__main__':
     unittest.main()

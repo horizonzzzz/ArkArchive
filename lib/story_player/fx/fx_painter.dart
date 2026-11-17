@@ -30,6 +30,10 @@ void paintEffects(
     if (effect.delayRemaining > 0) continue;
     canvas.save();
     canvas.translate(640 + effect.offset.dx, 360 - effect.offset.dy);
+    canvas.scale(
+      (effect.flip & 1) == 0 ? 1 : -1,
+      (effect.flip & 2) == 0 ? 1 : -1,
+    );
     final emitters = effect.simulation.emitters.toList()
       ..sort((a, b) => a.spec.sorting.compareTo(b.spec.sorting));
     for (final emitter in emitters) {
@@ -108,10 +112,12 @@ void paintEffects(
       if (materialFrames != null) {
         final count = fxNumber(materialFrames['count']).toInt();
         final frameColumns = fxNumber(materialFrames['columns']).toInt();
-        final frame =
+        final index =
             (effect.simulation.elapsed * fxNumber(materialFrames['fps']))
-                .floor()
-                .clamp(0, count - 1);
+                .floor();
+        final frame = materialFrames['loop'] == true
+            ? index % count
+            : index.clamp(0, count - 1);
         final width = fxNumber(materialFrames['width']);
         final height = fxNumber(materialFrames['height']);
         materialRect = Rect.fromLTWH(
@@ -328,9 +334,10 @@ void _paintMesh(
   if (frames != null) {
     final count = fxNumber(frames['count']).toInt();
     final columns = fxNumber(frames['columns']).toInt();
-    final frame = (effect.simulation.elapsed * fxNumber(frames['fps']))
-        .floor()
-        .clamp(0, count - 1);
+    final index = (effect.simulation.elapsed * fxNumber(frames['fps'])).floor();
+    final frame = frames['loop'] == true
+        ? index % count
+        : index.clamp(0, count - 1);
     width = fxNumber(frames['width']);
     height = fxNumber(frames['height']);
     frameX = (frame % columns) * width;

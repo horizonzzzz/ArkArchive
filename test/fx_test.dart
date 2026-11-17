@@ -52,6 +52,75 @@ void main() {
     }
     expect(simulation.active, isFalse);
   });
+  test('三维发射投影保留局部 Z 运动、落尘反射和横向风沙', () {
+    for (final basis in [
+      [
+        [1, 0],
+        [0, 0],
+        [0, -1],
+      ],
+      [
+        [0, 0],
+        [0, 1],
+        [-1, 0],
+      ],
+      [
+        [1, 0],
+        [0, -1],
+        [0, 0],
+      ],
+    ]) {
+      final raw = fixture(loop: false);
+      final emitter = (raw['emitters'] as List).single as Map<String, dynamic>;
+      emitter['emissionBasis'] = basis;
+      emitter['shape'] = {
+        'scale': [1, 1, 1],
+      };
+      emitter['speed'] = {'scalar': 0};
+      emitter['velocity'] = {
+        'enabled': true,
+        'y': {'scalar': 1},
+        'z': {'scalar': 2},
+      };
+      final simulation = FxSimulation(FxAsset.parse(raw))..advance(.05);
+      final velocity = simulation.emitters.single.particles.first.velocity;
+      expect(velocity.dx, basis[1][0] * 100 + basis[2][0] * 200);
+      expect(velocity.dy, basis[1][1] * 100 + basis[2][1] * 200);
+    }
+  });
+
+  test('三维发射投影拒绝非数值轴和缺失的形状维度', () {
+    for (final malformedBasis in [
+      [
+        [1, 0],
+        [0, 'bad'],
+        [0, -1],
+      ],
+      [
+        [1, 0],
+        [0, 1],
+      ],
+    ]) {
+      final raw = fixture();
+      final emitter = (raw['emitters'] as List).single as Map;
+      emitter['emissionBasis'] = malformedBasis;
+      emitter['shape'] = {
+        'scale': [1, 1, 1],
+      };
+      expect(() => FxAsset.parse(raw), throwsFormatException);
+    }
+    final raw = fixture();
+    final emitter = (raw['emitters'] as List).single as Map;
+    emitter['emissionBasis'] = [
+      [1, 0],
+      [0, 0],
+      [0, -1],
+    ];
+    emitter['shape'] = {
+      'scale': [1, 1],
+    };
+    expect(() => FxAsset.parse(raw), throwsFormatException);
+  });
   test('瞬时发射在零时刻和重复时间各触发一次，停止发射后仍推进存活粒子', () {
     final raw = fixture(loop: false);
     final spec = (raw['emitters'] as List).single as Map;
@@ -105,6 +174,17 @@ void main() {
             .abs();
 
     expect(cross, greaterThan(.01));
+  });
+
+  testWidgets('bgeffect 将 flip 轴标志传给演出实例', (tester) async {
+    final engine = StoryEngine(
+      StoryScript.parse('[bgeffect(name="test_fx", flip=2, layer=1)]\n正文'),
+      effectAssets: {'test_fx': FxAsset.parse(fixture())},
+    );
+    engine.start();
+    await tester.pump();
+    expect(engine.state.effects.single.flip, 2);
+    engine.dispose();
   });
 
   testWidgets('三维特效仅按旋转投影一次，不额外用余弦压扁', (tester) async {
@@ -424,7 +504,13 @@ void main() {
       'main': 'white.png',
       'tint': [.25, .5, 1, 1],
       'colorMultiplier': 2,
-      'frames': {'count': 2, 'columns': 2, 'width': 8, 'height': 8, 'fps': 10},
+      'frames': <String, dynamic>{
+        'count': 2,
+        'columns': 2,
+        'width': 8,
+        'height': 8,
+        'fps': 10,
+      },
     };
     final asset = FxAsset.parse(raw);
     final recorder = ui.PictureRecorder();
@@ -462,6 +548,11 @@ void main() {
 
     expect(await center(), [64, 128, 255, 255]);
     sim.advance(.1);
+    expect(await center(), [0, 255, 0, 255]);
+    (asset.emitters.single.material['frames'] as Map)['loop'] = true;
+    sim.advance(.1);
+    expect(await center(), [64, 128, 255, 255]);
+    (asset.emitters.single.material['frames'] as Map)['loop'] = false;
     expect(await center(), [0, 255, 0, 255]);
     effect.alpha = 0;
     expect(await center(), [0, 0, 0, 0]);
