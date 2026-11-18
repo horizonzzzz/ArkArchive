@@ -243,6 +243,17 @@ class FileCache {
     if (await folder.exists()) await folder.delete(recursive: true);
   }
 
+  /// 已缓存资源的字节数；故事层未命中时回退共享层，都未命中返回 null。
+  Future<int?> sizeOf(Uri uri, {String? story}) async {
+    final file = await _file(uri, story);
+    if (await file.exists()) return file.length();
+    if (story != null) {
+      final shared = await _file(uri, null);
+      if (await shared.exists()) return shared.length();
+    }
+    return null;
+  }
+
   Future<Uint8List?> read(
     Uri uri, {
     String? story,

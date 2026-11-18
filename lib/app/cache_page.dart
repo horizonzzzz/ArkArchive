@@ -27,6 +27,7 @@ class CachePage extends StatefulWidget {
     required this.caching,
     required this.done,
     required this.total,
+    this.exporting = false,
     this.message,
   });
   final List<StoryGroup> groups;
@@ -47,6 +48,9 @@ class CachePage extends StatefulWidget {
   final ValueChanged<List<StoryEntry>> onDeleteCached;
   final bool deleting;
   final bool caching;
+
+  /// 有导出任务在后台读取缓存：删除类操作需等待其完成。
+  final bool exporting;
   final int done;
   final int total;
   final String? message;
@@ -189,7 +193,10 @@ class _CachePageState extends State<CachePage> {
                           ),
                         ),
                         OutlinedButton.icon(
-                          onPressed: widget.deleting || _selectedOffline.isEmpty
+                          onPressed:
+                              widget.deleting ||
+                              widget.exporting ||
+                              _selectedOffline.isEmpty
                               ? null
                               : () => widget.onDeleteCached(
                                   entries
@@ -419,7 +426,7 @@ class _CachePageState extends State<CachePage> {
             Checkbox(
               value: _selectedOffline.contains(entry.path),
               semanticLabel: '选择离线剧情 ${entry.title}',
-              onChanged: widget.deleting
+              onChanged: widget.deleting || widget.exporting
                   ? null
                   : (selected) => setState(() {
                       if (selected == true) {
@@ -467,7 +474,7 @@ class _CachePageState extends State<CachePage> {
             ),
             IconButton(
               tooltip: '删除缓存 ${entry.title}',
-              onPressed: widget.deleting
+              onPressed: widget.deleting || widget.exporting
                   ? null
                   : () => widget.onDeleteCached([entry]),
               icon: const Icon(Icons.delete_outline, size: 20),

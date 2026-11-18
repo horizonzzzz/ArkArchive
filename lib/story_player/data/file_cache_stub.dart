@@ -9,6 +9,7 @@ class FileCache {
   Future<void> clear({Set<Uri> keep = const {}}) async {}
   Future<void> delete(Uri uri, {String? story}) async {}
   Future<void> deleteStory(String story) async {}
+  Future<int?> sizeOf(Uri uri, {String? story}) async => null;
   Future<Uint8List?> read(
     Uri uri, {
     String? story,

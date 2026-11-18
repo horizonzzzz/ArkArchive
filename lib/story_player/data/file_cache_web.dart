@@ -71,6 +71,12 @@ class FileCache {
     await web.window.caches.delete(_storyCacheName(story)).toDart;
   }
 
+  Future<int?> sizeOf(Uri uri, {String? story}) async {
+    // 浏览器端读取大小需要完整拉回响应体，成本与 read 相同；
+    // 预览体积统计对 Web 暂不提供精确值。
+    return null;
+  }
+
   Future<Uint8List?> read(
     Uri uri, {
     String? story,
