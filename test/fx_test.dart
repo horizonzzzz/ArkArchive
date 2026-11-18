@@ -782,4 +782,27 @@ void main() {
     expect(simulation.emitters.single.particles, isEmpty);
     expect(simulation.active, isFalse);
   });
+
+  test('P2 七种第一人称视效资源均可离线加载', () async {
+    final store = AssetStore();
+    addTearDown(store.close);
+    final loader = FxLoader('asset:///assets/fx-runtime/', store);
+    const expected = {
+      'avg_signalinterference_01': '',
+      'avg_056_tvnoise_01': '',
+      'avg_mohu_zhengyan_01': 'open',
+      'avg_mohu_biyan_01': 'close',
+      'avg_suduxian': '',
+      'avg_062_white_01': '',
+      'avg_062_black_01': '',
+    };
+    for (final entry in expected.entries) {
+      final asset = await loader.load(entry.key);
+      expect(asset.name, entry.key);
+      expect(asset.screenEffect['direction'] ?? '', entry.value);
+      for (final texture in asset.textures) {
+        expect(await loader.bytes(asset.textureUri(texture)), isNotEmpty);
+      }
+    }
+  });
 }

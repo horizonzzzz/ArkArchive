@@ -49,6 +49,17 @@ class StagePainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(bounds);
     canvas.drawColor(Colors.black, BlendMode.src);
+    final eyeEffect = _eyeEffect();
+    if (eyeEffect != null) {
+      canvas.saveLayer(
+        bounds,
+        Paint()
+          ..imageFilter = ui.ImageFilter.blur(
+            sigmaX: eyeEffect.$1,
+            sigmaY: eyeEffect.$1,
+          ),
+      );
+    }
     // 镜头震动与灰度/反色只作用于场景层，不作用于 CG 道具、幕布与遮罩。
     final cameraFilter = _cameraFilter();
     canvas.save();
@@ -116,6 +127,25 @@ class StagePainter extends CustomPainter {
     if (cameraFilter != null) {
       canvas.restore();
     }
+    if (eyeEffect != null) {
+      canvas.restore();
+      if (eyeEffect.$2 > 0) {
+        canvas.drawRect(
+          bounds,
+          Paint()
+            ..shader = ui.Gradient.radial(
+              const Offset(640, 360),
+              800,
+              [
+                Colors.transparent,
+                Colors.transparent,
+                Colors.black.withValues(alpha: eyeEffect.$2),
+              ],
+              const [0, .52, 1],
+            ),
+        );
+      }
+    }
     canvas.restore();
     for (final item in state.cgItems.values) {
       _cgItem(canvas, item);
@@ -129,6 +159,27 @@ class StagePainter extends CustomPainter {
     for (final stamp in state.stamps) {
       _stamp(canvas, stamp);
     }
+  }
+
+  (double, double)? _eyeEffect() {
+    final active =
+        state.effects
+            .where(
+              (effect) => effect.simulation.asset.screenEffect['type'] == 'eye',
+            )
+            .toList()
+          ..sort((a, b) => a.layer.compareTo(b.layer));
+    if (active.isEmpty) return null;
+    final effect = active.last;
+    final progress =
+        (effect.simulation.elapsed / effect.simulation.asset.duration).clamp(
+          0.0,
+          1.0,
+        );
+    final closing =
+        effect.simulation.asset.screenEffect['direction'] == 'close';
+    final amount = closing ? progress : 1 - progress;
+    return (amount * 5, amount * .82);
   }
 
   ColorFilter? _cameraFilter() {

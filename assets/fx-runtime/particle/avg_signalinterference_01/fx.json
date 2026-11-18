@@ -1,0 +1,9673 @@
+{
+  "version": 1,
+  "name": "avg_signalinterference_01",
+  "duration": 5.0,
+  "isLoop": true,
+  "emitters": [
+    {
+      "name": "bg_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_01.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.25,
+          0.25,
+          0.25,
+          0.5910000205039978
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 10.0
+      },
+      "sorting": 1,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.10000000149011612,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 13.729999542236328,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 7.96999979019165,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.27799999713897705
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.27799999713897705
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.18529030289158466,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.3441214618142977,
+          1.0,
+          1.0,
+          1.0,
+          0.45098039507865906
+        ],
+        [
+          0.514702067597467,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.714702067597467,
+          1.0,
+          1.0,
+          1.0,
+          0.5803921818733215
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "bg_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_01.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.25,
+          0.25,
+          0.25,
+          0.5910000205039978
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 10.0
+      },
+      "sorting": 1,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 13.729999542236328,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 7.96999979019165,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.8029999732971191
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.8029999732971191
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.18529030289158466,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.2500038147554742,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.32353704127565425,
+          1.0,
+          1.0,
+          1.0,
+          0.5221593976020813
+        ],
+        [
+          0.4264744029907683,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.5911802853437095,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.714702067597467,
+          1.0,
+          1.0,
+          1.0,
+          0.5803921818733215
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "bg_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_01.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.25,
+          0.25,
+          0.25,
+          0.5910000205039978
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 10.0
+      },
+      "sorting": 1,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.10000000149011612,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 13.729999542236328,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 7.96999979019165,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.27799999713897705
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.27799999713897705
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.18529030289158466,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.3441214618142977,
+          1.0,
+          1.0,
+          1.0,
+          0.45098039507865906
+        ],
+        [
+          0.514702067597467,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.714702067597467,
+          1.0,
+          1.0,
+          1.0,
+          0.5803921818733215
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "bg_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_01.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.25,
+          0.25,
+          0.25,
+          0.5910000205039978
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 10.0
+      },
+      "sorting": 1,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 13.729999542236328,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 7.96999979019165,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.8029999732971191
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.8029999732971191
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.18529030289158466,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.2500038147554742,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.32353704127565425,
+          1.0,
+          1.0,
+          1.0,
+          0.5221593976020813
+        ],
+        [
+          0.4264744029907683,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.5911802853437095,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.714702067597467,
+          1.0,
+          1.0,
+          1.0,
+          0.5803921818733215
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "bg_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_01.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.25,
+          0.25,
+          0.25,
+          0.5910000205039978
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 10.0
+      },
+      "sorting": 1,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.10000000149011612,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 13.729999542236328,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 7.96999979019165,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.27799999713897705
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.27799999713897705
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.18529030289158466,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.3441214618142977,
+          1.0,
+          1.0,
+          1.0,
+          0.45098039507865906
+        ],
+        [
+          0.514702067597467,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.714702067597467,
+          1.0,
+          1.0,
+          1.0,
+          0.5803921818733215
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "line_full_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_mask_18.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.8161764740943909,
+          0.8161764740943909,
+          0.8161764740943909,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 3,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 13.729999542236328,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 7.96999979019165,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.36000001430511475
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.36000001430511475
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": null,
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "line_full_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_mask_18.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.8161764740943909,
+          0.8161764740943909,
+          0.8161764740943909,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 3,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 13.729999542236328,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 7.96999979019165,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.19099999964237213
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.19099999964237213
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": null,
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "line_full_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_mask_18.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.8161764740943909,
+          0.8161764740943909,
+          0.8161764740943909,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 3,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 13.729999542236328,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 7.96999979019165,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.19099999964237213
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.19099999964237213
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": null,
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "line_full_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_mask_18.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.8161764740943909,
+          0.8161764740943909,
+          0.8161764740943909,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 3,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 13.729999542236328,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 7.96999979019165,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.36000001430511475
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.36000001430511475
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": null,
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "line_full_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_mask_18.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.8161764740943909,
+          0.8161764740943909,
+          0.8161764740943909,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 3,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 13.729999542236328,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 7.96999979019165,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.10899999737739563
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.10899999737739563
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": null,
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (2)",
+      "kind": "particle",
+      "position": [
+        -321.0,
+        -167.0
+      ],
+      "scale": [
+        0.857123613357544,
+        0.857123613357544
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 2.0,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.5720000267028809
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.5720000267028809
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (5)",
+      "kind": "particle",
+      "position": [
+        272.0,
+        65.0
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 26.739999771118164,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.9299999475479126,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.04699999839067459
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.04699999839067459
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (3)",
+      "kind": "particle",
+      "position": [
+        450.0,
+        -225.0
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": -3.141592653589793,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.5,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (5)",
+      "kind": "particle",
+      "position": [
+        310.0,
+        -112.0
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 26.739999771118164,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.9299999475479126,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.30300000309944153
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.30300000309944153
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01",
+      "kind": "particle",
+      "position": [
+        428.0,
+        -183.0
+      ],
+      "scale": [
+        0.6500790119171143,
+        0.6500789523124695
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.5,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.1340000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.1340000033378601
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01",
+      "kind": "particle",
+      "position": [
+        428.0,
+        124.0
+      ],
+      "scale": [
+        0.6500790119171143,
+        0.6500789523124695
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.0,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.1340000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.1340000033378601
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (5)",
+      "kind": "particle",
+      "position": [
+        272.0,
+        65.0
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 26.739999771118164,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.9299999475479126,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.04699999839067459
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.04699999839067459
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (1)",
+      "kind": "particle",
+      "position": [
+        50.0,
+        -204.0
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 15.0,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.0,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.05999999865889549
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.05999999865889549
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (3)",
+      "kind": "particle",
+      "position": [
+        -387.0,
+        -34.0
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": -3.141592653589793,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.5,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (2)",
+      "kind": "particle",
+      "position": [
+        316.0,
+        -292.0
+      ],
+      "scale": [
+        0.857123613357544,
+        0.857123613357544
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 2.0,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.5720000267028809
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.5720000267028809
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (4)",
+      "kind": "particle",
+      "position": [
+        533.9999389648438,
+        40.0
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.100000023841858,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (5)",
+      "kind": "particle",
+      "position": [
+        272.0,
+        65.0
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 26.739999771118164,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.9299999475479126,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.30300000309944153
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.30300000309944153
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (1)",
+      "kind": "particle",
+      "position": [
+        50.0,
+        -204.0
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 15.0,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.0,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.05999999865889549
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.05999999865889549
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (1)",
+      "kind": "particle",
+      "position": [
+        550.0,
+        319.9999694824219
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.5,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (1)",
+      "kind": "particle",
+      "position": [
+        -637.0,
+        314.0
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.5,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (1)",
+      "kind": "particle",
+      "position": [
+        -417.0,
+        191.0
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.5,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.22200000286102295
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.22200000286102295
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01",
+      "kind": "particle",
+      "position": [
+        132.0,
+        195.0
+      ],
+      "scale": [
+        0.6500790119171143,
+        0.6500789523124695
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.5,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01",
+      "kind": "particle",
+      "position": [
+        -402.0,
+        229.0
+      ],
+      "scale": [
+        0.6500790119171143,
+        0.6500789523124695
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.5,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (4)",
+      "kind": "particle",
+      "position": [
+        533.9999389648438,
+        40.0
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.100000023841858,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.7590000033378601
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01 (5)",
+      "kind": "particle",
+      "position": [
+        272.0,
+        65.0
+      ],
+      "scale": [
+        0.7299998998641968,
+        0.7299998998641968
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 26.739999771118164,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.9299999475479126,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.04699999839067459
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.04699999839067459
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "color_lline_01",
+      "kind": "particle",
+      "position": [
+        428.0,
+        124.0
+      ],
+      "scale": [
+        0.6500790119171143,
+        0.6500789523124695
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_03.png",
+        "tint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 5,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 1.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 0,
+        "scalar": 8.5600004196167,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 0,
+        "scalar": 1.0,
+        "min": 1.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.1340000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.1340000033378601
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": false,
+        "type": 4,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          1.0,
+          1.0
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.2029449912260624,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.7558861676966506,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cube_color_02 (2)",
+      "kind": "particle",
+      "position": [
+        -4.0,
+        -1.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_02.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 6,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.20000000298023224,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 3.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 0.05000000074505806,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 1.0,
+        "min": 0.30000001192092896,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 1.0,
+        "min": 0.30000001192092896,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.18400000035762787
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.18400000035762787
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 5,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          13.229999542236328,
+          7.5
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": null,
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cube_color_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_start_10.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 0.0
+      },
+      "sorting": 6,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.20000000298023224,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 260.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [],
+      "lifetime": {
+        "state": 3,
+        "scalar": 0.10000000149011612,
+        "min": 0.05000000074505806,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 5.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.10000000149011612,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.10000000149011612,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.2590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.14100000262260437
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 5,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          13.229999542236328,
+          7.5
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.26764324406805523,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.4529488059815366,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.6294193942168307,
+          0.0,
+          1.0,
+          0.2551722526550293,
+          1.0
+        ],
+        [
+          0.8147096971084153,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.08965492248535156,
+          1.0,
+          1.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cube_color_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_start_10.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 0.0
+      },
+      "sorting": 6,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.20000000298023224,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 500.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [],
+      "lifetime": {
+        "state": 3,
+        "scalar": 0.10000000149011612,
+        "min": 0.05000000074505806,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 5.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.20000000298023224,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.20000000298023224,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          0.0,
+          0.0,
+          0.0,
+          0.2590000033378601
+        ],
+        [
+          1,
+          0.6838235259056091,
+          0.6838235259056091,
+          0.6838235259056091,
+          0.5529999732971191
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 5,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          13.229999542236328,
+          7.5
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.26764324406805523,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.4529488059815366,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.6294193942168307,
+          0.0,
+          1.0,
+          0.2551722526550293,
+          1.0
+        ],
+        [
+          0.8147096971084153,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.08965492248535156,
+          1.0,
+          1.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cube_color_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_start_10.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 0.0
+      },
+      "sorting": 6,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.20000000298023224,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 500.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [],
+      "lifetime": {
+        "state": 3,
+        "scalar": 0.10000000149011612,
+        "min": 0.05000000074505806,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 5.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.20000000298023224,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.20000000298023224,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          0.0,
+          0.0,
+          0.0,
+          0.2590000033378601
+        ],
+        [
+          1,
+          0.6838235259056091,
+          0.6838235259056091,
+          0.6838235259056091,
+          0.5529999732971191
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 5,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          13.229999542236328,
+          7.5
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.26764324406805523,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.4529488059815366,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.6294193942168307,
+          0.0,
+          1.0,
+          0.2551722526550293,
+          1.0
+        ],
+        [
+          0.8147096971084153,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.08965492248535156,
+          1.0,
+          1.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cube_color_02",
+      "kind": "particle",
+      "position": [
+        -4.0,
+        -1.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_02.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 6,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 6.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 0.05000000074505806,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 1.0,
+        "min": 0.30000001192092896,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 1.0,
+        "min": 0.30000001192092896,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.32199999690055847
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.32199999690055847
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 5,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          13.229999542236328,
+          7.5
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": null,
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cube_color_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_start_10.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 0.0
+      },
+      "sorting": 6,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.20000000298023224,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 260.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [],
+      "lifetime": {
+        "state": 3,
+        "scalar": 0.10000000149011612,
+        "min": 0.05000000074505806,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 5.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.10000000149011612,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.10000000149011612,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.2590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.14100000262260437
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 5,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          13.229999542236328,
+          7.5
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.26764324406805523,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.4529488059815366,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.6294193942168307,
+          0.0,
+          1.0,
+          0.2551722526550293,
+          1.0
+        ],
+        [
+          0.8147096971084153,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.08965492248535156,
+          1.0,
+          1.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cube_color_01 (1)",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_start_10.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 0.0
+      },
+      "sorting": 6,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.20000000298023224,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 260.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [],
+      "lifetime": {
+        "state": 3,
+        "scalar": 0.10000000149011612,
+        "min": 0.05000000074505806,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 5.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.10000000149011612,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.10000000149011612,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.2590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.14100000262260437
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 5,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          13.229999542236328,
+          7.5
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.26764324406805523,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.4529488059815366,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.6294193942168307,
+          0.0,
+          1.0,
+          0.2551722526550293,
+          1.0
+        ],
+        [
+          0.8147096971084153,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.08965492248535156,
+          1.0,
+          1.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cube_color_02 (2)",
+      "kind": "particle",
+      "position": [
+        -4.0,
+        -1.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_02.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 6,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.20000000298023224,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 3.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 0.05000000074505806,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 1.0,
+        "min": 0.30000001192092896,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 1.0,
+        "min": 0.30000001192092896,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.18400000035762787
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.18400000035762787
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 5,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          13.229999542236328,
+          7.5
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": null,
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cube_color_02",
+      "kind": "particle",
+      "position": [
+        -4.0,
+        -1.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_02.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 6,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 6.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 0.05000000074505806,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 1.0,
+        "min": 0.30000001192092896,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 1.0,
+        "min": 0.30000001192092896,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.32199999690055847
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.32199999690055847
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 5,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          13.229999542236328,
+          7.5
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": null,
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cube_color_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_start_10.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 0.0
+      },
+      "sorting": 6,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.10000000149011612,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 260.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [],
+      "lifetime": {
+        "state": 3,
+        "scalar": 0.10000000149011612,
+        "min": 0.05000000074505806,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 5.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.20000000298023224,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.20000000298023224,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.2590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.14100000262260437
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 5,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          13.229999542236328,
+          7.5
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.26764324406805523,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.4529488059815366,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.6294193942168307,
+          0.0,
+          1.0,
+          0.2551722526550293,
+          1.0
+        ],
+        [
+          0.8147096971084153,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.08965492248535156,
+          1.0,
+          1.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cube_color_01",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_start_10.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 0.0
+      },
+      "sorting": 6,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.20000000298023224,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 260.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [],
+      "lifetime": {
+        "state": 3,
+        "scalar": 0.10000000149011612,
+        "min": 0.05000000074505806,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 5.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.10000000149011612,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.10000000149011612,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.2590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.14100000262260437
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 5,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          13.229999542236328,
+          7.5
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.26764324406805523,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.4529488059815366,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.6294193942168307,
+          0.0,
+          1.0,
+          0.2551722526550293,
+          1.0
+        ],
+        [
+          0.8147096971084153,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.08965492248535156,
+          1.0,
+          1.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cube_color_01 (1)",
+      "kind": "particle",
+      "position": [
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_start_10.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 0.0
+      },
+      "sorting": 6,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.20000000298023224,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 260.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [],
+      "lifetime": {
+        "state": 3,
+        "scalar": 0.10000000149011612,
+        "min": 0.05000000074505806,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 5.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.10000000149011612,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 0.019999999552965164,
+        "min": 0.10000000149011612,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.2590000033378601
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.14100000262260437
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 5,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          13.229999542236328,
+          7.5
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.26764324406805523,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.4529488059815366,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          0.6294193942168307,
+          0.0,
+          1.0,
+          0.2551722526550293,
+          1.0
+        ],
+        [
+          0.8147096971084153,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.08965492248535156,
+          1.0,
+          1.0
+        ]
+      ],
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "cube_color_02 (1)",
+      "kind": "particle",
+      "position": [
+        -4.0,
+        -1.0
+      ],
+      "scale": [
+        1.0,
+        1.0
+      ],
+      "rotation": 0.0,
+      "material": {
+        "main": "AVG_signalInterference_02.png",
+        "tint": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "mainColor": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ],
+        "uvScroll": [
+          0,
+          0
+        ],
+        "srcBlend": 1.0,
+        "dstBlend": 1.0
+      },
+      "sorting": 6,
+      "loop": false,
+      "prewarm": false,
+      "duration": 0.20000000298023224,
+      "maxParticles": 1000,
+      "rate": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 10.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "bursts": [
+        {
+          "time": 0.0,
+          "count": {
+            "state": 0,
+            "scalar": 3.0,
+            "min": 0.0,
+            "curve": [],
+            "curveMin": []
+          },
+          "cycles": 1,
+          "interval": 0.009999999776482582,
+          "probability": 1.0
+        }
+      ],
+      "lifetime": {
+        "state": 0,
+        "scalar": 0.20000000298023224,
+        "min": 0.05000000074505806,
+        "curve": [],
+        "curveMin": []
+      },
+      "speed": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 5.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "size": {
+        "state": 3,
+        "scalar": 1.0,
+        "min": 0.30000001192092896,
+        "curve": [],
+        "curveMin": []
+      },
+      "sizeY": {
+        "state": 3,
+        "scalar": 1.0,
+        "min": 0.30000001192092896,
+        "curve": [],
+        "curveMin": []
+      },
+      "startRotation": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "startColor": [
+        [
+          0,
+          1.0,
+          1.0,
+          1.0,
+          0.18400000035762787
+        ],
+        [
+          1,
+          1.0,
+          1.0,
+          1.0,
+          0.18400000035762787
+        ]
+      ],
+      "gravity": {
+        "state": 0,
+        "scalar": 0.0,
+        "min": 0.0,
+        "curve": [],
+        "curveMin": []
+      },
+      "shape": {
+        "enabled": true,
+        "type": 5,
+        "radius": 1.0,
+        "thickness": 1.0,
+        "angle": 25.0,
+        "scale": [
+          13.229999542236328,
+          7.5
+        ]
+      },
+      "sizeOverLife": null,
+      "sizeYOverLife": null,
+      "colorOverLife": null,
+      "rotationOverLife": null,
+      "uv": {
+        "enabled": false,
+        "tiles": [
+          1,
+          1
+        ],
+        "timeMode": 0,
+        "fps": 30.0,
+        "frame": {
+          "state": 1,
+          "scalar": 0.9998999834060669,
+          "min": 0.9998999834060669,
+          "curve": [
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              0.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "start": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "cycles": 1.0
+      },
+      "velocity": {
+        "enabled": false,
+        "x": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "y": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        }
+      },
+      "noise": null,
+      "stretch": false,
+      "lengthScale": 2.0,
+      "pivot": [
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "sourceSha256": "3d3f64133c43722d046848649c1a4c4b5a62b08e9c5724202859a3bf6d5ad8a2"
+}

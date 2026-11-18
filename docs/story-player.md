@@ -78,7 +78,7 @@ flutter test test/reference_live_test.dart --dart-define=STORY_REFERENCE_URL=htt
 ## 解包资源驱动的粒子特效
 
 `bgeffect` / `effect` 使用通用的描述解析、粒子模拟和二维绘制管线。首批 `avg_fire_01`（8 个粒子发射器和 1 个烟雾网格）与 `avg_048_smoke_01`（4 个发射器）的 `fx.json` 和主贴图位于各自的 `assets/fx-runtime/particle/` 或 `assets/fx-runtime/baked/` 特效目录，已在 `pubspec.yaml` 注册，默认通过 Flutter `rootBundle` 离线加载，无需配置外部目录。
-本次根据剧情变量表补充 `avg_036_daoguang_01`、`avg_042_fire_01`、`avg_061_glow_01`、`avg_062_smoke_01`、`avg_072_speech` 和 `avg_079_daoguang01`；针对第一优先级物理打击火花，接入了 `battle.ab` 中的 P0 火花 4 兄弟（`avg_daoguang_spark_01_mid`、`avg_daoguang_spark_02_mid`、`avg_daoguang_spark_01_large`、`avg_daoguang_spark_02_large`，对应变量 `$e_spark_01_mid`、`$e_spark_02_mid`、`$e_spark_01_large`、`$e_spark_02_large`），用于 14-11、BB-8、14-13 等高频拼刀与重创演出；`avg_058_tyndall_01` 与 `avg_mohu_zhengyan_01` 仅包含当前管线尚未支持的自定义/后处理材质，因此不生成不可播放的空描述。
+本次根据剧情变量表补充 `avg_036_daoguang_01`、`avg_042_fire_01`、`avg_061_glow_01`、`avg_062_smoke_01`、`avg_072_speech` 和 `avg_079_daoguang01`；针对第一优先级物理打击火花，接入了 `battle.ab` 中的 P0 火花 4 兄弟（`avg_daoguang_spark_01_mid`、`avg_daoguang_spark_02_mid`、`avg_daoguang_spark_01_large`、`avg_daoguang_spark_02_large`，对应变量 `$e_spark_01_mid`、`$e_spark_02_mid`、`$e_spark_01_large`、`$e_spark_02_large`），用于 14-11、BB-8、14-13 等高频拼刀与重创演出；`avg_058_tyndall_01` 仍因自定义后处理未接入而跳过；`avg_mohu_zhengyan_01` 与 `avg_mohu_biyan_01` 以全屏高斯模糊和暗角渐变近似眼睑变化，不等同 Unity 原后处理。
 本次按 `weather-effects-index.md` 与对应 AssetBundle 接入 `$eb_blizzard → avg_snowstorm_01`、`$eb_lightsnow → avg_snow_02`、`$eb_snowpowder → avg_058_snow_01`、`$eb_snow → avg_snow_01` 和 `$eb_072cg_snowcoverwindow → avg_072_snow`。四种常规雪效以解包粒子与贴图为基础；大雪省略依赖不支持溶解 shader 且无法重建网格的冰面 mesh，避免被当作矩形绘制。`AVG_072_snow` 依赖当前 Flutter 管线不支持的外置自定义 shader；按用户反馈，`$eb_072cg_snowcoverwindow → avg_072_snow` 保留空粒子占位，不绘制误导性的雪幕近似。
 为贴近 14-11 录屏中的向外放射火星，两个 mid spark 的运行时描述将锥形发射改为全周向随机；速度、贴图与纵向寿命曲线沿用解包资源，横向尺寸压窄以形成细线。这是视觉近似，不是原版 Shape 的逐项复刻。当前四个 spark 与本次新增三种主斩击共同构成物理战斗刀光层，但剧情里的 `Blocker`、其他背景/前景特效仍独立按脚本叠加，验收时须保留其时间线。
 本轮依据 `.temp/unpacked-battle/TT_battle.ab.json` 接入三种物理斩击：`$e_slash_01_l → avg_daoguang_attack_01_large`（正手弧斩，5 个网格烘焙层）、`$e_slash_02_l → avg_daoguang_attack_02_large`（反手弧斩，3 个网格烘焙层）、`$e_slash_cross → avg_dao_attack_guiji_01`（交叉斩，3 个网格烘焙层及 1 个粒子层）。派生资源位于 `assets/fx-runtime/baked/` 并已逐目录注册；脚本中的位置、旋转和图层参数继续由现有运行时处理。
@@ -153,3 +153,12 @@ uv run --no-project --with pillow python tool/fx/avg_fx_sandfall.py
 落沙还需 `.temp/unpacked-battle/` 与 `.temp/unpacked-fx-shared/`。四组资源均随应用打包。参考片段为 14-11 行动前 00:41–00:43、TL-9 行动后 01:03:50–01:03:55、TD-ST-2 00:24–00:27、TO-4 行动后 18:27–18:30；它们用于核对方向、覆盖和形态，不代表所有剧情的调用参数。连续帧必须使用 Flutter 实际资源、正确的 `effect`/`bgeffect` 分组及脚本参数；不能在已经含原版特效的视频截图上叠画后据此宣称一致。
 
 按上述四段参考导出了每种效果 6 秒、15fps 的 Flutter 连续帧，并将原片与中性背景上的实际绘制并排检查。雨与两种落尘均向下进入画面，风沙粒子由右向左穿过舞台，落沙按一次性实例停止发射；随机初始颜色及透明度保留 `TwoColors` 两端值，避免生成默认不透明白色。密度和亮度会随随机种子、剧情时刻与背景改变；Unity Noise 和 HDR/Bloom 仍为近似，细颗粒与原片尚有差异，不能据此宣称逐像素一致。
+
+
+## P2 第一人称叙事镜头与视效
+
+P2 七项按 `story_variables.json` 映射并打包：`$eb_signalInterference → avg_signalinterference_01`、`$eb_tvnoise → avg_056_tvnoise_01`、`$eb_dim_openeye → avg_mohu_zhengyan_01`、`$eb_dim_closeeye → avg_mohu_biyan_01`、`$eb_speedline → avg_suduxian`、`$eb_whitemask → avg_062_white_01`、`$eb_blackmask → avg_062_black_01`。五项粒子资源由 `.temp/unpacked-p2/<资源名>/` 解包结果通过 `tool/fx/avg_fx_extract.py` 转换；主贴图随 `fx.json` 存入 `assets/fx-runtime/particle/<资源名>/` 并在 `pubspec.yaml` 注册。转换会省略带不支持材质或缺 MainTex 的发射器：信号干扰的刀光蒙版粒子、白/黑遮罩中缺主贴图的子预制体不在当前描述中。
+
+睁眼/闭眼资源没有可直接绘制的粒子，而是相机后处理。运行时以共享 `FxSimulation` 时钟，在 1.5 秒内对舞台内容施加高斯模糊与径向暗角：睁眼逐渐清晰，闭眼逐渐模糊并压暗边缘；暂停与 seek 遵循现有特效时钟。该近似不会重建 Unity 的 HGMobileBlur、景深或原始遮罩材质，若原版使用非线性动画曲线，变化节奏也会不同。
+
+本轮未提供视频，资源形态取自解包结果；验收只能证明 Flutter 资源能离线加载及效果管线正常，不能证明与原版画面一致。P2 汇总计数应为 188 次（50+22+49+17+19+17+14）；覆盖分析图中的“174次”是算术错误，应以分项统计为准。

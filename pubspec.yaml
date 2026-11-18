@@ -108,6 +108,13 @@ flutter:
     - assets/fx-runtime/particle/avg_043_yanchen_01/
     - assets/fx-runtime/particle/avg_53_fengsha_01/
     - assets/fx-runtime/particle/avg_035_sandfall_01/
+    - assets/fx-runtime/particle/avg_signalinterference_01/
+    - assets/fx-runtime/particle/avg_056_tvnoise_01/
+    - assets/fx-runtime/particle/avg_suduxian/
+    - assets/fx-runtime/particle/avg_062_white_01/
+    - assets/fx-runtime/particle/avg_062_black_01/
+    - assets/fx-runtime/particle/avg_mohu_zhengyan_01/
+    - assets/fx-runtime/particle/avg_mohu_biyan_01/
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
   shaders:

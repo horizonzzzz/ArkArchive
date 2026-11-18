@@ -11,6 +11,7 @@ class FxAsset {
     this.emitters, {
     this.drawAfterImages = false,
     this.drawAfterBlocker = false,
+    this.screenEffect = const {},
   });
 
   factory FxAsset.parse(Map<String, dynamic> json, {Uri? base}) {
@@ -19,7 +20,9 @@ class FxAsset {
     final emitters = (json['emitters'] as List)
         .map((e) => FxEmitterSpec(e as Map<String, dynamic>))
         .toList();
-    if (emitters.isEmpty || emitters.length > 64) {
+    final screenEffect = (json['screenEffect'] as Map? ?? const {})
+        .cast<String, dynamic>();
+    if ((emitters.isEmpty && screenEffect.isEmpty) || emitters.length > 64) {
       throw const FormatException('特效发射器数量无效');
     }
     return FxAsset(
@@ -30,6 +33,7 @@ class FxAsset {
       emitters,
       drawAfterImages: json['drawAfterImages'] == true,
       drawAfterBlocker: json['drawAfterBlocker'] == true,
+      screenEffect: screenEffect,
     );
   }
 
@@ -39,6 +43,7 @@ class FxAsset {
   final bool loop;
   final bool drawAfterImages;
   final bool drawAfterBlocker;
+  final Map<String, dynamic> screenEffect;
   final List<FxEmitterSpec> emitters;
   Set<String> get textures => {for (final e in emitters) e.texture};
   Uri textureUri(String file) => base.resolve(file);
