@@ -3,6 +3,7 @@
   "name": "avg_062_white_01",
   "duration": 5.0,
   "isLoop": true,
+  "screenEffect": {"type": "overlay", "edge": [0.86, 0.91, 0.96, 0.58]},
   "emitters": [
     {
       "name": "big_noise_02",

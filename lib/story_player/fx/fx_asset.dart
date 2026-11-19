@@ -22,6 +22,18 @@ class FxAsset {
         .toList();
     final screenEffect = (json['screenEffect'] as Map? ?? const {})
         .cast<String, dynamic>();
+    if (screenEffect['type'] == 'overlay') {
+      final colors = [screenEffect['edge'], screenEffect['tint']].nonNulls;
+      if (colors.isEmpty ||
+          colors.any(
+            (color) =>
+                color is! List ||
+                color.length != 4 ||
+                color.any((v) => v is! num || !v.isFinite || v < 0 || v > 1),
+          )) {
+        throw const FormatException('屏幕遮罩颜色应为 0 到 1 的 RGBA');
+      }
+    }
     if ((emitters.isEmpty && screenEffect.isEmpty) || emitters.length > 64) {
       throw const FormatException('特效发射器数量无效');
     }

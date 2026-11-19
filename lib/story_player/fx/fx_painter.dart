@@ -5,6 +5,59 @@ import 'dart:typed_data';
 import 'fx_asset.dart';
 import 'fx_simulation.dart';
 
+/// 在场景合成后绘制屏幕空间遮罩，沿用对应特效的淡入淡出。
+void paintScreenOverlays(
+  Canvas canvas,
+  Rect bounds,
+  List<StageEffect> effects,
+) {
+  final overlays = effects.where((effect) {
+    return effect.delayRemaining <= 0 &&
+        effect.alpha > 0 &&
+        effect.simulation.active &&
+        effect.simulation.asset.screenEffect['type'] == 'overlay';
+  }).toList()..sort((a, b) => a.layer.compareTo(b.layer));
+  if (overlays.isEmpty) return;
+
+  canvas.save();
+  canvas.translate(bounds.center.dx, bounds.center.dy);
+  canvas.scale(bounds.width / 2, bounds.height / 2);
+  const rect = Rect.fromLTRB(-1, -1, 1, 1);
+  for (final effect in overlays) {
+    final config = effect.simulation.asset.screenEffect;
+    final paint = Paint();
+    if (config['tint'] != null) {
+      final tint = fxColor(config['tint']);
+      paint.shader = Gradient.radial(
+        Offset.zero,
+        1.1,
+        [
+          tint.withValues(alpha: tint.a * effect.alpha),
+          tint.withValues(alpha: 0),
+        ],
+        const [.25, 1],
+      );
+      canvas.drawRect(rect, paint);
+    }
+    if (config['edge'] != null) {
+      final edge = fxColor(config['edge']);
+      final alpha = edge.a * effect.alpha;
+      paint.shader = Gradient.radial(
+        Offset.zero,
+        1.1,
+        [
+          edge.withValues(alpha: 0),
+          edge.withValues(alpha: alpha * .38),
+          edge.withValues(alpha: alpha),
+        ],
+        const [.54, .8, 1],
+      );
+      canvas.drawRect(rect, paint);
+    }
+  }
+  canvas.restore();
+}
+
 /// 通用粒子与动画网格绘制；材质动画由离线图集提供，运行时投影三维顶点。
 void paintEffects(
   Canvas canvas,

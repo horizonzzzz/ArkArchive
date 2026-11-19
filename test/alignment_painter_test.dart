@@ -1,8 +1,10 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:arknights_story_player/story_player/data/asset_store.dart';
 import 'package:arknights_story_player/story_player/data/media_catalog.dart';
 import 'package:arknights_story_player/story_player/fx/fx_asset.dart';
+import 'package:arknights_story_player/story_player/fx/fx_loader.dart';
 import 'package:arknights_story_player/story_player/fx/fx_simulation.dart';
 import 'package:arknights_story_player/story_player/stage_state.dart';
 import 'package:arknights_story_player/story_player/script.dart';
@@ -55,6 +57,57 @@ void main() {
     final offset = (y * 1280 + x) * 4;
     return List.generate(4, (i) => bytes.getUint8(offset + i));
   }
+
+  test('白黑遮罩只影响边缘，旧电视色调按独立图层叠加', () async {
+    final store = AssetStore();
+    addTearDown(store.close);
+    final loader = FxLoader('asset:///assets/fx-runtime/', store);
+    final gray = await solid(const ui.Color(0xff808080));
+    final state = StageState()..images.add(StageImage('gray')..fit = 'fill');
+    const grayPixel = [128, 128, 128, 255];
+    final textures = {catalog.image('gray'): gray};
+
+    Future<StageEffect> effect(String name, int layer) async => StageEffect(
+      FxSimulation(await loader.load(name)),
+      group: 'bgeffect',
+      layer: layer,
+      offset: const ui.Offset(300, 0),
+    );
+    Future<List<int>> sample([int x = 640]) =>
+        pixel(state, textures: textures, x: x);
+
+    final white = await effect('avg_062_white_01', 1);
+    state.effects.add(white);
+    expect(await sample(), grayPixel);
+    final whiteEdge = await sample(4);
+    expect(whiteEdge[0], greaterThan(148));
+    expect((await sample(1275))[0], closeTo(whiteEdge[0], 1));
+    white.delayRemaining = 1;
+    expect(await sample(4), grayPixel);
+    white
+      ..delayRemaining = 0
+      ..alpha = .5;
+    expect((await sample(4))[0], inExclusiveRange(128, whiteEdge[0]));
+
+    final black = await effect('avg_062_black_01', 1);
+    state.effects
+      ..clear()
+      ..add(black);
+    expect(await sample(), grayPixel);
+    expect((await sample(4))[0], lessThan(100));
+    final oldTv = await effect('avg_old_tv_01', 2);
+    state.effects.add(oldTv);
+    final warmCenter = await sample();
+    expect(warmCenter[0], greaterThan(128));
+    expect(warmCenter[2], lessThan(128));
+    state.effects.remove(oldTv);
+    expect(await sample(), grayPixel);
+    state.blockerAlpha = 1;
+    state.effects
+      ..clear()
+      ..add(white);
+    expect(await sample(4), [0, 0, 0, 255]);
+  });
 
   test('背景特效按资源设置绘制在 CG 前面或后面', () async {
     final red = await solid(const ui.Color(0xffff0000));

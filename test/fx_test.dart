@@ -806,6 +806,21 @@ void main() {
     }
   });
 
+  test('屏幕遮罩拒绝缺失或无效的 RGBA', () {
+    for (final config in [
+      {'type': 'overlay'},
+      {
+        'type': 'overlay',
+        'tint': [0, 0, 0, 1.1],
+      },
+    ]) {
+      expect(
+        () => FxAsset.parse({...fixture(), 'screenEffect': config}),
+        throwsFormatException,
+      );
+    }
+  });
+
   test('三维圆锥 90 度外圈发射沿 360 度径向扩散，并保留旧二维圆锥兼容', () {
     final raw3d = fixture(loop: false, max: 120);
     final e3d = (raw3d['emitters'] as List).single as Map<String, dynamic>;

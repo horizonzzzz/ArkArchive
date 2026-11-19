@@ -160,6 +160,7 @@ class StagePainter extends CustomPainter {
     for (final item in state.cgItems.values) {
       _cgItem(canvas, item);
     }
+    paintScreenOverlays(canvas, bounds, state.effects);
     for (final entry in state.curtains.entries) {
       _curtain(canvas, entry.key, entry.value);
     }

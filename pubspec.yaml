@@ -113,6 +113,7 @@ flutter:
     - assets/fx-runtime/particle/avg_suduxian/
     - assets/fx-runtime/particle/avg_062_white_01/
     - assets/fx-runtime/particle/avg_062_black_01/
+    - assets/fx-runtime/particle/avg_old_tv_01/
     - assets/fx-runtime/particle/avg_mohu_zhengyan_01/
     - assets/fx-runtime/particle/avg_mohu_biyan_01/
   # An image asset can refer to one or more resolution-specific "variants", see

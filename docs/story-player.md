@@ -157,7 +157,11 @@ uv run --no-project --with pillow python tool/fx/avg_fx_sandfall.py
 
 ## P2 第一人称叙事镜头与视效
 
-P2 七项按 `story_variables.json` 映射并打包：`$eb_signalInterference → avg_signalinterference_01`、`$eb_tvnoise → avg_056_tvnoise_01`、`$eb_dim_openeye → avg_mohu_zhengyan_01`、`$eb_dim_closeeye → avg_mohu_biyan_01`、`$eb_speedline → avg_suduxian`、`$eb_whitemask → avg_062_white_01`、`$eb_blackmask → avg_062_black_01`。五项粒子资源由 `.temp/unpacked-p2/<资源名>/` 解包结果通过 `tool/fx/avg_fx_extract.py` 转换；主贴图随 `fx.json` 存入 `assets/fx-runtime/particle/<资源名>/` 并在 `pubspec.yaml` 注册。转换会省略带不支持材质或缺 MainTex 的发射器：信号干扰的刀光蒙版粒子、白/黑遮罩中缺主贴图的子预制体不在当前描述中。
+P2 七项按 `story_variables.json` 映射并打包：`$eb_signalInterference → avg_signalinterference_01`、`$eb_tvnoise → avg_056_tvnoise_01`、`$eb_dim_openeye → avg_mohu_zhengyan_01`、`$eb_dim_closeeye → avg_mohu_biyan_01`、`$eb_speedline → avg_suduxian`、`$eb_whitemask → avg_062_white_01`、`$eb_blackmask → avg_062_black_01`。五项粒子资源由 `.temp/unpacked-p2/<资源名>/` 解包结果通过 `tool/fx/avg_fx_extract.py` 转换；主贴图随 `fx.json` 存入 `assets/fx-runtime/particle/<资源名>/` 并在 `pubspec.yaml` 注册。转换会省略带不支持材质或缺 MainTex 的发射器：信号干扰的刀光蒙版粒子、白/黑遮罩中依赖未支持材质的原版子节点不直接绘制。
+
+白/黑遮罩保留已解包的颗粒与划痕，用手工维护的 `screenEffect: {type: "overlay", edge: [r, g, b, a]}` 补上屏幕边缘的亮幕与暗角。`edge` 不改变画面中心；可选的 `tint` 为独立的中央色调，两者用 0–1 的 RGBA。遮罩在场景合成后、幕布和 `Blocker` 之前按 layer 绘制，跟随特效延迟、淡入淡出和清除，不随脚本坐标或镜头抖动移动。重导粒子时须保留这两个资源的 `screenEffect` 字段。
+
+白遮罩参考片段 `activities/act43side/level_act43side_08_end` 的白边与剧本独立指定的灰度叠加；`activities/act48side/level_act48side_06_end` 同时使用黑遮罩和 `$eb_oldtv`。后者映射到另行打包的 `avg_old_tv_01`，用中央暖色渐变近似截图色调，只在脚本启用该特效时显示。边缘与暖色均为渐变近似，未还原原版材质的溶解动画。
 
 `$eb_speedline → avg_suduxian` 由 `.temp/unpacked-p2/avg_suduxian/` 配合解包的公共着色器包重导，以保留 `Torappu/Particles/Additive` 叠加混合、`emissionBasis` 三维投影、速度上限阻尼与贴图 U 轴拉伸：
 
