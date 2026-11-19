@@ -179,6 +179,8 @@ def convert(source, output, prefab=None, shaders=None, project_particles=False):
             shscale = shape.get('m_Scale', {})
             size, color = ps['SizeModule'], ps['ColorModule']
             rot, vel, noise = ps['RotationModule'], ps['VelocityModule'], ps['NoiseModule']
+            clamp_vel = ps.get('ClampVelocityModule') or {}
+            stretch = renderer.get('m_RenderMode') == 1
             entry.update(loop=ps.get('looping', True), prewarm=ps.get('prewarm', False),
                          duration=ps.get('lengthInSec', 5), maxParticles=im.get('maxNumParticles', 100),
                          rate=curve(ps['EmissionModule'].get('rateOverTime') if ps['EmissionModule'].get('enabled') else None),
@@ -207,12 +209,20 @@ def convert(source, output, prefab=None, shaders=None, project_particles=False):
                              'cycles': uv.get('cycles', 1)},
                          velocity={'enabled': vel.get('enabled', False), 'x': curve(vel.get('x')), 'y': curve(vel.get('y'))},
                          noise=curve(noise.get('strength')) if noise.get('enabled') else None,
-                         stretch=renderer.get('m_RenderMode') == 1,
+                         stretch=stretch,
                          lengthScale=renderer.get('m_LengthScale', 1.0),
                          pivot=[renderer.get('m_Pivot', {}).get(c, 0.0) for c in 'xy'])
+            if clamp_vel.get('enabled'):
+                entry['limitVelocity'] = {
+                    'magnitude': curve(clamp_vel.get('magnitude')),
+                    'dampen': clamp_vel.get('dampen', 0.0),
+                }
             if project_particles:
                 entry['shape']['scale'].append(shscale.get('z', 1))
                 entry['velocity'].update(z=curve(vel.get('z')), world=vel.get('inWorldSpace', False))
+                if stretch:
+                    # Unity Stretched Billboard 将贴图 U 轴沿粒子速度方向拉伸。
+                    entry['stretchAlignU'] = True
         emitters.append(entry)
     if not emitters:
         raise ValueError(f'{source}：未找到可绘制发射器')

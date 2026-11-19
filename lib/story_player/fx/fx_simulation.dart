@@ -18,8 +18,8 @@ class FxParticle {
   Offset position;
   final Offset direction;
   Offset velocity = Offset.zero;
-  final double life, size, sizeY, speed, gravity, seed;
-  double age = 0, rotation;
+  final double life, size, sizeY, gravity, seed;
+  double speed, age = 0, rotation;
   double get progress => (age / life).clamp(0, 1);
 }
 
@@ -127,6 +127,22 @@ class FxEmitterSim {
         ) *
         noise;
     final gravity = -9.81 * pixelsPerUnit * p.gravity;
+    final limitSpec = spec.limitVelocity;
+    if (limitSpec != null && dt > 0) {
+      final currentMag = (velocity + Offset(0, gravity * p.age)).distance;
+      final limit =
+          limitSpec.magnitude.at(progress, p.seed).clamp(0.0, double.infinity) *
+          pixelsPerUnit;
+      if (currentMag > limit && currentMag > 1e-8) {
+        // 按 60Hz 基准步长折算 Unity ClampVelocityModule 的逐帧 dampen 衰减。
+        final factor = limitSpec.dampen >= 1
+            ? 1.0
+            : 1 - math.pow(1 - limitSpec.dampen, dt * 60).toDouble();
+        final ratio = (currentMag + (limit - currentMag) * factor) / currentMag;
+        p.speed *= ratio;
+        velocity *= ratio;
+      }
+    }
     p.velocity = velocity + Offset(0, gravity * p.age);
     p.position +=
         velocity * dt + Offset(0, gravity * (p.age * dt + dt * dt / 2));
@@ -172,17 +188,22 @@ class FxEmitterSim {
         if (type == 8) direction = Offset(math.cos(angle), math.sin(angle));
         if (type == 8) directionZ = 0;
         if (type == 4) {
-          final spread =
-              (random.nextDouble() - .5) *
-              fxNumber(shape['angle']) *
-              math.pi /
-              180;
-          direction = Offset(math.sin(spread), math.cos(spread));
           if (spec.emissionBasis != null) {
-            final polar = random.nextDouble() * math.pi * 2;
-            direction =
-                Offset(math.cos(polar), math.sin(polar)) * math.sin(spread);
-            directionZ = math.cos(spread);
+            // Unity Cone 局部轴为 +Z，底面粒子按位置角沿圆锥侧面张开；angle=90° 时沿 XY 径向发射。
+            final coneRad = fxNumber(shape['angle']) * math.pi / 180;
+            final rNorm = radius > 0 ? (r / radius).clamp(0.0, 1.0) : 0.0;
+            final tilt = coneRad >= math.pi / 2 - 1e-4
+                ? math.pi / 2
+                : math.atan(rNorm * math.tan(coneRad));
+            direction = Offset(math.cos(angle), math.sin(angle)) * math.sin(tilt);
+            directionZ = math.cos(tilt);
+          } else {
+            final spread =
+                (random.nextDouble() - .5) *
+                fxNumber(shape['angle']) *
+                math.pi /
+                180;
+            direction = Offset(math.sin(spread), math.cos(spread));
           }
         }
       }

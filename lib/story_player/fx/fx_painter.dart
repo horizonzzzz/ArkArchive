@@ -41,7 +41,7 @@ void paintEffects(
       final image = textures[effect.simulation.asset.textureUri(spec.texture)];
       if (image == null) continue;
       final paint = Paint()
-        ..filterQuality = FilterQuality.low
+        ..filterQuality = FilterQuality.medium
         ..blendMode = spec.additive ? BlendMode.plus : BlendMode.srcOver;
       if (spec.geometry != null) {
         _paintMesh(canvas, effect, emitter, image, paint);
@@ -199,6 +199,34 @@ void paintEffects(
           );
           final center = project(p.position);
           final velocity = project(p.position + p.velocity) - center;
+          if (spec.stretch && spec.stretchAlignU && spec.alignment != 2) {
+            if (spec.lengthScale == 0 || velocity.distanceSquared <= 1e-12) {
+              continue;
+            }
+            final uAngle = spec.lengthScale >= 0
+                ? math.atan2(-velocity.dy, -velocity.dx)
+                : math.atan2(velocity.dy, velocity.dx);
+            final length = p.sizeY * sizeY * spec.lengthScale.abs();
+            final thickness = p.size * size;
+            canvas.save();
+            canvas.translate(center.dx, center.dy);
+            canvas.rotate(uAngle);
+            canvas.drawImageRect(
+              image,
+              src,
+              Rect.fromCenter(
+                center: Offset(
+                  spec.pivot.dy * length,
+                  -spec.pivot.dx * thickness,
+                ),
+                width: length,
+                height: thickness,
+              ),
+              paint,
+            );
+            canvas.restore();
+            continue;
+          }
           final angle = spec.stretch && velocity.distanceSquared > 1e-12
               ? math.atan2(velocity.dx, -velocity.dy)
               : -p.rotation;
@@ -267,6 +295,32 @@ void paintEffects(
         final direction = p.velocity.distanceSquared > 1e-12
             ? p.velocity
             : p.direction;
+        if (spec.stretch && spec.stretchAlignU) {
+          if (spec.lengthScale == 0 || direction.distanceSquared <= 1e-12) {
+            canvas.restore();
+            continue;
+          }
+          // Unity Stretched Billboard 沿速度方向拉伸贴图 U 轴；正 lengthScale 向速度反方向拖尾，
+          // 负 lengthScale 向速度正方向延伸，pivot.y 沿该拉伸轴偏移。
+          final uAngle = spec.lengthScale >= 0
+              ? math.atan2(direction.dy, -direction.dx)
+              : math.atan2(-direction.dy, direction.dx);
+          canvas.rotate(uAngle);
+          final length = p.sizeY * sizeY * spec.lengthScale.abs();
+          final thickness = p.size * size;
+          final center = Offset(
+            spec.pivot.dy * length,
+            -spec.pivot.dx * thickness,
+          );
+          canvas.drawImageRect(
+            image,
+            src,
+            Rect.fromCenter(center: center, width: length, height: thickness),
+            paint,
+          );
+          canvas.restore();
+          continue;
+        }
         final rotation = spec.stretch && direction.distanceSquared > 0
             ? math.atan2(direction.dx, direction.dy)
             : -p.rotation;

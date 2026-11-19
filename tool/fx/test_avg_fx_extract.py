@@ -235,5 +235,42 @@ class ExtractTest(unittest.TestCase):
             atlas = Image.open(root / 'atlas.png')
             self.assertNotEqual(atlas.getpixel((0, 0))[3], atlas.getpixel((12, 6))[3])
 
+    def test_clamp_velocity_and_stretched_billboard_align_u_export(self):
+        from importlib import import_module
+        Image = import_module('PIL.Image')
+        ps = {'m_GameObject': ref(2), 'InitialModule': {
+            'startSize': {'scalar': .2}, 'startSpeed': {'scalar': 20}},
+            'ClampVelocityModule': {
+                'enabled': True, 'dampen': .2,
+                'magnitude': {'minMaxState': 0, 'scalar': 4.0}},
+            **{key: {} for key in ('ShapeModule', 'UVModule', 'SizeModule', 'ColorModule',
+                                  'RotationModule', 'VelocityModule', 'NoiseModule', 'EmissionModule')}}
+        tree = {'1': {'m_Name': 'root'}, '2': {'m_Name': 'speedline'},
+                '3': transform(1), '4': transform(2, parent=3), '5': ps,
+                '6': {'m_GameObject': ref(2), 'm_RenderMode': 1, 'm_LengthScale': -30.0,
+                      'm_Pivot': dict(x=0, y=.24, z=0), 'm_Materials': [ref(7)]},
+                '7': {'m_Shader': ref(10), 'm_SavedProperties': {
+                    'm_TexEnvs': [['_MainTex', {'m_Texture': ref(8), 'm_Scale': dict(x=1, y=1), 'm_Offset': dict(x=0, y=0)}]]}},
+                '8': {'m_Name': 'streak'}, '9': {'_effectDuration': 1, '_isLoop': True}}
+        shader = {'m_ParsedForm': dict(m_Name='Torappu/Particles/Additive',
+                  m_SubShaders=[{'m_Passes': [{'m_State': {'rtBlend0': {
+                  'srcBlend': dict(val=5), 'destBlend': dict(val=1)}}}]}])}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / 'TT_speed.ab.json'
+            source.write_text(json.dumps({'asset': tree}), encoding='utf-8')
+            Image.new('RGBA', (4, 4), 'white').save(root / 'streak.png')
+            with contextlib.redirect_stdout(io.StringIO()):
+                legacy = convert(source, root / 'legacy')
+                projected = convert(source, root / 'proj', shaders={'10': shader}, project_particles=True)
+            le = legacy['emitters'][0]
+            self.assertNotIn('stretchAlignU', le)
+            self.assertEqual(le['limitVelocity']['dampen'], .2)
+            self.assertEqual(le['limitVelocity']['magnitude']['scalar'], 4.0)
+            pe = projected['emitters'][0]
+            self.assertTrue(pe['stretchAlignU'])
+            self.assertEqual(pe['material']['dstBlend'], 1)
+            self.assertEqual(pe['limitVelocity']['dampen'], .2)
+
 if __name__ == '__main__':
     unittest.main()

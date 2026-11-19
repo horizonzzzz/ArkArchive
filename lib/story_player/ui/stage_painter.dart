@@ -26,6 +26,8 @@ class StagePainter extends CustomPainter {
   final Map<String, ui.Image> sprites;
   final String fontFamily;
   static const bounds = Rect.fromLTWH(0, 0, 1280, 720);
+  // focusout 失焦模糊换算（amount=0.8 时约 2.8px，与原游戏实拍背景及速度线模糊一致）。
+  static const _focusBlurSigma = 3.5;
 
   static const _curtainAngles = {
     0: 180.0,
@@ -67,22 +69,34 @@ class StagePainter extends CustomPainter {
       canvas.saveLayer(bounds, Paint()..colorFilter = cameraFilter);
     }
     canvas.translate(state.shake.dx, state.shake.dy);
-    _withFocus(canvas, 'bg', (c) {
-      for (final image in state.backgrounds) {
-        _image(c, image);
-      }
-    });
-    _withFocus(canvas, 'lbg', (c) {
-      for (final scene in state.largeScenes) {
-        _largeScene(c, scene);
-      }
-    });
-    _withFocus(canvas, 'bg', (c) => _avgDisplays(c, 'bgover'));
-    _withFocus(
-      canvas,
-      'bg',
-      (c) => paintEffects(c, state.effects, textures, 'bgeffect'),
-    );
+    // 背景与背景特效在同失焦级别下共用同一离屏层：既保留 Additive 叠加到背景，又同步承受 focusout 模糊。
+    final mergeBgLayer =
+        state.largeScenes.isEmpty || state.focus['bg'] == state.focus['lbg'];
+    if (mergeBgLayer) {
+      _withFocus(canvas, 'bg', (c) {
+        for (final image in state.backgrounds) {
+          _image(c, image);
+        }
+        for (final scene in state.largeScenes) {
+          _largeScene(c, scene);
+        }
+        _avgDisplays(c, 'bgover');
+        paintEffects(c, state.effects, textures, 'bgeffect');
+      });
+    } else {
+      _withFocus(canvas, 'bg', (c) {
+        for (final image in state.backgrounds) {
+          _image(c, image);
+        }
+      });
+      _withFocus(canvas, 'lbg', (c) {
+        for (final scene in state.largeScenes) {
+          _largeScene(c, scene);
+        }
+      });
+      _withFocus(canvas, 'bg', (c) => _avgDisplays(c, 'bgover'));
+      paintEffects(canvas, state.effects, textures, 'bgeffect');
+    }
     canvas.save();
     canvas.translate(640, 360);
     canvas.rotate(state.imageRotation * math.pi / 180);
@@ -96,16 +110,12 @@ class StagePainter extends CustomPainter {
       }
     });
     canvas.restore();
-    _withFocus(
+    paintEffects(
       canvas,
-      'bg',
-      (c) => paintEffects(
-        c,
-        state.effects,
-        textures,
-        'bgeffect',
-        afterImages: true,
-      ),
+      state.effects,
+      textures,
+      'bgeffect',
+      afterImages: true,
     );
     _withFocus(canvas, 'cg', (c) => _avgDisplays(c, 'cgover'));
     for (final window in state.cutins.values) {
@@ -226,8 +236,8 @@ class StagePainter extends CustomPainter {
     final paint = Paint();
     if (state.focusBlur) {
       paint.imageFilter = ui.ImageFilter.blur(
-        sigmaX: amount * 8,
-        sigmaY: amount * 8,
+        sigmaX: amount * _focusBlurSigma,
+        sigmaY: amount * _focusBlurSigma,
       );
     }
     if (state.focusColor != 'None') {
@@ -427,8 +437,8 @@ class StagePainter extends CustomPainter {
       final paint = Paint();
       if (state.focusBlur) {
         paint.imageFilter = ui.ImageFilter.blur(
-          sigmaX: focusAmount * 8,
-          sigmaY: focusAmount * 8,
+          sigmaX: focusAmount * _focusBlurSigma,
+          sigmaY: focusAmount * _focusBlurSigma,
         );
       }
       if (state.focusColor != 'None') {

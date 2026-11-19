@@ -109,6 +109,43 @@ void main() {
     ]);
   });
 
+  test('背景失焦时背景特效与背景共用离屏层，保留叠加混合并同步模糊', () async {
+    final darkBlue = await solid(const ui.Color(0xff102030));
+    final addGreen = await solid(const ui.Color(0xff004000));
+    final asset = FxAsset.parse({
+      'version': 1,
+      'name': 'bg_add_focus',
+      'duration': 1,
+      'isLoop': true,
+      'emitters': [
+        {
+          'name': 'quad',
+          'kind': 'mesh',
+          'scale': [400, 400],
+          'material': {'main': 'green.png', 'srcBlend': 5, 'dstBlend': 1},
+        },
+      ],
+    }, base: Uri.parse('https://example.test/fx/'));
+    final state = StageState()
+      ..backgrounds.add(StageImage('bg')..fit = 'fill')
+      ..focus['bg'] = 0.8
+      ..effects.add(
+        StageEffect(FxSimulation(asset), group: 'bgeffect', layer: 1),
+      );
+    final rgba = await pixel(
+      state,
+      textures: {
+        catalog.image('bg'): darkBlue,
+        asset.textureUri('green.png'): addGreen,
+      },
+    );
+    // 同层 Additive 叠加应在原暗蓝背景 (16, 32, 48) 上增加绿色分量，而不是覆盖成纯绿。
+    expect(rgba[0], closeTo(16, 2));
+    expect(rgba[1], closeTo(96, 2));
+    expect(rgba[2], closeTo(48, 2));
+    expect(rgba[3], 255);
+  });
+
   test('声明前景的刀光在完整黑幕上绘制，普通特效仍受遮罩覆盖', () async {
     final red = await solid(const ui.Color(0xffff0000));
     for (final foreground in [false, true]) {

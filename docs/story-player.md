@@ -159,6 +159,18 @@ uv run --no-project --with pillow python tool/fx/avg_fx_sandfall.py
 
 P2 七项按 `story_variables.json` 映射并打包：`$eb_signalInterference → avg_signalinterference_01`、`$eb_tvnoise → avg_056_tvnoise_01`、`$eb_dim_openeye → avg_mohu_zhengyan_01`、`$eb_dim_closeeye → avg_mohu_biyan_01`、`$eb_speedline → avg_suduxian`、`$eb_whitemask → avg_062_white_01`、`$eb_blackmask → avg_062_black_01`。五项粒子资源由 `.temp/unpacked-p2/<资源名>/` 解包结果通过 `tool/fx/avg_fx_extract.py` 转换；主贴图随 `fx.json` 存入 `assets/fx-runtime/particle/<资源名>/` 并在 `pubspec.yaml` 注册。转换会省略带不支持材质或缺 MainTex 的发射器：信号干扰的刀光蒙版粒子、白/黑遮罩中缺主贴图的子预制体不在当前描述中。
 
+`$eb_speedline → avg_suduxian` 由 `.temp/unpacked-p2/avg_suduxian/` 配合解包的公共着色器包重导，以保留 `Torappu/Particles/Additive` 叠加混合、`emissionBasis` 三维投影、速度上限阻尼与贴图 U 轴拉伸：
+
+```bash
+uv run --no-project --with pillow python tool/fx/avg_fx_extract.py .temp/unpacked-p2/avg_suduxian assets/fx-runtime/particle --project-particles --shaders ".temp/unpacked-avg-shaders/TT_[uc]shaders.ab.json"
+```
+
+运行时同步补齐了四项通用能力并核对参考片段（墟 · AT-3 夜逃通告（行动后）片头，`[bgeffect(name="$eb_speedline", layer=1)]` 搭配 `[focusout(duration=1, type="bg", from=0, to=0.8)]`）：
+- 三维圆锥（`shape.type == 4` 且存在 `emissionBasis`）按圆锥侧面几何在 360° 径向扩散，`angle=90°` 时在 XY 平面沿半径 330px 外环向外发射；无 `emissionBasis` 的历史资源保留原有二维扇形行为。
+- 支持 `ClampVelocityModule` 导出的 `limitVelocity`（含 `magnitude` 曲线与 `dampen` 阻尼），使外层长线（`lizisha_dm`）在离屏前衰减停留在画面四周。
+- 支持 Unity `Stretched Billboard` 贴图 U 轴对齐（`stretchAlignU: true`），正 `lengthScale` 向速度反方向拖尾、负 `lengthScale` 向速度正方向延伸并遵守 `pivot.y` 偏移；粒子绘制改用 `FilterQuality.medium`（Mipmap 采样）避免高缩放比细条纹理出现点状锯齿。
+- `StagePainter` 在 `bg` 与 `lbg` 同失焦级别（或无大场景）时，将背景与 `bgeffect` 合并在同一 `_withFocus(canvas, 'bg', ...)` 离屏层绘制，既保留 `BlendMode.plus` 叠加混合又同步承受 `focusout` 模糊，并将 `focusout` 模糊系数校准为 `amount * 3.5`（`0.8` 时约 `2.8px`），与参考录屏中的背景和速度线宽（约 7–8px 柔边）一致。随机种子、压缩画面与 HDR/Bloom 仍有近似差异，其余未提供参考视频的 P2 项仍只验证了离线加载与管线运行。
+
 睁眼/闭眼资源没有可直接绘制的粒子，而是相机后处理。运行时以共享 `FxSimulation` 时钟，在 1.5 秒内对舞台内容施加高斯模糊与径向暗角：睁眼逐渐清晰，闭眼逐渐模糊并压暗边缘；暂停与 seek 遵循现有特效时钟。该近似不会重建 Unity 的 HGMobileBlur、景深或原始遮罩材质，若原版使用非线性动画曲线，变化节奏也会不同。
 
-本轮未提供视频，资源形态取自解包结果；验收只能证明 Flutter 资源能离线加载及效果管线正常，不能证明与原版画面一致。P2 汇总计数应为 188 次（50+22+49+17+19+17+14）；覆盖分析图中的“174次”是算术错误，应以分项统计为准。
+P2 汇总计数应为 188 次（50+22+49+17+19+17+14）；覆盖分析图中的“174次”是算术错误，应以分项统计为准。

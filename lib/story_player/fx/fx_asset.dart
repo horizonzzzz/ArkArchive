@@ -100,8 +100,12 @@ class FxEmitterSpec {
       shape = (j['shape'] as Map? ?? const {}).cast<String, dynamic>(),
       uv = (j['uv'] as Map? ?? const {}).cast<String, dynamic>(),
       velocity = (j['velocity'] as Map? ?? const {}).cast<String, dynamic>(),
+      limitVelocity = j['limitVelocity'] == null
+          ? null
+          : FxLimitVelocity(j['limitVelocity'] as Map),
       noise = FxRange.parse(j['noise']),
-      stretch = j['stretch'] == true {
+      stretch = j['stretch'] == true,
+      stretchAlignU = j['stretchAlignU'] == true {
     if (emissionBasis != null) {
       final raw = j['emissionBasis'] as List;
       if (raw.length != 3 ||
@@ -177,7 +181,8 @@ class FxEmitterSpec {
   final FxMesh? geometry;
   final List<FxBurst> bursts;
   final String name;
-  final bool mesh, loop, prewarm, stretch;
+  final bool mesh, loop, prewarm, stretch, stretchAlignU;
+  final FxLimitVelocity? limitVelocity;
   final Offset position, scale;
   final double rotation, duration;
   final int sorting;
@@ -304,6 +309,19 @@ class FxBurst {
   final double time, interval, probability;
   final int cycles;
   final FxRange count;
+}
+
+/// Unity ClampVelocityModule（Limit Velocity over Lifetime）限速与阻尼。
+class FxLimitVelocity {
+  FxLimitVelocity(Map j)
+    : magnitude = FxRange.parse(j['magnitude']),
+      dampen = fxNumber(j['dampen']) {
+    if (!dampen.isFinite || dampen < 0 || dampen > 1) {
+      throw const FormatException('特效限速阻尼无效');
+    }
+  }
+  final FxRange magnitude;
+  final double dampen;
 }
 
 /// Unity MinMaxCurve：0 常量、1 曲线、2 双曲线、3 双常量。

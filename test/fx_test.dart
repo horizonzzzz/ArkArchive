@@ -805,4 +805,218 @@ void main() {
       }
     }
   });
+
+  test('三维圆锥 90 度外圈发射沿 360 度径向扩散，并保留旧二维圆锥兼容', () {
+    final raw3d = fixture(loop: false, max: 120);
+    final e3d = (raw3d['emitters'] as List).single as Map<String, dynamic>;
+    e3d
+      ..['emissionBasis'] = [
+        [1, 0],
+        [0, 1],
+        [0, 0],
+      ]
+      ..['rate'] = {'scalar': 0}
+      ..['bursts'] = [
+        {
+          'time': 0,
+          'count': {'scalar': 80},
+        },
+      ]
+      ..['speed'] = {'scalar': 10}
+      ..['shape'] = {
+        'enabled': true,
+        'type': 4,
+        'radius': 3.0,
+        'thickness': 0.0,
+        'angle': 90.0,
+        'scale': [1, 1, 1],
+      };
+    final sim3d = FxSimulation(FxAsset.parse(raw3d), seed: 7)..advance(.05);
+    final particles = sim3d.emitters.single.particles;
+    expect(particles, hasLength(80));
+    expect(particles.any((p) => p.direction.dx > .7), isTrue);
+    expect(particles.any((p) => p.direction.dx < -.7), isTrue);
+    expect(particles.any((p) => p.direction.dy > .7), isTrue);
+    expect(particles.any((p) => p.direction.dy < -.7), isTrue);
+    for (final p in particles) {
+      // 位置应沿径向位于初始半径 300px 外侧。
+      expect(p.position.distance, greaterThan(310));
+      final dot =
+          (p.position.dx * p.direction.dx + p.position.dy * p.direction.dy) /
+          p.position.distance;
+      expect(dot, closeTo(1.0, 1e-4));
+    }
+
+    // 无 emissionBasis 的旧配置继续保持向上扇形发射，不破坏历史资源。
+    final raw2d = fixture(loop: false, max: 40);
+    final e2d = (raw2d['emitters'] as List).single as Map<String, dynamic>;
+    e2d
+      ..['rate'] = {'scalar': 0}
+      ..['bursts'] = [
+        {
+          'time': 0,
+          'count': {'scalar': 20},
+        },
+      ]
+      ..['shape'] = {
+        'enabled': true,
+        'type': 4,
+        'radius': 1.0,
+        'thickness': 0.0,
+        'angle': 30.0,
+        'scale': [1, 1],
+      };
+    final sim2d = FxSimulation(FxAsset.parse(raw2d), seed: 7)..advance(.02);
+    expect(
+      sim2d.emitters.single.particles.every((p) => p.direction.dy > .9),
+      isTrue,
+    );
+  });
+
+  test('limitVelocity 按阻尼衰减超限速度并校验非法阻尼参数', () {
+    final raw = fixture(loop: false, max: 1);
+    final emitter = (raw['emitters'] as List).single as Map<String, dynamic>;
+    emitter
+      ..['rate'] = {'scalar': 0}
+      ..['bursts'] = [
+        {
+          'time': 0,
+          'count': {'scalar': 1},
+        },
+      ]
+      ..['lifetime'] = {'scalar': 1}
+      ..['speed'] = {'scalar': 30}
+      ..['limitVelocity'] = {
+        'magnitude': {'scalar': 4},
+        'dampen': .2,
+      };
+    final sim = FxSimulation(FxAsset.parse(raw), seed: 3)..advance(.02);
+    final initialSpeed = sim.emitters.single.particles.single.velocity.distance;
+    sim.advance(.3);
+    final dampedSpeed = sim.emitters.single.particles.single.velocity.distance;
+    expect(initialSpeed, greaterThan(1500));
+    expect(dampedSpeed, lessThan(500));
+    expect(dampedSpeed, greaterThanOrEqualTo(399));
+
+    emitter['limitVelocity'] = {
+      'magnitude': {'scalar': 4},
+      'dampen': 1.5,
+    };
+    expect(() => FxAsset.parse(raw), throwsFormatException);
+  });
+
+  test('stretchAlignU 沿运动方向拉伸贴图 U 轴并区分正负 lengthScale 与 pivot', () async {
+    // 构造左半红、右半蓝的 16×16 贴图，以像素颜色检验 U 轴方向与拉伸轴。
+    final rec = ui.PictureRecorder();
+    final c = ui.Canvas(rec);
+    c.drawRect(
+      const ui.Rect.fromLTWH(0, 0, 8, 16),
+      ui.Paint()..color = const ui.Color(0xffff0000),
+    );
+    c.drawRect(
+      const ui.Rect.fromLTWH(8, 0, 8, 16),
+      ui.Paint()..color = const ui.Color(0xff0000ff),
+    );
+    final pic = rec.endRecording();
+    final tex = await pic.toImage(16, 16);
+    pic.dispose();
+    addTearDown(tex.dispose);
+
+    Future<List<int>> samplePixel(
+      double lengthScale,
+      double pivotY,
+      int x,
+      int y,
+    ) async {
+      final raw = fixture(loop: false, max: 1);
+      final emitter = (raw['emitters'] as List).single as Map<String, dynamic>;
+      emitter
+        ..['rate'] = {'scalar': 0}
+        ..['bursts'] = [
+          {
+            'time': 0,
+            'count': {'scalar': 1},
+          },
+        ]
+        ..['speed'] = {'scalar': 0}
+        ..['velocity'] = {
+          'enabled': true,
+          'x': {'scalar': 1},
+          'y': {'scalar': 0},
+        }
+        ..['size'] = {'scalar': .2}
+        ..['sizeY'] = {'scalar': .2}
+        ..['material'] = {'main': 'white.png', 'tint': [1, 1, 1, 1]}
+        ..['stretch'] = true
+        ..['stretchAlignU'] = true
+        ..['lengthScale'] = lengthScale
+        ..['pivot'] = [0.0, pivotY];
+      final asset = FxAsset.parse(raw);
+      final sim = FxSimulation(asset, seed: 1)..advance(.01);
+      // 将粒子放回中心，仅检验朝 +X 速度下的拉伸朝向和长度。
+      sim.emitters.single.particles.single.position = ui.Offset.zero;
+      final effect = StageEffect(sim, group: 'bgeffect', layer: 0);
+      final prec = ui.PictureRecorder();
+      paintEffects(
+        ui.Canvas(prec),
+        [effect],
+        {asset.textureUri('white.png'): tex},
+        'bgeffect',
+      );
+      final p = prec.endRecording();
+      final img = await p.toImage(1280, 720);
+      final bytes = (await img.toByteData())!.buffer.asUint8List();
+      final offset = (y * 1280 + x) * 4;
+      final px = bytes.sublist(offset, offset + 4);
+      img.dispose();
+      p.dispose();
+      return px;
+    }
+
+    // 速度沿 +X，size=20，lengthScale=6 => 宽 120、高 20，U=0 朝右(+X 速度头)为红，U=1 朝左(-X 拖尾)为蓝。
+    expect(await samplePixel(6, 0, 680, 360), [255, 0, 0, 255]);
+    expect(await samplePixel(6, 0, 600, 360), [0, 0, 255, 255]);
+    // 垂直方向超过 thickness/2=10 应透明，证明确实沿 X 轴而非 Y 轴拉伸。
+    expect(await samplePixel(6, 0, 640, 330), [0, 0, 0, 0]);
+
+    // 负 lengthScale=-6 且 pivotY=0.25：U=0 朝左(红)，U=1 朝右(蓝)，中心向右偏移 +30px。
+    expect(await samplePixel(-6, 0.25, 710, 360), [0, 0, 255, 255]);
+    expect(await samplePixel(-6, 0.25, 630, 360), [255, 0, 0, 255]);
+  });
+
+  test('avg_suduxian 打包资源以叠加混合与径向拉伸正确模拟双层速度线', () async {
+    final store = AssetStore();
+    addTearDown(store.close);
+    final loader = FxLoader('asset:///assets/fx-runtime/', store);
+    final asset = await loader.load('avg_suduxian');
+    expect(asset.emitters.map((e) => e.name), ['lizisha3_dm', 'lizisha_dm']);
+    for (final emitter in asset.emitters) {
+      expect(emitter.additive, isTrue, reason: emitter.name);
+      expect(emitter.stretch, isTrue, reason: emitter.name);
+      expect(emitter.stretchAlignU, isTrue, reason: emitter.name);
+      expect(emitter.emissionBasis, isNotNull, reason: emitter.name);
+    }
+    expect(asset.emitters[0].limitVelocity, isNull);
+    expect(asset.emitters[1].limitVelocity, isNotNull);
+    expect(asset.emitters[1].limitVelocity!.dampen, closeTo(.2, 1e-4));
+
+    final sim = FxSimulation(asset, seed: 42);
+    for (var i = 0; i < 45; i++) {
+      sim.advance(1 / 30);
+    }
+    final allParticles = [
+      for (final e in sim.emitters) ...e.particles,
+    ];
+    expect(allParticles.length, greaterThan(25));
+    // 粒子从圆环半径 330px 向 360° 外侧扩散，四个象限均有覆盖且中心留空。
+    expect(allParticles.any((p) => p.position.dx > 250 && p.position.dy > 50), isTrue);
+    expect(allParticles.any((p) => p.position.dx < -250 && p.position.dy > 50), isTrue);
+    expect(allParticles.any((p) => p.position.dx > 250 && p.position.dy < -50), isTrue);
+    expect(allParticles.any((p) => p.position.dx < -250 && p.position.dy < -50), isTrue);
+    for (final e in sim.emitters) {
+      for (final p in e.particles) {
+        expect((p.position - e.spec.position).distance, greaterThan(320));
+      }
+    }
+  });
 }

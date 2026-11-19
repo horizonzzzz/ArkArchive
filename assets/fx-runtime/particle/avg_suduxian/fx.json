@@ -15,9 +15,9 @@
         1.0,
         1.0
       ],
-      "rotation": 0.0,
+      "rotation": 0,
       "material": {
-        "main": "AVG_trail_05.png",
+        "main": "particle_5128151593347878660.png",
         "tint": [
           1.0,
           1.0,
@@ -31,13 +31,36 @@
           1
         ],
         "uvScroll": [
-          -1.0,
-          0.0
+          0,
+          0
         ],
-        "srcBlend": 1.0,
-        "dstBlend": 0.0
+        "srcBlend": 5.0,
+        "dstBlend": 1.0,
+        "colorMultiplier": 2,
+        "frames": {
+          "count": 1,
+          "columns": 1,
+          "fps": 30,
+          "width": 128,
+          "height": 128,
+          "loop": false
+        }
       },
       "sorting": 1,
+      "emissionBasis": [
+        [
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
       "loop": true,
       "prewarm": false,
       "duration": 1.0,
@@ -129,6 +152,7 @@
         "thickness": 0.0,
         "angle": 90.0,
         "scale": [
+          1.0,
           1.0,
           1.0
         ]
@@ -237,7 +261,15 @@
           "min": 0.0,
           "curve": [],
           "curveMin": []
-        }
+        },
+        "z": {
+          "state": 0,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "world": false
       },
       "noise": null,
       "stretch": true,
@@ -245,7 +277,8 @@
       "pivot": [
         0.0,
         0.0
-      ]
+      ],
+      "stretchAlignU": true
     },
     {
       "name": "lizisha_dm",
@@ -258,9 +291,9 @@
         0.9998099207878113,
         0.9998099207878113
       ],
-      "rotation": 0.0,
+      "rotation": 0,
       "material": {
-        "main": "AVG_trail_05.png",
+        "main": "particle_n7099197038989766908.png",
         "tint": [
           1.0,
           1.0,
@@ -274,13 +307,36 @@
           1
         ],
         "uvScroll": [
-          -1.0,
-          0.0
+          0,
+          0
         ],
-        "srcBlend": 1.0,
-        "dstBlend": 0.0
+        "srcBlend": 5.0,
+        "dstBlend": 1.0,
+        "colorMultiplier": 2,
+        "frames": {
+          "count": 1,
+          "columns": 1,
+          "fps": 30,
+          "width": 128,
+          "height": 128,
+          "loop": false
+        }
       },
       "sorting": 1,
+      "emissionBasis": [
+        [
+          0.9998099207878113,
+          0.0
+        ],
+        [
+          0.0,
+          0.9998099207878113
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
       "loop": true,
       "prewarm": false,
       "duration": 1.0,
@@ -358,6 +414,7 @@
         "thickness": 0.0,
         "angle": 90.0,
         "scale": [
+          1.0,
           1.0,
           1.0
         ]
@@ -459,7 +516,15 @@
           "min": -3.0,
           "curve": [],
           "curveMin": []
-        }
+        },
+        "z": {
+          "state": 3,
+          "scalar": 0.0,
+          "min": 0.0,
+          "curve": [],
+          "curveMin": []
+        },
+        "world": false
       },
       "noise": null,
       "stretch": true,
@@ -467,7 +532,31 @@
       "pivot": [
         0.0,
         0.23999999463558197
-      ]
+      ],
+      "limitVelocity": {
+        "magnitude": {
+          "state": 1,
+          "scalar": 3.9800000190734863,
+          "min": 1.0,
+          "curve": [
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              1.0,
+              0.0,
+              -2.0,
+              -2.0
+            ]
+          ],
+          "curveMin": []
+        },
+        "dampen": 0.20000000298023224
+      },
+      "stretchAlignU": true
     }
   ],
   "sourceSha256": "2efe8250d49ded6dd9661aaa85d1fcd7b87f8ce8e3cb722380360b3c0bde3f1d"
