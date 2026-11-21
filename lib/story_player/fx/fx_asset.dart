@@ -9,6 +9,7 @@ class FxAsset {
     this.duration,
     this.loop,
     this.emitters, {
+    this.stageScale = 1,
     this.drawAfterImages = false,
     this.drawAfterBlocker = false,
     this.screenEffect = const {},
@@ -37,12 +38,17 @@ class FxAsset {
     if ((emitters.isEmpty && screenEffect.isEmpty) || emitters.length > 64) {
       throw const FormatException('特效发射器数量无效');
     }
+    final stageScale = json['stageScale'] ?? 1;
+    if (stageScale is! num || !stageScale.isFinite || stageScale <= 0) {
+      throw const FormatException('特效舞台缩放必须为正数');
+    }
     return FxAsset(
       name,
       base ?? Uri(),
       fxNumber(json['duration'], 5).clamp(.01, 120),
       json['isLoop'] == true,
       emitters,
+      stageScale: stageScale.toDouble(),
       drawAfterImages: json['drawAfterImages'] == true,
       drawAfterBlocker: json['drawAfterBlocker'] == true,
       screenEffect: screenEffect,
@@ -53,6 +59,7 @@ class FxAsset {
   final Uri base;
   final double duration;
   final bool loop;
+  final double stageScale;
   final bool drawAfterImages;
   final bool drawAfterBlocker;
   final Map<String, dynamic> screenEffect;

@@ -99,6 +99,11 @@ uv run --no-project --with pillow python tool/fx/avg_fx_physical.py
 
 `tool/fx/avg_fx_extract.py` 将 ArkUnpacker 的 `TT_*.ab.json` 转换为版本 1 描述，支持纯粒子和复合 bundle 网格资源。测试使用合成描述验证解析与模拟；打包资源不通过特效名称硬编码到测试中。
 `fx.json` 保留解包出的 Transform 投影坐标；运行时仅将粒子速度、粒子尺寸和粒子运动参数按 100 像素/单位换算，网格位置与尺寸沿用导出坐标。发射器绘制顺序使用解包出的 `sorting`；粒子的位置和飞行方向按脚本的 `rox/roy/roz` 使用 Unity Z→X→Y 顺序投影，Stretched Billboard 沿投影后的运动方向按速度/长度比例拉伸。
+EP-6 的折线斩和 IS-6 的小斩在资源描述中使用 `stageScale: 0.6666666666666666`。舞台绘制以中心为原点，同时缩放脚本偏移、投影后的网格和粒子。其他资源默认使用 1。
+
+EP-6《若退路在燃烧》22:10–22:13 依次触发折线斩、方向性命中闪光和交叉命中闪光。折线斩的 `an` 层以加法混合绘制。交叉命中使用加法混合，发射器整体右移、上移各 120 逻辑像素，中心闪光调为白色并缩小外围光晕。重建烘焙资源时保留这几项运行时校准。中间一击的 `avg_dao_guiji_hit_02` 使用随应用打包的原创方向性闪光，`flash.png` 由细长的白色高斯光带和中心光斑合成。
+
+IS-6《旧日碾轧》19:46–19:50 的斜斩紧随白闪。两条 `CharacterAction(type="move",block=false)` 与后续白闪并行执行。播放器为移动保留默认阻塞行为，显式 `isblock` 优先于 `block`。两段演出核对使用剧情原始指令和 60fps 的 Flutter 舞台连续帧。
 
 ```sh
 uv run --no-project python tool/fx/avg_fx_extract.py .temp/unpacked-fire-smoke assets/fx-runtime/particle

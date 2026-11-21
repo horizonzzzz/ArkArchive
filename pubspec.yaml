@@ -99,6 +99,13 @@ flutter:
     - assets/fx-runtime/baked/avg_daoguang_attack_01_large/
     - assets/fx-runtime/baked/avg_daoguang_attack_02_large/
     - assets/fx-runtime/baked/avg_dao_attack_guiji_01/
+    - assets/fx-runtime/baked/avg_dao_attack_guiji_02/
+    - assets/fx-runtime/baked/avg_dao_guiji_hit_01/
+    - assets/fx-runtime/particle/avg_dao_guiji_hit_02/
+    - assets/fx-runtime/baked/avg_daoguang_attack_01_small/
+    - assets/fx-runtime/baked/avg_daoguang_attack_02_small/
+    - assets/fx-runtime/baked/avg_magic_fire_01/
+    - assets/fx-runtime/baked/avg_amiya_attack_01/
     - assets/fx-runtime/particle/avg_058_snow_01/
     - assets/fx-runtime/particle/avg_072_snow/
     - assets/fx-runtime/particle/avg_snow_01/

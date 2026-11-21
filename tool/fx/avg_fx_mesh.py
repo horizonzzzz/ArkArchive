@@ -157,7 +157,7 @@ def bake_material(material, shader, tracks, path, tree, source, target, filename
     from importlib import import_module
     Image = import_module('PIL.Image')
     shader_name = shader['m_ParsedForm']['m_Name']
-    supported = {'Torappu/Particles/Dissolve/Dissolve Add', 'Torappu/Particles/Dissolve/Dissolve AB', 'Torappu/Particles/Dissolve/Dissolve AB UVTween', 'Torappu/Particles/Additive', 'Torappu/Particles/AlphaBlend'}
+    supported = {'Torappu/Particles/Dissolve/Dissolve Add', 'Torappu/Particles/Dissolve/Dissolve AB', 'Torappu/Particles/Dissolve/Dissolve AB Double', 'Torappu/Particles/Dissolve/Dissolve AB UVTween', 'Torappu/Particles/Additive', 'Torappu/Particles/AlphaBlend'}
     if shader_name not in supported:
         raise ValueError(f'尚未实现材质转换：{shader_name}')
     props = dict(material['m_SavedProperties']['m_TexEnvs'])
@@ -172,7 +172,8 @@ def bake_material(material, shader, tracks, path, tree, source, target, filename
             raise ValueError(f'不支持的默认纹理：{name}={default}')
         return Image.new('RGBA', (1, 1), (255 if default == 'white' else 0,) * 3 + (255,))
     main = texture('_MainTex')
-    dissolve = texture('_DissolveTex') if '_DissolveTex' in props else None
+    mask_names = [name for name in ('_DissolveTex', '_DissolveTex_01', '_DissolveTex_02') if name in props]
+    dissolves = [(name, texture(name)) for name in mask_names]
     loop = False
     if particle and shader_name.endswith(' UVTween'):
         from fractions import Fraction
@@ -196,8 +197,8 @@ def bake_material(material, shader, tracks, path, tree, source, target, filename
         floats, vectors = property_values(material, tracks, path, frame / fps)
         tint = [1]*4 if particle else vectors.get('_TintColor', [1]*4)
         main_st = vectors.get('_MainTex_ST', [1, 1, 0, 0])
-        mask_st = vectors.get('_DissolveTex_ST', [1, 1, 0, 0])
-        amount, border = floats.get('_Amount', 0), max(1e-6, floats.get('_BorderWidth', 0.01))
+
+
         pixels = []
         for y in range(height):
             for x in range(width):
@@ -212,10 +213,14 @@ def bake_material(material, shader, tracks, path, tree, source, target, filename
                         raise ValueError(f'不支持的 MainTexChannel：{channel}')
                     color = (color[component],) * 4
                 alpha = 1
-                if dissolve:
+                for name, dissolve in dissolves:
+                    suffix = name.removeprefix('_DissolveTex')
+                    mask_st = vectors.get(name + '_ST', [1, 1, 0, 0])
+                    amount = floats.get('_Amount' + suffix, floats.get('_Amount', 0))
+                    border = max(1e-6, floats.get('_BorderWidth' + suffix, floats.get('_BorderWidth', 0.01)))
                     mask = sample(dissolve, u*mask_st[0]+mask_st[2]+uv_tween[2]*frame/fps, v*mask_st[1]+mask_st[3]+uv_tween[3]*frame/fps)[0] / 255
-                    # 原版 GLSL：clamp((mask-amount+border*(1-roundEven(amount+.5)))/border,0,1)。
-                    alpha = max(0, min(1, (mask-amount+border*(1-round(amount+.5))) / border))
+                    # 多重 dissolve 蒙版按片元裁切交集处理。
+                    alpha *= max(0, min(1, (mask-amount+border*(1-round(amount+.5))) / border))
                 pixels.append(tuple(round(max(0, min(255, color[c] * (1 if particle or shader_name == 'Torappu/Particles/AlphaBlend' else 2) * tint[c] * (alpha if c == 3 else 1)))) for c in range(4)))
         tile = Image.new('RGBA', (width, height))
         tile.putdata(pixels)

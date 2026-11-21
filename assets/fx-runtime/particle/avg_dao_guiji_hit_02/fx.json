@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "name": "avg_dao_guiji_hit_02",
+  "duration": 0.24,
+  "drawAfterBlocker": true,
+  "emitters": [
+    {
+      "name": "directional_flash",
+      "kind": "particle",
+      "position": [-28, -15],
+      "rotation": 0.75,
+      "material": {"main": "flash.png", "srcBlend": 5, "dstBlend": 1},
+      "loop": false,
+      "duration": 0.01,
+      "maxParticles": 1,
+      "bursts": [{"time": 0, "count": {"scalar": 1}}],
+      "lifetime": {"scalar": 0.24},
+      "size": {"scalar": 5.2},
+      "sizeY": {"scalar": 1.15},
+      "sizeOverLife": {"state": 1, "scalar": 1, "curve": [[0, 0.48], [0.25, 1], [1, 0.84]]},
+      "sizeYOverLife": {"state": 1, "scalar": 1, "curve": [[0, 0.85], [0.2, 1], [1, 0.1]]},
+      "colorOverLife": [[0, 1, 1, 1, 1], [0.36, 1, 1, 1, 1], [1, 1, 1, 1, 0]]
+    }
+  ]
+}

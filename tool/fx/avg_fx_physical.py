@@ -25,7 +25,7 @@ shaders = {}
 for file in (Path('.temp/unpacked-avg-shaders/TT_[uc]shaders.ab.json'), Path('.temp/unpacked-android-shaders/TT_[uc]shaders.ab.json')):
     tree = read_tree(file)
     shaders.update(tree)
-for name in ('AVG_daoguang_attack_01_large', 'AVG_daoguang_attack_02_large', 'AVG_dao_attack_guiji_01'):
+for name in ('AVG_daoguang_attack_01_large', 'AVG_daoguang_attack_02_large', 'AVG_dao_attack_guiji_01', 'AVG_dao_attack_guiji_02', 'AVG_dao_guiji_hit_01', 'AVG_daoguang_attack_01_small', 'AVG_daoguang_attack_02_small', 'AVG_magic_fire_01', 'AVG_amiya_attack_01'):
     selected = select_prefab(full, name)
     tree = {pid: copy.deepcopy(obj) for pid, obj in selected.items() if 'm_Component' in obj or 'm_GameObject' in obj}
     output = Path('.temp/fx-stage') / name.lower()

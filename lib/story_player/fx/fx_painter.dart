@@ -82,10 +82,14 @@ void paintEffects(
   for (final effect in ordered) {
     if (effect.delayRemaining > 0) continue;
     canvas.save();
-    canvas.translate(640 + effect.offset.dx, 360 - effect.offset.dy);
+    final stageScale = effect.simulation.asset.stageScale;
+    canvas.translate(
+      640 + effect.offset.dx * stageScale,
+      360 - effect.offset.dy * stageScale,
+    );
     canvas.scale(
-      (effect.flip & 1) == 0 ? 1 : -1,
-      (effect.flip & 2) == 0 ? 1 : -1,
+      (effect.flip & 1) == 0 ? stageScale : -stageScale,
+      (effect.flip & 2) == 0 ? stageScale : -stageScale,
     );
     final emitters = effect.simulation.emitters.toList()
       ..sort((a, b) => a.spec.sorting.compareTo(b.spec.sorting));

@@ -2551,11 +2551,12 @@ class StoryEngine extends ChangeNotifier {
     switch (action) {
       case 'move':
         final fromX = node.actionX, fromY = node.actionY;
-        await animate('characterMotion:$slot', seconds, (t) {
+        final move = animate('characterMotion:$slot', seconds, (t) {
           final e = _easeOutCubic(t);
           node.actionX = _lerp(fromX, fromX + xOffset, e);
           node.actionY = _lerp(fromY, fromY + yOffset, e);
         });
+        if (c.flag('isblock', c.flag('block', true))) await move;
       case 'jump':
         _startJump(
           slot,
