@@ -907,6 +907,15 @@ class StoryEngine extends ChangeNotifier {
       }
       return;
     }
+    if (group == 'bgeffect') {
+      final replaced = state.effects
+          .where((e) => e.group == group && e.layer == layer)
+          .toList();
+      for (final previous in replaced) {
+        _cancelAnimation('$key:${identityHashCode(previous)}');
+        state.effects.remove(previous);
+      }
+    }
     late final String resolved;
     try {
       resolved = resolveFxName(name, variables);
@@ -918,15 +927,6 @@ class StoryEngine extends ChangeNotifier {
     if (asset == null) {
       warn('第 ${c.line} 行：特效 $resolved 未加载（未打包或资源加载失败）');
       return;
-    }
-    if (group == 'bgeffect') {
-      final replaced = state.effects
-          .where((e) => e.group == group && e.layer == layer)
-          .toList();
-      for (final previous in replaced) {
-        _cancelAnimation('$key:${identityHashCode(previous)}');
-        state.effects.remove(previous);
-      }
     }
     final effect = StageEffect(
       FxSimulation(asset, seed: c.line, loop: group == 'effect' ? false : null),

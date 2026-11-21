@@ -463,9 +463,9 @@ void _paintMesh(
   paint.colorFilter = ColorFilter.mode(
     Color.from(
       alpha: effect.alpha * (animation?[15] ?? 1),
-      red: 1,
-      green: 1,
-      blue: 1,
+      red: animation?[12] ?? 1,
+      green: animation?[13] ?? 1,
+      blue: animation?[14] ?? 1,
     ),
     BlendMode.modulate,
   );

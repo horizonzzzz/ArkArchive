@@ -64,7 +64,11 @@ class MediaCatalog {
       );
     }
     return MediaCatalog(
-      variables: tables[0],
+      variables: {
+        ...tables[0],
+        if (!tables[0].keys.any((key) => key.toLowerCase() == 'e_snakeslayer'))
+          'e_snakeslayer': 'avg_079_daoguang01',
+      },
       characters: tables[1],
       backgroundPpu: tables[2],
     );

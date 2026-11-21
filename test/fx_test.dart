@@ -187,6 +187,22 @@ void main() {
     engine.dispose();
   });
 
+  testWidgets('bgeffect 同层切换到缺失或非法资源时清除旧特效', (tester) async {
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[bgeffect(name="test_fx", layer=1)]
+[bgeffect(name="missing_fx", layer=1)]
+[bgeffect(name="../invalid", layer=1)]
+正文
+'''),
+      effectAssets: {'test_fx': FxAsset.parse(fixture())},
+    );
+    engine.start();
+    await tester.pump();
+    expect(engine.state.effects, isEmpty);
+    engine.dispose();
+  });
+
   testWidgets('三维特效仅按旋转投影一次，不额外用余弦压扁', (tester) async {
     final raw = fixture();
     ((raw['emitters'] as List).single as Map)['transform3D'] = [
