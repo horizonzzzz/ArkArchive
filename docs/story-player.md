@@ -115,6 +115,8 @@ flutter run -d windows
 
 每组资源目录为 `assets/fx-runtime/particle/<特效小写名>/` 或 `assets/fx-runtime/baked/<特效小写名>/`，并在 `pubspec.yaml` 注册；Flutter 不递归收录目录。含材质烘焙帧或采样动画的资源归入 `baked/`，其余归入 `particle/`，烘焙资源仍可同时包含 Dart 粒子模拟。开发时可用 `--dart-define=STORY_FX_ROOT=...` 替换默认资源根目录：桌面/移动端接受绝对本地目录或 `file:` URI，Web 可使用 HTTP(S) 地址，服务端需允许跨域。外部覆盖资源未纳入“完整下载”的依赖与完成状态判断；默认打包资源不占用剧情缓存，删除剧情缓存不会删除它们。资源缺失时记录警告并继续对白。
 
+`avg_magic_fire_01` 只有粒子发射器，没有材质烘焙帧或采样动画，因此归入 `particle/`。
+
 特效指令中的 `delay` 以秒计并按播放速度缩放；延迟期间不绘制或推进粒子，`fade` 与实际显示时刻对齐。清除尚未启动的实例会立即取消。
 变量按 `story_variables.json` 解析，例如 TL-10「活着的重量」行动后使用 `$eb_smoke_01 → avg_048_smoke_01`（layer 1）及 `$eb_burn → avg_fire_01`（layer 2）。背景特效默认在背景之后、CG 之前绘制；资源声明 `drawAfterImages: true` 时改为在 CG 之后绘制，用于太阳光晕等覆盖画面的效果。前景特效默认在人物之后、遮罩之前绘制；资源声明 `drawAfterBlocker: true` 时在遮罩之后绘制，各绘制阶段按 layer 从低到高排列。同组同层的新 `bgeffect` 替换旧实例；一次性 `effect` 连续创建独立实例，保留同层刀光的叠加，淡入/淡出按实例调度；无名称且指定 layer 时清除此层，空指令清除该组全部层。`fade=true` 配合 `fadetime` 淡入/淡出，`block=true` 等待结束；`x/y` 使用舞台中心原点、y 向上，三维网格和带 `transform3D` 的粒子按 Unity Z→X→Y 顺序应用 `roz/rox/roy` 再投影；旧描述继续用余弦缩放近似投影。
 

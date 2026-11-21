@@ -2955,6 +2955,7 @@ class StoryEngine extends ChangeNotifier {
   // ============ avgdisplay ============
 
   Future<void> _avgDisplay(StoryCommand c) async {
+    // 保留参考端的数字样式名称用于诊断，不代表支持对应样式的渲染。
     const styleMap = {
       1: 'animetext',
       2: 'spine',
