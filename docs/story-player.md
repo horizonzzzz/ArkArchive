@@ -78,32 +78,25 @@ flutter test test/reference_live_test.dart --dart-define=STORY_REFERENCE_URL=htt
 ## 解包资源驱动的粒子特效
 
 `bgeffect` / `effect` 使用通用的描述解析、粒子模拟和二维绘制管线。首批 `avg_fire_01`（8 个粒子发射器和 1 个烟雾网格）与 `avg_048_smoke_01`（4 个发射器）的 `fx.json` 和主贴图位于各自的 `assets/fx-runtime/particle/` 或 `assets/fx-runtime/baked/` 特效目录，已在 `pubspec.yaml` 注册，默认通过 Flutter `rootBundle` 离线加载，无需配置外部目录。
-本次根据剧情变量表补充 `avg_036_daoguang_01`、`avg_042_fire_01`、`avg_061_glow_01`、`avg_062_smoke_01`、`avg_072_speech` 和 `avg_079_daoguang01`；针对第一优先级物理打击火花，接入了 `battle.ab` 中的 P0 火花 4 兄弟（`avg_daoguang_spark_01_mid`、`avg_daoguang_spark_02_mid`、`avg_daoguang_spark_01_large`、`avg_daoguang_spark_02_large`，对应变量 `$e_spark_01_mid`、`$e_spark_02_mid`、`$e_spark_01_large`、`$e_spark_02_large`），用于 14-11、BB-8、14-13 等高频拼刀与重创演出；`avg_058_tyndall_01` 仍因自定义后处理未接入而跳过；`avg_mohu_zhengyan_01` 与 `avg_mohu_biyan_01` 以全屏高斯模糊和暗角渐变近似眼睑变化，不等同 Unity 原后处理。
-本次按 `weather-effects-index.md` 与对应 AssetBundle 接入 `$eb_blizzard → avg_snowstorm_01`、`$eb_lightsnow → avg_snow_02`、`$eb_snowpowder → avg_058_snow_01`、`$eb_snow → avg_snow_01` 和 `$eb_072cg_snowcoverwindow → avg_072_snow`。四种常规雪效以解包粒子与贴图为基础；大雪省略依赖不支持溶解 shader 且无法重建网格的冰面 mesh，避免被当作矩形绘制。`AVG_072_snow` 依赖当前 Flutter 管线不支持的外置自定义 shader；按用户反馈，`$eb_072cg_snowcoverwindow → avg_072_snow` 保留空粒子占位，不绘制误导性的雪幕近似。
-为贴近 14-11 录屏中的向外放射火星，两个 mid spark 的运行时描述将锥形发射改为全周向随机；速度、贴图与纵向寿命曲线沿用解包资源，横向尺寸压窄以形成细线。这是视觉近似，不是原版 Shape 的逐项复刻。当前四个 spark 与本次新增三种主斩击共同构成物理战斗刀光层，但剧情里的 `Blocker`、其他背景/前景特效仍独立按脚本叠加，验收时须保留其时间线。
-本轮依据 `.temp/unpacked-battle/TT_battle.ab.json` 接入三种物理斩击：`$e_slash_01_l → avg_daoguang_attack_01_large`（正手弧斩，5 个网格烘焙层）、`$e_slash_02_l → avg_daoguang_attack_02_large`（反手弧斩，3 个网格烘焙层）、`$e_slash_cross → avg_dao_attack_guiji_01`（交叉斩，3 个网格烘焙层及 1 个粒子层）。派生资源位于 `assets/fx-runtime/baked/` 并已逐目录注册；脚本中的位置、旋转和图层参数继续由现有运行时处理。
+`bgeffect` / `effect` 使用统一的资源描述、粒子模拟和烘焙帧管线。运行时资源按 `assets/fx-runtime/particle/<name>/` 或 `assets/fx-runtime/baked/<name>/` 组织，并在 `pubspec.yaml` 中逐目录注册；Flutter 不递归收录目录。默认通过 `rootBundle` 离线加载，资源缺失只记录警告并继续对白。
 
-三种刀光通过 Animator → Controller → AnimationClip 引用取动画，不能依赖 clip 与预制体同名。转换器保留 streamed/dense/constant 轨道，按每个绑定的实际宽度解析 Transform（位置、四元数、Euler 角、缩放）、GameObject 显隐和材质属性；变换以 60fps 采样。网格动画每帧为 16 个数（原点、XYZ 基向量、RGBA），粒子动画保留原有 13 个数（原点、XY 基向量、RGBA）。网格保留局部坐标，运行时先应用动画再应用剧情三维旋转；不能再乘旧二维余弦缩放，否则大倾角刀光会被重复压扁。
+资源映射来自 `story_variables.json`。背景特效默认绘制在背景之后、CG 之前，`drawAfterImages: true` 时移到 CG 之后；前景特效默认绘制在人物之后、遮罩之前，`drawAfterBlocker: true` 时移到遮罩之后。`bgeffect` 同组同层的新实例替换旧实例，普通 `effect` 可叠加多个实例；空名称按组或层清除。`delay`、`fade`、`fadetime`、`block` 和 `x/y` 遵守现有指令语义，三维资源按 Unity 的 Z→X→Y 顺序投影，旧资源继续使用兼容性缩放。
 
-这三种资源声明 `drawAfterBlocker: true`，普通 `effect` 则保留遮罩前绘制。该字段只作用于 `effect`；`bgeffect` 继续按 `drawAfterImages` 选择背景绘制阶段，不会因该字段被过滤。该资源声明用于 15-17 行动后黑幕中的连续斩击，也避免 14-13 白闪遮住交叉斩；它是针对已核对片段的图层选择，不能据此把全部特效移到遮罩上方。14-13 的缺失点是 W 发出“阿斯卡纶，把这个金毛脑袋摘下来给我……”之前的两次 `$e_slash_cross`，其动画还包含旋转和节点显隐。
+粒子、网格和采样动画共用特效时钟，暂停时冻结；重播、跳转和断点重建创建新实例，旧淡出回调不能删除新实例。循环资源按时钟取模，预热最多 10 秒，长帧最多追赶 250ms，并受发射器数量上限限制。转换器保留材质混合、UV、顶点色、Transform、显隐和动画轨道；不支持的 shader 或缺失贴图必须明确跳过，不能用误导性的矩形近似替代。
 
-可在项目根目录重建：
+当前资源覆盖火焰、烟雾、刀光、雪、雨、扬尘、风沙、落沙、太阳光晕、速度线、电视噪声和黑白遮罩等。未接入的自定义后处理、部分 shader、Noise、HDR/Bloom 和辅助贴图仍属于近似范围，不能宣称逐像素复现。剧情脚本中的时间线、分组、层级、遮罩和多实例叠加必须单独核对，不能只凭静态截图验收。
+
+需要重建派生资源时，先用 ArkUnpacker 导出对应 AssetBundle 的 typetree、PNG 和 shader，再运行 `tool/fx/avg_fx_extract.py` 或对应烘焙脚本。临时解包结果、原始 AssetBundle、完整 typetree 和验收帧放在忽略的 `.temp/`；只有运行时使用的 `fx.json`、主贴图和生成资源进入 `assets/`。转换失败或动画、材质、贴图引用不完整时应中止，不能生成半成品。
+
+动态验收必须使用 Flutter 实际资源、正确的 `effect`/`bgeffect` 分组和脚本参数，按参考录像提取连续帧，覆盖出现、叠加、暂停、跳转和消散阶段。参考录像只用于方向、覆盖和形态核对；随机种子、Unity Noise、HDR/Bloom 和未支持 shader 造成的差异需记录为已知边界。游戏素材版权不因转换或打包改变，也不自动适用项目代码许可证。
+
+可执行的基础自检：
 
 ```sh
-uv run --no-project --with pillow python tool/fx/avg_fx_physical.py
+uv run --no-project --with pillow python tool/fx/avg_fx_extract.py <解包目录> assets/fx-runtime/particle --project-particles --shaders ".temp/unpacked-avg-shaders/TT_[uc]shaders.ab.json"
+uv run --no-project python tool/fx/test_avg_fx_extract.py
+flutter test test/fx_test.dart
 ```
-
-输入需包含 `.temp/unpacked-battle/TT_battle.ab.json`、`.temp/unpacked-fx-shared/` 下的共享 typetree 与同目录 PNG，以及 `.temp/unpacked-avg-shaders/TT_[uc]shaders.ab.json`、`.temp/unpacked-android-shaders/TT_[uc]shaders.ab.json`。脚本解析材质、纹理、Controller 和 clip 引用，生成中间 `.temp/fx-stage/`，并更新上述三个打包目录；未解析的动画或缺失贴图会中止转换。
-
-剧情缓存中可用于优先对比的命中点：主线 14-11（`obt/main/level_main_14-10_beg`）、14-13（`obt/main/level_st_14-02`）、11-19（`obt/main/level_main_11-17_beg`）、15-17（`obt/main/level_main_15-15_end`）；活动 IS-2、IS-6、ZT-10、BB-8/BB-9，以及 EP-5 至 EP-8。14-13 同段包含连续 `$e_slash_02_l` 与 `$e_slash_cross`，BB-8 连续触发两次正手大斩击，适合检查多实例叠加；交叉斩另可对比 RS-1、BP-3。该列表按本地缓存剧本中对三个变量的扫描归纳，不代表全部调用点。首次接入未做视频核对；随后按用户提供的 `QQ20261115-214239-HD.mp4` 密集取帧，修复 Animator 动画漏采，并用最终资源在黑幕上连续渲染检查展开与消散。亮度、Bloom 和交叉斩周围的其他未接入特效仍有偏差，不能视为完整原版复现。
-
-`tool/fx/avg_fx_extract.py` 将 ArkUnpacker 的 `TT_*.ab.json` 转换为版本 1 描述，支持纯粒子和复合 bundle 网格资源。测试使用合成描述验证解析与模拟；打包资源不通过特效名称硬编码到测试中。
-`fx.json` 保留解包出的 Transform 投影坐标；运行时仅将粒子速度、粒子尺寸和粒子运动参数按 100 像素/单位换算，网格位置与尺寸沿用导出坐标。发射器绘制顺序使用解包出的 `sorting`；粒子的位置和飞行方向按脚本的 `rox/roy/roz` 使用 Unity Z→X→Y 顺序投影，Stretched Billboard 沿投影后的运动方向按速度/长度比例拉伸。
-EP-6 的折线斩和 IS-6 的小斩在资源描述中使用 `stageScale: 0.6666666666666666`。舞台绘制以中心为原点，同时缩放脚本偏移、投影后的网格和粒子。其他资源默认使用 1。
-
-EP-6《若退路在燃烧》22:10–22:13 依次触发折线斩、方向性命中闪光和交叉命中闪光。折线斩的 `an` 层以加法混合绘制。交叉命中使用加法混合，发射器整体右移、上移各 120 逻辑像素，中心闪光调为白色并缩小外围光晕。重建烘焙资源时保留这几项运行时校准。中间一击的 `avg_dao_guiji_hit_02` 使用随应用打包的原创方向性闪光，`flash.png` 由细长的白色高斯光带和中心光斑合成。
-
-IS-6《旧日碾轧》19:46–19:50 的斜斩紧随白闪。两条 `CharacterAction(type="move",block=false)` 与后续白闪并行执行。播放器为移动保留默认阻塞行为，显式 `isblock` 优先于 `block`。两段演出核对使用剧情原始指令和 60fps 的 Flutter 舞台连续帧。
 
 ```sh
 uv run --no-project python tool/fx/avg_fx_extract.py .temp/unpacked-fire-smoke assets/fx-runtime/particle
@@ -184,4 +177,3 @@ uv run --no-project --with pillow python tool/fx/avg_fx_extract.py .temp/unpacke
 
 睁眼/闭眼资源没有可直接绘制的粒子，而是相机后处理。运行时以共享 `FxSimulation` 时钟，在 1.5 秒内对舞台内容施加高斯模糊与径向暗角：睁眼逐渐清晰，闭眼逐渐模糊并压暗边缘；暂停与 seek 遵循现有特效时钟。该近似不会重建 Unity 的 HGMobileBlur、景深或原始遮罩材质，若原版使用非线性动画曲线，变化节奏也会不同。
 
-P2 汇总计数应为 188 次（50+22+49+17+19+17+14）；覆盖分析图中的“174次”是算术错误，应以分项统计为准。
