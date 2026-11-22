@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:arknights_story_player/app/app_update.dart';
 import 'package:arknights_story_player/app/settings_page.dart';
 import 'package:crypto/crypto.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';

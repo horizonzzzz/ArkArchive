@@ -5,7 +5,7 @@ import '../story_player/data/playback_settings.dart';
 import '../story_player/data/story_repository.dart';
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'app_theme.dart';
 import 'app_update.dart';

@@ -23,7 +23,17 @@ class CharacterArt {
 }
 
 /// 资源条目类别；script 由 StoryRepository 在聚合层补充。
-enum AssetKind { background, cg, cutin, other, character, music, sfx, script }
+enum AssetKind {
+  background,
+  cg,
+  cutin,
+  other,
+  character,
+  music,
+  sfx,
+  script,
+  video,
+}
 
 /// 单个资源文件的导出描述：来源地址与导出目录内的相对路径。
 class AssetFile {
@@ -116,6 +126,28 @@ class MediaCatalog {
         ? 'images'
         : 'background';
     return assetBase.resolve('avg/$dir/${key.toLowerCase()}.png');
+  }
+
+  /// 剧情内嵌视频：`url` 为完整 http(s) 地址时直接使用；其余取值与 `res`
+  /// 一样按参考端规则（context.DG_3DzZj.js 的 l()：非 http 一律拼资源根）
+  /// 去开头斜杠、整体小写、逐段编码后拼到资源根，例如
+  /// `video/act55side/TL02.mp4` →
+  /// `https://torappu.prts.wiki/assets/video/act55side/tl02.mp4`。
+  /// 两者都为空时返回 null，调用方按 invalid_parameter 处理。
+  Uri? video(String url, String res) {
+    final direct = url.trim();
+    final isHttp = RegExp(r'^https?://', caseSensitive: false).hasMatch(direct);
+    var path = (direct.isEmpty || isHttp ? res : direct).trim();
+    if (isHttp) {
+      return Uri.tryParse(direct);
+    }
+    while (path.startsWith('/')) {
+      path = path.substring(1);
+    }
+    if (path.isEmpty) return null;
+    return assetBase.resolve(
+      path.toLowerCase().split('/').map(Uri.encodeComponent).join('/'),
+    );
   }
 
   Uri _characterUri(String path) => assetBase.resolve(
@@ -235,10 +267,12 @@ class MediaCatalog {
     final segments = uri.pathSegments;
     var matches = uri.host == assetBase.host;
     if (matches) {
-      final head = '/assets/${dir == 'characters' ? 'avg/characters' : 'audio'}/'
-          .split('/')
-          .where((s) => s.isNotEmpty)
-          .toList();
+      final head = switch (dir) {
+        'characters' => 'assets/avg/characters',
+        'audio' => 'assets/audio',
+        'video' => 'assets/video',
+        _ => '',
+      }.split('/').where((s) => s.isNotEmpty).toList();
       if (segments.length < head.length) {
         matches = false;
       } else {
@@ -292,15 +326,10 @@ class MediaCatalog {
       if (warnOnMissing) warnings.add('第 $line 行：未找到立绘 $name');
       return null;
     }
-    return AssetRef(
-      AssetKind.character,
-      base,
-      [
-        for (final uri in art.assets)
-          AssetFile(uri, _assetExportPath(uri, dir: 'characters')),
-      ],
-      group: base,
-    );
+    return AssetRef(AssetKind.character, base, [
+      for (final uri in art.assets)
+        AssetFile(uri, _assetExportPath(uri, dir: 'characters')),
+    ], group: base);
   }
 
   /// 逐条指令收集带分类的资源引用；warnings 与 [dependencies] 一致。
@@ -412,6 +441,23 @@ class MediaCatalog {
               _audioTitle(first!),
               files,
             ),
+          );
+        }
+      }
+      if (c.tag == 'video') {
+        final uri = video(c.value('url'), c.value('res'));
+        if (uri == null) {
+          warnings.add('第 ${c.line} 行：video 缺少 url 或 res 参数');
+        } else {
+          // 无路径段的绝对地址（如 https://x?clip=1）用稳定标题兜底，
+          // 不让准备阶段抛错。
+          final title = uri.pathSegments.isNotEmpty
+              ? _stripExtension(uri.pathSegments.last)
+              : 'video';
+          refs.add(
+            AssetRef(AssetKind.video, title, [
+              AssetFile(uri, _assetExportPath(uri, dir: 'video')),
+            ], group: title),
           );
         }
       }

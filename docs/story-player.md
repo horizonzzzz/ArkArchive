@@ -8,6 +8,7 @@
 | --- | --- |
 | `lib/story_player/script.dart` | `StoryScript.parse`、命令参数与原始行号 |
 | `lib/story_player/runtime/story_engine.dart` | 指令注册、执行队列、动画、分支、暂停和跳转 |
+| `lib/story_player/runtime/story_video.dart`、`lib/story_player/runtime/video_player_output.dart` | 视频输出接口、Noop 降级与 video_player 平台实现 |
 | `lib/story_player/stage_state.dart` | 舞台、对白、立绘和效果状态 |
 | `lib/story_player/ui/story_stage.dart`、`lib/story_player/ui/stage_painter.dart` | 舞台布局、文本和图层绘制 |
 | `lib/story_player/ui/story_player.dart` | 播放控制、快进、进度条、生命周期和断点保存 |
@@ -19,7 +20,7 @@
 
 解析器去除 BOM、空白和 `//` 注释，支持反斜杠续行；指令名与参数键转小写，保留原始命令和未知指令。普通文本和具名文本转成 `dialogue`。带引号、转义和括号的参数不能用简单字符串分割替代。错误应携带原始行号：`commandIndex` 从 0 开始，脚本行号从 1 开始。
 
-运行时为每类指令注册处理器，将结果写入 `StageState`，绘制层只消费状态。新增指令还要核对 `MediaCatalog.dependencies` 的资源收集，避免在线可播却无法完整缓存。未知指令记录诊断并继续，不应直接导致整篇剧情不可读。
+运行时为每类指令注册处理器，将结果写入 `StageState`，绘制层只消费状态。音频与视频输出是例外：它们由注入的输出层（`StoryAudio` / `StoryVideo`）自治，引擎只转发指令、暂停与销毁，播放状态不进入 `StageState`。新增指令还要核对 `MediaCatalog.dependencies` 的资源收集，避免在线可播却无法完整缓存。未知指令记录诊断并继续，不应直接导致整篇剧情不可读。
 
 以下规则来自历史 PRTS 对齐及当前回归，应在修改时保持：
 
@@ -38,6 +39,14 @@
 `StoryAudio` 提供执行、暂停、恢复、停止和释放；`SilentStoryAudio` 可用于测试。`JustAudioOutput` 用独立通道播放 BGM 和音效，前奏只播放一次，循环体单独循环。
 
 资源加载和播放请求完成前，必须再次核对 epoch 与请求标识；暂停、跳转、重播或销毁后，旧请求不得重新开始播放。播放列表的 `currentIndex` 监听需忽略重复索引，避免 `setLoopMode` 反馈触发微任务循环。修改音频时还需验证 intro→loop、停止后慢请求返回、重复切歌与页面退出。
+
+## 剧情内嵌视频
+
+`[Video]` 由 `StoryVideo` 输出层消费，语义对齐 PRTS 生产播放器（2026-11 审计版）：`url` 优先、`res` 次之；`res` 去开头斜杠、整体小写、逐段编码后拼到资源根（`video/act55side/TL02.mp4` → `assets/video/act55side/tl02.mp4`）。播放是全屏黑底覆盖层，按原始比例居中，盖住舞台与对白；指令队列阻塞到播放结束或失败，失败只警告并继续，不卡死剧情（替代参考端的启动 HEAD 缺失探测：缺失资源在初始化阶段报错，行为等价）。播放期间点击不推进；seek、跳节点、重播与销毁中断视频；断点重建与 seek 重演不重播（一次性演出，与非循环音效一致）。`fadeoutdelay` 参数参考端不消费，本实现同样忽略。
+
+播放视频时，右上角的跳过图标会打开确认框。确认后继续执行视频后的指令。若视频位于片尾，则进入正常的结束流程。
+
+参考端没有暂停机制；本项目视频跟随全局暂停（切后台必须停止），这是有意的原生差异。视频 URL 进入 `MediaCatalog.collect` / `dependencies`，随「完整下载」离线；播放时缓存命中走本地文件，未命中流式播放。平台能力：Android / iOS / macOS / Web 注入 `VideoPlayerStoryVideo`（官方 `video_player`）；Windows 由 `video_player_win`（Media Foundation，随包单个 ~130KB dll）联邦接管同一套接口，标准 mp4/H.264 无需额外解码包；Linux 无官方或轻量实现，降级为 `NoopStoryVideo` 并记录诊断，剧情照常推进。
 
 ## 断点、进度条与人物回放
 
@@ -71,7 +80,7 @@ flutter test test/reference_live_test.dart --dart-define=STORY_REFERENCE_URL=htt
 
 此检查下载静态依赖、解码图片并报告指令覆盖，默认不联网；它不能证明动态演出和音频听感正确。历史视觉参照为 [PRTS TL-1 行动后](https://prts.wiki/w/TL-1_%E5%BA%B8%E4%BF%97%E7%9A%84%E5%AE%9E%E8%B7%B5/END)。应用原生解释脚本，不下载执行 PRTS 播放器 JavaScript；参考端构建文件名会变化。
 
-当前 `video` 和依赖未授权字体的 `spellsticker` 仍跳过；`spellstickerclear` 为空处理。`cameraeffect=Chaos`、部分 `avgdisplay` 样式和非 `group_location_stamp` 的 `animtext` 尚不支持。通讯窗口部分模板、波形、关键帧和占位图仍简化，商业字体以 Noto 近似；随机震动不保证逐帧一致。`fit_mode` 仅保留元数据，未实现额外适配语义。
+当前依赖未授权字体的 `spellsticker` 仍跳过；`spellstickerclear` 为空处理。`video` 仅在 Linux 降级为 Noop 并记录诊断（无官方或轻量播放器实现），其余平台均接入平台播放器。`cameraeffect=Chaos`、部分 `avgdisplay` 样式和非 `group_location_stamp` 的 `animtext` 尚不支持。通讯窗口部分模板、波形、关键帧和占位图仍简化，商业字体以 Noto 近似；随机震动不保证逐帧一致。`fit_mode` 仅保留元数据，未实现额外适配语义。
 
 历史对齐细节可用 `git show 70b0fd2^:docs/player_alignment.md` 查阅；其旧测试数量和资源打包说明已过时。断点相关历史入口为 `f4a8892`、`261e499`，进度条为 `60a2c6a`、`6bb88e0`，人物回放保护为 `7fdb2f5`。
 

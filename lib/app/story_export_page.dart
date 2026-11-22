@@ -1,5 +1,5 @@
 import 'package:file_selector/file_selector.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../story_player/data/asset_package.dart';
@@ -184,9 +184,10 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
   // ---------- 分类与筛选 ----------
 
   List<AssetItem> _categoryItems(int category) => switch (category) {
+    // 视频与音频同属「音频」分类页（试听类媒体）。
+    2 => _package!.itemsOfKinds({AssetKind.music, AssetKind.sfx, AssetKind.video}),
     0 => _package!.itemsOfKinds(_imageKinds),
     1 => _package!.itemsOfKinds({AssetKind.character}),
-    2 => _package!.itemsOfKinds({AssetKind.music, AssetKind.sfx}),
     _ => _package!.itemsOfKinds({AssetKind.script}),
   };
 
@@ -1119,6 +1120,8 @@ class _AudioTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
+    // 视频素材不支持 30 秒音频试听：按钮置灰，条目只提供勾选导出。
+    final isVideo = item.kind == AssetKind.video;
     return AnimatedBuilder(
       animation: audio,
       builder: (context, _) {
@@ -1130,10 +1133,14 @@ class _AudioTile extends StatelessWidget {
           visualDensity: VisualDensity.compact,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
           leading: IconButton(
-            tooltip: playing ? '停止试听' : '试听 30 秒',
-            onPressed: () => audio.toggle(item.id, item.preview),
+            tooltip: isVideo ? '视频素材不支持试听' : (playing ? '停止试听' : '试听 30 秒'),
+            onPressed: isVideo ? null : () => audio.toggle(item.id, item.preview),
             icon: Icon(
-              playing ? Icons.stop_circle_outlined : Icons.play_circle_outline,
+              isVideo
+                  ? Icons.movie_outlined
+                  : playing
+                  ? Icons.stop_circle_outlined
+                  : Icons.play_circle_outline,
               size: 26,
               color: playing ? colors.indicator : colors.secondary,
             ),
@@ -1162,22 +1169,20 @@ class _AudioTile extends StatelessWidget {
                     ),
                   ],
                 )
-              : Text(
+                  : Text(
                   ended
                       ? '试听结束，点击重新播放'
                       : error != null
                       ? '无法试听'
                       : [
-                          item.kind == AssetKind.music
-                              ? 'BGM'
-                              : '音效',
+                          _kindLabel(item.kind),
                           if (item.files.length > 1) '含 ${item.files.length} 个文件',
                           if (bytes != null) _formatBytes(bytes!),
                         ].join(' · '),
                   style: TextStyle(fontSize: 11, color: colors.subtext),
                 ),
           trailing: Checkbox(value: selected, onChanged: (_) => onToggle()),
-          onTap: () => audio.toggle(item.id, item.preview),
+          onTap: isVideo ? null : () => audio.toggle(item.id, item.preview),
         );
       },
     );
@@ -1452,15 +1457,16 @@ class _ViewerImageState extends State<_ViewerImage> {
 // ---------- 公共 ----------
 
 String _kindLabel(AssetKind kind) => switch (kind) {
-  AssetKind.background => '背景',
-  AssetKind.cg => 'CG',
-  AssetKind.cutin => '切入图',
-  AssetKind.other => '道具图',
-  AssetKind.character => '立绘',
-  AssetKind.music => 'BGM',
-  AssetKind.sfx => '音效',
-  AssetKind.script => '脚本',
-};
+      AssetKind.background => '背景',
+      AssetKind.cg => 'CG',
+      AssetKind.cutin => '切入图',
+      AssetKind.other => '道具图',
+      AssetKind.character => '立绘',
+      AssetKind.music => 'BGM',
+      AssetKind.sfx => '音效',
+      AssetKind.script => '脚本',
+      AssetKind.video => '视频',
+    };
 
 String _formatBytes(int bytes) {
   if (bytes < 1024) return '$bytes B';

@@ -17,4 +17,8 @@ class FileCache {
   }) async => null;
   Future<void> write(Uri uri, Uint8List bytes, {String? story}) async {}
   Future<Uri> playableUri(Uri uri, {String? story}) async => uri;
+
+  Future<Uri> playableVideoUri(Uri uri, {String? story}) async => uri;
+
+  void releaseVideoSource(Uri source) {}
 }

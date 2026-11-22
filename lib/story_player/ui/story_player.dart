@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/app_theme.dart';
+import '../data/asset_store.dart';
 import '../data/media_catalog.dart';
 import '../data/playback_progress.dart';
 import '../data/story_repository.dart';
@@ -14,6 +16,8 @@ import '../data/playback_settings.dart';
 import '../runtime/just_audio_output.dart';
 import '../runtime/story_audio.dart';
 import '../runtime/story_engine.dart';
+import '../runtime/story_video.dart';
+import '../runtime/video_player_output.dart';
 import '../runtime/playback_checkpoint.dart';
 import '../stage_state.dart';
 import '../fx/fx_asset.dart';
@@ -28,6 +32,7 @@ class StoryPlayer extends StatefulWidget {
     super.key,
     required this.story,
     this.audio,
+    this.video,
     this.settings = const PlaybackSettings(),
     this.resumable,
     this.onProgress,
@@ -37,6 +42,11 @@ class StoryPlayer extends StatefulWidget {
   });
   final PreparedStory story;
   final StoryAudio? audio;
+
+  /// 可注入的视频输出；测试或特殊宿主可传 [NoopStoryVideo]。缺省时按
+  /// 平台能力选择：有官方 video_player 实现的平台用 [VideoPlayerStoryVideo]，
+  /// 其余平台降级为 Noop 并记录诊断。
+  final StoryVideo? video;
   final PlaybackSettings settings;
 
   /// 可选恢复点：存在时开始画面额外提供「从上次继续」入口，
@@ -121,6 +131,9 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
       effectAssets: effectAssets,
       typingInterval: Duration(milliseconds: widget.settings.typingMs.round()),
       autoWaitSeconds: widget.settings.autoDelay,
+      video:
+          widget.video ??
+          _createVideoOutput(widget.story.catalog, widget.story.assets),
       audio:
           widget.audio ??
           JustAudioOutput(
@@ -148,6 +161,42 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     engine.warnings.addAll(widget.story.warnings);
     engine.addListener(_progressChanged);
     unawaited(_prepare());
+  }
+
+  /// 平台能力选择：官方 video_player 支持 Android/iOS/macOS/Web；
+  /// Windows 由 video_player_win（Media Foundation）补齐；Linux 无官方或
+  /// 轻量实现，降级为 Noop 并在诊断中说明。
+  StoryVideo _createVideoOutput(MediaCatalog catalog, AssetStore assets) {
+    final supported =
+        kIsWeb ||
+        [
+          TargetPlatform.android,
+          TargetPlatform.iOS,
+          TargetPlatform.macOS,
+          TargetPlatform.windows,
+        ].contains(defaultTargetPlatform);
+    if (supported) {
+      return VideoPlayerStoryVideo(
+        catalog,
+        assets,
+        onWarning: (message) {
+          if (mounted) {
+            engine.warn(message);
+            setState(() {});
+          }
+        },
+      );
+    }
+    return NoopStoryVideo(
+      reason: 'Linux 平台暂无剧情内嵌视频的官方或轻量播放器实现，视频段落已跳过',
+      // 显式注入的 Noop 同样要把跳过诊断回传引擎，与引擎默认 Noop 一致。
+      onWarning: (message) {
+        if (mounted) {
+          engine.warn(message);
+          setState(() {});
+        }
+      },
+    );
   }
 
   Future<void> _prepareEffects() async {
@@ -312,6 +361,12 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     _progressHideTimer?.cancel();
     if (state != AppLifecycleState.resumed) {
       unawaited(_saveProgress(force: true));
+      // 切后台暂停剧情视频（音频/动画保持既有后台行为）：初始化窗口的
+      // 意图式暂停会阻止控制器就绪后自动开播。
+      unawaited(engine.video.pause());
+    } else {
+      // 引擎全局暂停（用户手动暂停）时不抢着恢复。
+      if (!engine.paused) unawaited(engine.video.resume());
     }
   }
 
@@ -1053,6 +1108,25 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     },
   );
 
+  Future<void> _confirmSkipVideo(Object session) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('跳过视频播放？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('跳过'),
+          ),
+        ],
+      ),
+    );
+    if (mounted && confirmed == true) await engine.skipVideo(session);
+  }
   Future<void> _continueFromArchive() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1266,6 +1340,14 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                 ),
               ),
             ),
+          // 剧情内嵌视频覆盖层（[Video] 指令）：黑底全屏、按原比例居中，
+          // 盖住舞台与对白，但让位给进度条、顶部工具条与 seek 黑闪层。
+          // 点击穿透到舞台：引擎播放视频时 advance 无效，与参考端一致。
+          Positioned.fill(
+            child: IgnorePointer(
+              child: engine.video.buildSurface() ?? const SizedBox.shrink(),
+            ),
+          ),
           if (!ready)
             const Center(
               child: Column(
@@ -1404,66 +1486,81 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
           ),
           AnimatedBuilder(
             animation: engine,
-            builder: (context, _) => AnimatedOpacity(
-              opacity: engine.theaterMode ? 0 : 1,
-              duration: const Duration(milliseconds: 200),
-              child: IgnorePointer(
-                ignoring: engine.theaterMode,
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: SafeArea(
-                    bottom: false,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _overlayButton(
-                            tooltip: '退出播放器',
-                            icon: Icons.arrow_back,
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
+            builder: (context, _) {
+              final videoSession = engine.videoSession;
+              final hideToolbar = engine.theaterMode && videoSession == null;
+              return AnimatedOpacity(
+                opacity: hideToolbar ? 0 : 1,
+                duration: const Duration(milliseconds: 200),
+                child: IgnorePointer(
+                  ignoring: hideToolbar,
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: SafeArea(
+                      bottom: false,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            if (!engine.theaterMode)
                               _overlayButton(
-                                tooltip: '对话记录',
-                                icon: Icons.history,
-                                onPressed: () => _showLog(),
-                              ),
-                              _overlayButton(
-                                tooltip: '资源与指令诊断',
-                                icon: Icons.info_outline,
-                                onPressed: () => _showLog(diagnostics: true),
-                                badge: engine.warnings.isNotEmpty,
-                              ),
-                              _overlayButton(
-                                tooltip: engine.autoMode != 'default'
-                                    ? '自动播放：开启'
-                                    : '手动播放：开启',
-                                icon: engine.autoMode != 'default'
-                                    ? Icons.play_circle_outline
-                                    : Icons.touch_app,
-                                onPressed: !engine.state.metadata.isAutoable
-                                    ? null
-                                    : () => engine.setAutoMode(
-                                        engine.autoMode == 'default'
-                                            ? 'button_auto'
-                                            : 'default',
-                                      ),
-                              ),
-                            ],
-                          ),
-                        ],
+                                tooltip: '退出播放器',
+                                icon: Icons.arrow_back,
+                                onPressed: () => Navigator.pop(context),
+                              )
+                            else
+                              const SizedBox.shrink(),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (!engine.theaterMode) ...[
+                                  _overlayButton(
+                                    tooltip: '对话记录',
+                                    icon: Icons.history,
+                                    onPressed: () => _showLog(),
+                                  ),
+                                  _overlayButton(
+                                    tooltip: '资源与指令诊断',
+                                    icon: Icons.info_outline,
+                                    onPressed: () => _showLog(diagnostics: true),
+                                    badge: engine.warnings.isNotEmpty,
+                                  ),
+                                  _overlayButton(
+                                    tooltip: engine.autoMode != 'default'
+                                        ? '自动播放：开启'
+                                        : '手动播放：开启',
+                                    icon: engine.autoMode != 'default'
+                                        ? Icons.play_circle_outline
+                                        : Icons.touch_app,
+                                    onPressed: !engine.state.metadata.isAutoable
+                                        ? null
+                                        : () => engine.setAutoMode(
+                                            engine.autoMode == 'default'
+                                                ? 'button_auto'
+                                                : 'default',
+                                          ),
+                                  ),
+                                ],
+                                if (videoSession != null)
+                                  _overlayButton(
+                                    tooltip: '跳过视频',
+                                    icon: Icons.skip_next,
+                                    onPressed: () => _confirmSkipVideo(videoSession),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
           if (_archiveMode && ready)
             Positioned(

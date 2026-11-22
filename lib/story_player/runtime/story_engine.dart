@@ -10,6 +10,7 @@ import '../fx/fx_asset.dart';
 import '../fx/fx_loader.dart';
 import '../fx/fx_simulation.dart';
 import 'story_audio.dart';
+import 'story_video.dart';
 import 'playback_checkpoint.dart';
 
 typedef CommandHandler = Future<void> Function(StoryCommand command);
@@ -363,6 +364,7 @@ class StoryEngine extends ChangeNotifier {
   StoryEngine(
     this.script, {
     StoryAudio? audio,
+    StoryVideo? video,
     this.elapsed,
     this.variables = const {},
     this.typingInterval = const Duration(milliseconds: 40),
@@ -371,7 +373,12 @@ class StoryEngine extends ChangeNotifier {
     this.characterArtSize,
     this.imageNaturalWidth,
     this.effectAssets = const {},
-  }) : audio = audio ?? SilentStoryAudio() {
+  }) : audio = audio ?? SilentStoryAudio(),
+       video = video ?? NoopStoryVideo() {
+    // 默认注入的 Noop 输出把警告回传引擎诊断，与旧版跳过行为一致。
+    if (video == null) {
+      (this.video as NoopStoryVideo).onWarning = warn;
+    }
     defaultSpeed = PlaySpeed(
       typingMs: typingInterval.inMicroseconds / 1000,
       animateRatio: 1,
@@ -387,6 +394,7 @@ class StoryEngine extends ChangeNotifier {
 
   final StoryScript script;
   final StoryAudio audio;
+  final StoryVideo video;
   final Map<String, dynamic> variables;
   final Duration typingInterval;
   final double? autoWaitSeconds;
@@ -415,6 +423,29 @@ class StoryEngine extends ChangeNotifier {
   final List<int> _playbackTrace = [];
   final Map<String, StoryCommand> _resumeTracks = {};
   bool _rebuilding = false;
+  (int, Completer<void>)? _videoPlayback;
+
+  /// 当前视频的标识，用于确认框关闭后核对仍是同一段视频。
+  Object? get videoSession {
+    final playback = _videoPlayback;
+    return playback != null && playback.$1 == _epoch ? playback.$2 : null;
+  }
+
+  Future<void> skipVideo(Object session) async {
+    final skip = _videoPlayback?.$2;
+    if (_disposed ||
+        skip == null ||
+        skip.isCompleted ||
+        !identical(session, videoSession)) {
+      return;
+    }
+    skip.complete();
+    try {
+      await video.stop();
+    } catch (e) {
+      if (!_disposed) warn('停止视频失败：$e');
+    }
+  }
 
   int get checkpointRevision =>
       cursor > 0 || running || _playbackTrace.isNotEmpty
@@ -1204,6 +1235,7 @@ class StoryEngine extends ChangeNotifier {
     _cancelShake();
     _resetMotions();
     clearOverlays();
+    unawaited(video.stop());
     final metadata = state.metadata;
     state = StageState()..metadata = metadata;
     cursor = 0;
@@ -1318,6 +1350,7 @@ class StoryEngine extends ChangeNotifier {
     _waitingInput = false;
     final epoch = _epoch;
     _autoClickAt = -1;
+    var playedVideo = false;
     _changed();
     try {
       while (!_disposed && epoch == _epoch && cursor < script.commands.length) {
@@ -1328,16 +1361,18 @@ class StoryEngine extends ChangeNotifier {
         if (c.tag == 'endtip' && autoMode == 'default') continue;
         _playbackTrace.add(cursor - 1);
         if (await _executeCommand(c)) break;
+        if (c.tag == 'video') playedVideo = true;
         if (epoch != _epoch || _disposed || state.choices.isNotEmpty) break;
         if (_waitingInput) break;
       }
       if (epoch == _epoch &&
           cursor >= script.commands.length &&
           state.choices.isEmpty &&
-          !state.dialogueVisible &&
+          (!state.dialogueVisible || playedVideo) &&
           !_waitingInput) {
         _finishCleanup();
         finished = true;
+        state.dialogueVisible = false;
         _waitingInput = false;
       }
     } finally {
@@ -1417,6 +1452,8 @@ class StoryEngine extends ChangeNotifier {
     _resetMultiline();
     _resetMotions();
     clearOverlays();
+    // 跳过节点中断正在播放的剧情视频（参考端 pendingWait.interrupt）。
+    unawaited(video.stop());
     running = false;
     _waitingInput = false;
     _autoClickAt = -1;
@@ -1509,6 +1546,22 @@ class StoryEngine extends ChangeNotifier {
           track.line,
           track.raw,
         );
+      }
+    }
+  }
+
+  Future<void> _executeVideo(StoryCommand c) async {
+    // 断点重建与 seek 重演不重播视频（一次性演出，与非循环音效一致）。
+    if (_rebuilding) return;
+    final skip = Completer<void>();
+    _videoPlayback = (_epoch, skip);
+    _changed();
+    try {
+      await Future.any([video.execute(c), skip.future]);
+    } finally {
+      if (identical(_videoPlayback?.$2, skip)) {
+        _videoPlayback = null;
+        _changed();
       }
     }
   }
@@ -1725,6 +1778,7 @@ class StoryEngine extends ChangeNotifier {
     _itemSlotInUse = false;
     _resetMultiline();
     await audio.stop();
+    unawaited(video.stop());
     if (!_disposed) {
       _changed();
       await advance();
@@ -1735,7 +1789,9 @@ class StoryEngine extends ChangeNotifier {
     paused = value;
     if (value) {
       await audio.pause();
+      await video.pause();
     } else {
+      await video.resume();
       await audio.resume();
     }
     _changed();
@@ -1834,12 +1890,10 @@ class StoryEngine extends ChangeNotifier {
     });
     register('bgeffect', _effect);
     register('effect', _effect);
-    register('video', (c) async {
-      warn('第 ${c.line} 行：video 需要平台播放器（Windows 无官方实现），本轮跳过');
-    });
-    register('spellsticker', (c) async {
-      warn('第 ${c.line} 行：spellsticker 依赖 FZTYSK/RoHMinSink 字体（未获授权），本轮跳过');
-    });
+    // 参考端（StoryPlayer.DH9HUkmm.js case`video`）：url 优先、res 次之；
+    // 播放阻塞指令队列直到结束或出错，重建路径不重演，中断由 stop 触发。
+    // URL 解析与平台播放器在 StoryVideo 输出层，与音频同构。
+    register('video', _executeVideo);
     register('spellstickerclear', (_) async {});
     for (final tag in [
       'playmusic',
@@ -3825,6 +3879,7 @@ class StoryEngine extends ChangeNotifier {
     _cancelShake();
     _clock.stop();
     unawaited(audio.dispose());
+    unawaited(video.dispose());
     super.dispose();
   }
 }

@@ -309,4 +309,9 @@ class FileCache {
     }
     return file.uri;
   }
+
+  Future<Uri> playableVideoUri(Uri uri, {String? story}) =>
+      playableUri(uri, story: story);
+
+  void releaseVideoSource(Uri source) {}
 }

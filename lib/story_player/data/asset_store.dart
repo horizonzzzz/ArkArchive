@@ -516,6 +516,18 @@ class AssetStore {
     }
   }
 
+  Future<Uri> playableVideoUri(Uri uri, {String? story}) async {
+    try {
+      return await _cache.playableVideoUri(uri, story: story ?? _storyScope());
+    } catch (_) {
+      return uri;
+    }
+  }
+
+  void releaseVideoSource(Uri source) {
+    _cache.releaseVideoSource(source);
+  }
+
   /// 已缓存资源在磁盘上的字节数；两层都未命中返回 null，不发起网络请求。
   Future<int?> cachedSize(Uri uri, {String? story}) async {
     if (_movingCache) throw StateError('缓存目录迁移中');
