@@ -420,7 +420,81 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('小幅拖动松手视为取消，明显拖动跳转到目标句', (tester) async {
+  testWidgets('小幅拖动保留手柄位置并可连续调整', (tester) async {
+    final stage = await openPlayer(
+      tester,
+      script: '[header]\n${List.generate(200, (i) => '对白 $i').join('\n')}',
+    );
+    final progress = find.byKey(const Key('story-progress-hit-area'));
+    final rect = tester.getRect(progress);
+    final track = find.descendant(
+      of: find.byKey(const Key('story-progress-track')),
+      matching: find.byType(CustomPaint),
+    );
+    double thumbPosition() =>
+        (tester.widget<CustomPaint>(track).painter! as dynamic).value as double;
+
+    final initial = stage.engine.progress;
+    final first = await tester.startGesture(rect.center);
+    await first.moveBy(const Offset(40, 0));
+    await tester.pump();
+    await first.moveBy(const Offset(-39, 0));
+    await tester.pump();
+    await tester.pump();
+    await first.up();
+    await tester.pumpAndSettle();
+    expect(stage.engine.state.text, '对白 0');
+    expect(thumbPosition(), closeTo(initial + 1 / rect.width, .0001));
+
+    final tiny = await tester.startGesture(
+      Offset(rect.left + initial * rect.width + 1, rect.center.dy),
+    );
+    await tiny.moveBy(const Offset(1, 0));
+    await tiny.up();
+    await tester.pumpAndSettle();
+    expect(thumbPosition(), closeTo(initial + 2 / rect.width, .0001));
+
+    final second = await tester.startGesture(rect.center);
+    await second.moveBy(const Offset(40, 0));
+    await tester.pump();
+    await second.moveBy(const Offset(-32, 0));
+    await tester.pump();
+    await tester.pump();
+    await second.up();
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(thumbPosition(), closeTo(initial + 10 / rect.width, .0001));
+    await tester.pumpAndSettle();
+    expect(stage.engine.state.text, isNot('对白 0'));
+    expect(thumbPosition(), closeTo(initial + 10 / rect.width, .0001));
+
+    final inFlight = await tester.startGesture(rect.center);
+    await inFlight.moveBy(const Offset(40, 0));
+    await tester.pump();
+    await inFlight.moveBy(const Offset(40, 0));
+    await tester.pump();
+    await inFlight.up();
+    await tester.pump(const Duration(milliseconds: 40));
+    final queued = await tester.startGesture(rect.center);
+    await queued.moveBy(const Offset(40, 0));
+    await tester.pump();
+    await queued.moveBy(const Offset(-32, 0));
+    await tester.pump();
+    await queued.up();
+    await tester.pumpAndSettle();
+    expect(thumbPosition(), closeTo(initial + 98 / rect.width, .0001));
+    expect(stage.engine.progress, closeTo(thumbPosition(), 1 / 201));
+
+    final cursor = stage.engine.cursor;
+    await stage.engine.advance();
+    await stage.engine.advance();
+    await tester.pump();
+    await tester.pump();
+    expect(stage.engine.cursor, greaterThan(cursor));
+    expect(thumbPosition(), closeTo(stage.engine.progress, .0001));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('拖回原位保留当前句，拖向其他位置可跳转', (tester) async {
     final stage = await openPlayer(tester);
     expect(stage.engine.state.text, '第一句');
     final rect = tester.getRect(
@@ -440,13 +514,13 @@ void main() {
     expect(stage.engine.state.text, '第一句');
     expect(stage.engine.state.history, hasLength(1));
 
-    // 拖出 1.5% 以上才生效，吸附到最近停顿点。
+    // 拖动到其他停顿点附近时跳转。
     final seek = await tester.startGesture(
       Offset(rect.center.dx, rect.center.dy),
     );
     await seek.moveBy(const Offset(40, 0));
     await tester.pump();
-    await seek.moveBy(const Offset(80, 0));
+    await seek.moveBy(const Offset(120, 0));
     await tester.pump();
     await seek.up();
     // 黑闪期间（§5-A8）：黑闪层 target opacity 为 1。
@@ -548,7 +622,7 @@ void main() {
     expect(stage.engine.state.text, '第一句');
     expect(stage.engine.state.history, hasLength(1));
 
-    // 呼出后的第二次轻点：吸附最近停顿点跳转。
+    // 呼出后的第二次轻点：跳转到附近的停顿点。
     await tester.tapAt(Offset(rect.left + rect.width * .9, rect.center.dy));
     await tester.pump(const Duration(milliseconds: 120));
     await tester.pumpAndSettle();
@@ -579,7 +653,7 @@ void main() {
     await gesture.moveBy(const Offset(40, 0));
     await tester.pump();
     expect(fadeOpacity(), 1);
-    await gesture.moveBy(const Offset(80, 0));
+    await gesture.moveBy(const Offset(120, 0));
     await tester.pump();
     await gesture.up();
     await tester.pumpAndSettle();

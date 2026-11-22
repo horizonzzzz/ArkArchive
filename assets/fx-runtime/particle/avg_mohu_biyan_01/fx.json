@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "name": "avg_mohu_biyan_01",
+  "duration": 1.5,
+  "isLoop": true,
+  "emitters": [],
+  "screenEffect": {"type": "eye", "direction": "close"}
+}

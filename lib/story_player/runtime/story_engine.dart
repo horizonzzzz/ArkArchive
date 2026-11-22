@@ -6,6 +6,9 @@ import 'package:flutter/foundation.dart';
 
 import '../script.dart';
 import '../stage_state.dart';
+import '../fx/fx_asset.dart';
+import '../fx/fx_loader.dart';
+import '../fx/fx_simulation.dart';
 import 'story_audio.dart';
 import 'playback_checkpoint.dart';
 
@@ -21,7 +24,7 @@ class StoryPreviewCharacter {
   final double brightness;
 }
 
-/// 可供进度条吸附的剧情停顿点。commandIndex 是脚本命令索引，而不是行号。
+/// 进度条可跳转的剧情停顿点。commandIndex 是脚本命令索引，而不是行号。
 class StoryStopPoint {
   const StoryStopPoint({
     required this.commandIndex,
@@ -367,6 +370,7 @@ class StoryEngine extends ChangeNotifier {
     this.firstRead = true,
     this.characterArtSize,
     this.imageNaturalWidth,
+    this.effectAssets = const {},
   }) : audio = audio ?? SilentStoryAudio() {
     defaultSpeed = PlaySpeed(
       typingMs: typingInterval.inMicroseconds / 1000,
@@ -394,6 +398,7 @@ class StoryEngine extends ChangeNotifier {
 
   /// 图片原始宽度（像素），供 showitem cutin 窗口缺省宽度计算（参考端回退 100）。
   final double? Function(String image)? imageNaturalWidth;
+  final Map<String, FxAsset> effectAssets;
   final Map<String, CommandHandler> handlers = {};
   final List<String> warnings = [];
   final Map<String, _Animation> _animations = {};
@@ -639,6 +644,18 @@ class StoryEngine extends ChangeNotifier {
     _lastTick = now;
     if (paused || _disposed || _rebuilding) return;
     var changed = false;
+    for (final effect in state.effects.toList()) {
+      final delayMs = effect.delayRemaining * 1000;
+      final advanceMs = math.max(0.0, dt - delayMs).toDouble();
+      effect.delayRemaining = math.max(0.0, delayMs - dt).toDouble() / 1000;
+      if (delayMs > 0 && advanceMs == 0) {
+        changed = true;
+        continue;
+      }
+      effect.simulation.advance(advanceMs / 1000);
+      changed = true;
+      if (!effect.simulation.active) state.effects.remove(effect);
+    }
     for (final frame in state.interludes.values) {
       if (!frame.voiceActive || !frame.visible) continue;
       frame.voicePhase = (frame.voicePhase + dt / 1000) % (math.pi * 2);
@@ -843,6 +860,110 @@ class StoryEngine extends ChangeNotifier {
       node.shakeOffsetX = 0;
       node.shakeOffsetY = 0;
       node.jumpOffsetY = 0;
+    }
+  }
+
+  Future<void> _effect(StoryCommand c) async {
+    final group = c.tag;
+    final layer = c.number('layer').toInt();
+    final name = c.value('name');
+    final seconds = scaled(c.number('fadetime', .3));
+    final fades = c.flag('fade');
+    final delay = math.max(0.0, scaled(c.number('delay'))).toDouble();
+    final key = 'fx:$group:$layer';
+    if (_rebuilding && group == 'effect') return;
+    if (name.isEmpty) {
+      final clearing = state.effects
+          .where(
+            (e) =>
+                e.group == group &&
+                (!c.args.containsKey('layer') || e.layer == layer),
+          )
+          .toList();
+      Future<void> clear(StageEffect effect) async {
+        if (effect.delayRemaining > 0) {
+          _cancelAnimation(
+            'fx:${effect.group}:${effect.layer}:${identityHashCode(effect)}',
+          );
+          state.effects.remove(effect);
+          _changed();
+          return;
+        }
+        final alpha = effect.alpha;
+        await animate(
+          'fx:$group:${effect.layer}:${identityHashCode(effect)}',
+          fades ? seconds : 0,
+          (t) => effect.alpha = alpha * (1 - t),
+        );
+        state.effects.remove(effect);
+        _changed();
+      }
+
+      final done = Future.wait(clearing.map(clear));
+      if (c.flag('block')) {
+        await done;
+      } else {
+        unawaited(done);
+      }
+      return;
+    }
+    if (group == 'bgeffect') {
+      final replaced = state.effects
+          .where((e) => e.group == group && e.layer == layer)
+          .toList();
+      for (final previous in replaced) {
+        _cancelAnimation('$key:${identityHashCode(previous)}');
+        state.effects.remove(previous);
+      }
+    }
+    late final String resolved;
+    try {
+      resolved = resolveFxName(name, variables);
+    } on FormatException catch (e) {
+      warn('第 ${c.line} 行：${e.message}');
+      return;
+    }
+    final asset = effectAssets[resolved];
+    if (asset == null) {
+      warn('第 ${c.line} 行：特效 $resolved 未加载（未打包或资源加载失败）');
+      return;
+    }
+    final effect = StageEffect(
+      FxSimulation(asset, seed: c.line, loop: group == 'effect' ? false : null),
+      group: group,
+      layer: layer,
+      flip: c.number('flip').toInt(),
+      offset: Offset(c.number('x'), c.number('y')),
+      rotation: c.number('roz') * math.pi / 180,
+      rotation3D: Offset(c.number('rox'), c.number('roy')) * (math.pi / 180),
+      delayRemaining: delay,
+      scale:
+          asset.emitters.any(
+            (e) =>
+                e.geometry != null ||
+                e.transform3D != null ||
+                e.animation != null,
+          )
+          ? const Offset(1, 1)
+          : Offset(
+              math.cos(c.number('roy') * math.pi / 180),
+              math.cos(c.number('rox') * math.pi / 180),
+            ),
+    );
+    state.effects.add(effect);
+    final done = animate(
+      '$key:${identityHashCode(effect)}',
+      fades ? seconds : 0,
+      (t) => effect.alpha = t,
+      delay: delay,
+    );
+    if (c.flag('block')) {
+      if (!fades && delay > 0) {
+        await animate('$key:start:${identityHashCode(effect)}', delay, (_) {});
+      }
+      await done;
+    } else {
+      unawaited(done);
     }
   }
 
@@ -1711,12 +1832,8 @@ class StoryEngine extends ChangeNotifier {
       }
       _changed();
     });
-    register('bgeffect', (c) async {
-      warn('第 ${c.line} 行：bgeffect 参考端同样不支持，跳过');
-    });
-    register('effect', (c) async {
-      warn('第 ${c.line} 行：effect 参考端同样不支持，跳过');
-    });
+    register('bgeffect', _effect);
+    register('effect', _effect);
     register('video', (c) async {
       warn('第 ${c.line} 行：video 需要平台播放器（Windows 无官方实现），本轮跳过');
     });
@@ -2434,11 +2551,12 @@ class StoryEngine extends ChangeNotifier {
     switch (action) {
       case 'move':
         final fromX = node.actionX, fromY = node.actionY;
-        await animate('characterMotion:$slot', seconds, (t) {
+        final move = animate('characterMotion:$slot', seconds, (t) {
           final e = _easeOutCubic(t);
           node.actionX = _lerp(fromX, fromX + xOffset, e);
           node.actionY = _lerp(fromY, fromY + yOffset, e);
         });
+        if (c.flag('isblock', c.flag('block', true))) await move;
       case 'jump':
         _startJump(
           slot,
@@ -2837,6 +2955,7 @@ class StoryEngine extends ChangeNotifier {
   // ============ avgdisplay ============
 
   Future<void> _avgDisplay(StoryCommand c) async {
+    // 保留参考端的数字样式名称用于诊断，不代表支持对应样式的渲染。
     const styleMap = {
       1: 'animetext',
       2: 'spine',

@@ -75,7 +75,7 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # 剧情对白字体与滑动遮罩纹理随应用打包，运行时不联网获取。
+  # 剧情对白字体、滑动遮罩与首批粒子特效随应用打包，运行时不联网获取。
   assets:
     - assets/fonts/NotoSansHans-Medium.ttf
     - assets/fonts/Bender.otf
@@ -86,6 +86,46 @@ flutter:
     - assets/images/prts_ui/
     - assets/characters/
     - assets/characters/details/
+    - assets/fx-runtime/particle/avg_fire_01/
+    - assets/fx-runtime/particle/avg_048_smoke_01/
+    - assets/fx-runtime/particle/avg_042_fire_01/
+    - assets/fx-runtime/baked/avg_036_daoguang_01/
+    - assets/fx-runtime/particle/avg_061_glow_01/
+    - assets/fx-runtime/particle/avg_062_smoke_01/
+    - assets/fx-runtime/baked/avg_072_speech/
+    - assets/fx-runtime/baked/avg_079_daoguang01/
+    - assets/fx-runtime/particle/avg_daoguang_spark_01_mid/
+    - assets/fx-runtime/particle/avg_daoguang_spark_02_mid/
+    - assets/fx-runtime/particle/avg_daoguang_spark_01_large/
+    - assets/fx-runtime/particle/avg_daoguang_spark_02_large/
+    - assets/fx-runtime/baked/avg_daoguang_zhixian_01_large/
+    - assets/fx-runtime/baked/avg_daoguang_attack_01_large/
+    - assets/fx-runtime/baked/avg_daoguang_attack_02_large/
+    - assets/fx-runtime/baked/avg_dao_attack_guiji_01/
+    - assets/fx-runtime/baked/avg_dao_attack_guiji_02/
+    - assets/fx-runtime/baked/avg_dao_guiji_hit_01/
+    - assets/fx-runtime/particle/avg_dao_guiji_hit_02/
+    - assets/fx-runtime/baked/avg_daoguang_attack_01_small/
+    - assets/fx-runtime/baked/avg_daoguang_attack_02_small/
+    - assets/fx-runtime/particle/avg_magic_fire_01/
+    - assets/fx-runtime/baked/avg_amiya_attack_01/
+    - assets/fx-runtime/particle/avg_058_snow_01/
+    - assets/fx-runtime/particle/avg_072_snow/
+    - assets/fx-runtime/particle/avg_snow_01/
+    - assets/fx-runtime/particle/avg_snow_02/
+    - assets/fx-runtime/particle/avg_snowstorm_01/
+    - assets/fx-runtime/particle/avg_rain_02/
+    - assets/fx-runtime/particle/avg_043_yanchen_01/
+    - assets/fx-runtime/particle/avg_53_fengsha_01/
+    - assets/fx-runtime/particle/avg_035_sandfall_01/
+    - assets/fx-runtime/particle/avg_signalinterference_01/
+    - assets/fx-runtime/particle/avg_056_tvnoise_01/
+    - assets/fx-runtime/particle/avg_suduxian/
+    - assets/fx-runtime/particle/avg_062_white_01/
+    - assets/fx-runtime/particle/avg_062_black_01/
+    - assets/fx-runtime/particle/avg_old_tv_01/
+    - assets/fx-runtime/particle/avg_mohu_zhengyan_01/
+    - assets/fx-runtime/particle/avg_mohu_biyan_01/
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
   shaders:

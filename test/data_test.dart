@@ -437,7 +437,6 @@ void main() {
     );
     expect(warnings, isEmpty);
   });
-
   test('音频查找忽略大小写，但不改变剧情文本变量表', () {
     final catalog = MediaCatalog(
       variables: {

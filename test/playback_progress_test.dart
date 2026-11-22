@@ -87,6 +87,20 @@ void main() {
     expect(secondRestore.state.choices, isEmpty);
   });
 
+  test('seek 不重播历史单次音效', () async {
+    final script = StoryScript.parse('''
+[playsound(key="once")]
+第一句
+第二句
+''');
+    final audio = _RecordingAudio();
+    final engine = StoryEngine(script, audio: audio);
+    addTearDown(engine.dispose);
+
+    expect(await engine.seekToStop(engine.stopPoints.last), isTrue);
+    expect(audio.commands, isEmpty);
+  });
+
   test('恢复时直接完成转场与等待，不重放历史单次音效，只恢复有效循环音轨', () async {
     final script = StoryScript.parse('''
 [playmusic(key="old")]
