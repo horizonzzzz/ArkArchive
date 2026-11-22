@@ -54,6 +54,7 @@ app.*.map.json
 
 # Build and staging artifacts
 /dist/
+.temp
 
 /.cache/
 # Android 发布签名（密钥库与口令绝不能入库）
