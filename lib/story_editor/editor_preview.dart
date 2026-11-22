@@ -98,6 +98,8 @@ class EditorPreviewResources {
     }
   }
 
+  Future<Uint8List> loadBytes(Uri uri) => store.loadTransient(uri);
+
   Future<List<String>> effects() => _effects ??= () async {
     final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
     final names = {
@@ -167,7 +169,7 @@ class EditorPreviewResources {
       try {
         base = await prts();
       } catch (e) {
-        warnings.add('PRTS 素材目录暂不可用：$e');
+        warnings.add('PRTS 素材目录暂不可用，请检查资源目录后重试');
       }
     }
     if (!active() || _closed) throw StateError('预览已关闭');
@@ -260,8 +262,13 @@ class EditorPreviewResources {
     engine.warnings.addAll(warnings.map(locate));
     for (final c in script.commands) {
       if (!engine.handlers.containsKey(c.tag) &&
-          !const {'dialogue', 'dialog', 'aside', 'endtip', 'multiline'}
-              .contains(c.tag)) {
+          !const {
+            'dialogue',
+            'dialog',
+            'aside',
+            'endtip',
+            'multiline',
+          }.contains(c.tag)) {
         engine.warnings.add('${locations[c.line]}：当前播放器不支持 ${c.tag}，原样保留');
       }
     }

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
+
 import 'package:material_ui/material_ui.dart';
 
 import '../story_player/ui/story_stage.dart';
@@ -50,10 +52,12 @@ class _EditorStageState extends State<EditorStage> {
   bool _loading = true;
   _Handle? _drag;
   Offset _point = Offset.zero;
+  late final FocusNode _focusNode;
 
   @override
   void initState() {
     super.initState();
+    _focusNode = FocusNode(debugLabel: '剧情舞台');
     _schedule();
   }
 
@@ -105,7 +109,7 @@ class _EditorStageState extends State<EditorStage> {
     } catch (e) {
       if (active()) {
         setState(() {
-          _error = '舞台加载失败：$e';
+          _error = '舞台加载失败，请检查素材或脚本后重试';
           _loading = false;
         });
       }
@@ -117,6 +121,7 @@ class _EditorStageState extends State<EditorStage> {
   @override
   void dispose() {
     _refresh?.cancel();
+    _focusNode.dispose();
     _stage?.dispose();
     super.dispose();
   }
@@ -209,6 +214,63 @@ class _EditorStageState extends State<EditorStage> {
   }
 
   String _format(double value) => value.toStringAsFixed(1);
+
+  void _nudge(KeyEvent event) {
+    if (event is! KeyDownEvent || widget.selected < 0) return;
+    final command = widget
+        .project
+        .scenes[widget.scene]
+        .beats[widget.beat]
+        .commands[widget.selected];
+    final step = HardwareKeyboard.instance.isShiftPressed ? 10.0 : 1.0;
+    final key = event.logicalKey;
+    var dx = 0.0;
+    var dy = 0.0;
+    if (key == LogicalKeyboardKey.arrowLeft) dx = -step;
+    if (key == LogicalKeyboardKey.arrowRight) dx = step;
+    if (key == LogicalKeyboardKey.arrowUp) dy = step;
+    if (key == LogicalKeyboardKey.arrowDown) dy = -step;
+    if (dx == 0 && dy == 0) return;
+    if (command.tag == 'charslot') {
+      final parts = command.value('posto').split(',');
+      final x = double.tryParse(parts.firstOrNull ?? '') ?? 0;
+      final y = double.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
+      widget.onMove(widget.selected, {
+        'posto': '${_format(x + dx)},${_format(y + dy)}',
+      });
+    } else {
+      final x = double.tryParse(command.value('x')) ?? 0;
+      final y = double.tryParse(command.value('y')) ?? 0;
+      widget.onMove(widget.selected, {
+        'x': _format(x + dx),
+        'y': _format(y + dy),
+      });
+    }
+  }
+
+  Widget _outline(_Handle handle, Size size, double scale) => Positioned(
+    left: (handle.anchor.dx * scale - 30).clamp(
+      0.0,
+      math.max(0.0, size.width - 60),
+    ),
+    top: (handle.anchor.dy * scale - 30).clamp(
+      0.0,
+      math.max(0.0, size.height - 60),
+    ),
+    child: IgnorePointer(
+      child: Container(
+        width: 60,
+        height: 60,
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: Theme.of(context).colorScheme.primary,
+            width: 2,
+          ),
+          borderRadius: BorderRadius.circular(6),
+        ),
+      ),
+    ),
+  );
 
   Widget _handle(_Handle handle, Size size, double scale) {
     final index = handle.index;
@@ -303,42 +365,54 @@ class _EditorStageState extends State<EditorStage> {
       final size = Size(1280 * scale, 720 * scale);
       final stage = _stage;
       final warnings = [?_error, ...?stage?.engine.warnings];
-      return SizedBox.fromSize(
-        size: size,
-        child: ClipRect(
-          child: ColoredBox(
-            color: const Color(0xff181c1f),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (stage != null)
-                  IgnorePointer(
-                    child: StoryStage(
-                      engine: stage.engine,
-                      catalog: stage.catalog,
-                      textures: stage.textures,
-                    ),
-                  ),
-                if (stage != null && !_loading)
-                  for (final handle in _handles(stage))
-                    _handle(handle, size, scale),
-                if (_loading)
-                  const Align(
-                    alignment: Alignment.topCenter,
-                    child: LinearProgressIndicator(minHeight: 2),
-                  ),
-                if (!_loading && warnings.isNotEmpty)
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    child: IconButton(
-                      tooltip: '舞台提示',
-                      color: Colors.amber,
-                      icon: const Icon(Icons.warning_amber),
-                      onPressed: () => widget.onIssues(warnings),
-                    ),
-                  ),
-              ],
+      return KeyboardListener(
+        focusNode: _focusNode,
+        onKeyEvent: _nudge,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _focusNode.requestFocus,
+          child: SizedBox.fromSize(
+            size: size,
+            child: ClipRect(
+              child: ColoredBox(
+                color: const Color(0xff181c1f),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (stage != null)
+                      IgnorePointer(
+                        child: StoryStage(
+                          engine: stage.engine,
+                          catalog: stage.catalog,
+                          textures: stage.textures,
+                        ),
+                      ),
+                    if (stage != null && !_loading)
+                      for (final handle in _handles(stage))
+                        if (handle.index == widget.selected)
+                          _outline(handle, size, scale),
+                    if (stage != null && !_loading)
+                      for (final handle in _handles(stage))
+                        _handle(handle, size, scale),
+                    if (_loading)
+                      const Align(
+                        alignment: Alignment.topCenter,
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                    if (!_loading && warnings.isNotEmpty)
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: IconButton(
+                          tooltip: '舞台提示',
+                          color: Colors.amber,
+                          icon: const Icon(Icons.warning_amber),
+                          onPressed: () => widget.onIssues(warnings),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

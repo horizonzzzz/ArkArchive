@@ -44,6 +44,8 @@ void main() {
       await tester.binding.setSurfaceSize(size);
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final storage = _Drafts();
+      final initial = EditorProject.create('测试剧情');
+      storage.projects[initial.id] = initial;
       final store = AssetStore();
       await tester.pumpWidget(
         MaterialApp(
@@ -91,7 +93,6 @@ void main() {
         dialogue,
       );
 
-
       await select('试播', '从头播放');
       final stage = tester.widget<StoryStage>(
         find.descendant(
@@ -120,4 +121,27 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }
+
+  testWidgets('空态不会自动创建未命名作品', (tester) async {
+    final storage = _Drafts();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StoryEditorPage(storage: storage, store: AssetStore()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('还没有本地作品'), findsOneWidget);
+    expect(storage.projects, isEmpty);
+    await tester.tap(find.text('新建作品'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), '新的作品');
+    await tester.tap(find.text('确定'));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+
+    expect(storage.projects.values.single.title, '新的作品');
+  });
 }

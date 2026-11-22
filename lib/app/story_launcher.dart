@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../story_player/story_player.dart';
 import '../story_editor/editor_platform.dart';
+import '../story_editor/editor_project.dart';
 import '../story_editor/story_editor_page.dart';
 import 'activity_images.dart';
 import 'app_theme.dart';
@@ -58,6 +59,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   final Map<int, int> _catalogPages = {};
   int _page = 0;
   bool _editorOpened = false;
+  EditorProject? _editorIncoming;
   late final _editorStorage = EditorStorage();
   int _cacheReturnPage = 0;
   bool _busy = false;
@@ -266,6 +268,35 @@ class _StoryLauncherState extends State<StoryLauncher> {
           _cacheBytes = null;
           _cacheLocation = null;
         });
+      }
+    }
+  }
+
+  Future<void> _playEditorProject(EditorProject project) async {
+    PreparedStory? prepared;
+    try {
+      final compiled = project.compile();
+      final document = StoryDocument(
+        title: project.title,
+        script: compiled.script,
+        sourceHash: project.id,
+      );
+      prepared = await _repository.prepare(document);
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => StoryPlayer(
+            story: prepared!,
+            settings: _repository.store.playbackSettings,
+            resumable: null,
+            onProgress: null,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('作品播放失败，请检查脚本后重试')));
       }
     }
   }
@@ -916,6 +947,31 @@ class _StoryLauncherState extends State<StoryLauncher> {
     archiveStory: story,
     snippet: snippet,
   );
+  Future<void> _deriveEntry(StoryEntry entry) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final document = await _repository.loadEntry(entry);
+      final derived = EditorProject.fromScript(
+        entry.title,
+        document.script,
+      ).copyWith(derivedFrom: entry.path);
+      if (!mounted) return;
+      setState(() {
+        _editorIncoming = derived;
+        _editorOpened = true;
+        _page = 4;
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('无法派生此剧情，请稍后重试')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _open(
     StoryEntry entry, {
     CharacterStory? archiveStory,
@@ -1176,6 +1232,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                       child: StoryEditorPage(
                                         storage: _editorStorage,
                                         store: _repository.store,
+                                        incoming: _editorIncoming,
+                                        onPlayProject: _playEditorProject,
                                       ),
                                     )
                                   else
@@ -1936,10 +1994,12 @@ class _StoryLauncherState extends State<StoryLauncher> {
                 padding: EdgeInsets.zero,
                 onSelected: (value) => switch (value) {
                   'cache' => _cacheEntry(entry),
+                  'derive' => _deriveEntry(entry),
                   'export' => _openExportDialog(entry),
                   _ => null,
                 },
                 itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'derive', child: Text('派生到创作')),
                   PopupMenuItem(
                     value: 'cache',
                     enabled:

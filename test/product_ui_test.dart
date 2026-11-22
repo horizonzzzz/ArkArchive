@@ -1020,7 +1020,9 @@ void main() {
     await tester.tap(button);
     await tester.pumpAndSettle();
     // 菜单在触发按钮下方展开，不遮挡按钮本身。
-    final item = find.bySubtype<PopupMenuItem<String>>();
+    final item = find.byWidgetPredicate(
+      (widget) => widget is PopupMenuItem<String> && widget.value == 'cache',
+    );
     expect(tester.getRect(item).top, greaterThan(buttonRect.bottom));
   });
 

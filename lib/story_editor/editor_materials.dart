@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+import 'dart:math' as math;
+
+import 'package:just_audio/just_audio.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'dart:ui' as ui;
@@ -32,6 +36,8 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
   List<String> effects = const [];
   bool loading = true;
   Object? error;
+  final _player = AudioPlayer();
+  String? playing;
 
   bool get image => {
     FieldType.background,
@@ -52,8 +58,8 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
       } else {
         catalog = await widget.resources.prts();
       }
-    } catch (e) {
-      error = e;
+    } catch (_) {
+      error = '素材目录读取失败，请检查资源目录或稍后重试';
     }
     if (mounted) setState(() => loading = false);
   }
@@ -136,16 +142,108 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('素材无法使用：$e')));
+            .showSnackBar(const SnackBar(content: Text('素材无法使用，请确认文件格式和大小')));
+      }
+    }
+  }
+
+  Uri? _audioUri(String key) => widget.assets[key]?.uri ?? catalog?.audio(key);
+
+  Future<void> _play(String key) async {
+    if (playing == key) {
+      await _player.stop();
+      if (mounted) setState(() => playing = null);
+      return;
+    }
+    final uri = _audioUri(key);
+    if (uri == null) return;
+    try {
+      await _player.setAudioSource(AudioSource.uri(uri));
+      if (mounted) setState(() => playing = key);
+      await _player.play();
+      if (mounted && playing == key) setState(() => playing = null);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('音频暂时无法试听')));
       }
     }
   }
 
   @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  Widget _materialTile(String key, String label) {
+    final audio = !image && widget.field.type != FieldType.fx;
+    final local = widget.assets[key];
+    final tile = ListTile(
+      dense: true,
+      selected: key == widget.current,
+      leading: _thumbnail(key, local),
+      title: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: key.startsWith('local_')
+          ? Text(key, maxLines: 1, overflow: TextOverflow.ellipsis)
+          : null,
+      trailing: audio
+          ? IconButton(
+              tooltip: playing == key ? '停止试听' : '试听',
+              onPressed: () => _play(key),
+              icon: Icon(playing == key ? Icons.stop : Icons.play_arrow),
+            )
+          : null,
+      onTap: () => Navigator.pop(context, (key, local)),
+    );
+    if (!image) {
+      return tile;
+    }
+    return SizedBox(width: 128, child: Card(child: tile));
+  }
+
+  Widget _thumbnail(String key, EditorAsset? local) {
+    if (!image) {
+      return Icon(
+        widget.field.type == FieldType.fx
+            ? Icons.auto_awesome
+            : Icons.music_note,
+      );
+    }
+    if (local != null) {
+      return Image.memory(
+        local.bytes,
+        width: 52,
+        height: 52,
+        fit: BoxFit.cover,
+      );
+    }
+    final uri = widget.field.type == FieldType.character
+        ? catalog?.character(key)?.body
+        : catalog?.image(key, cg: widget.field.type == FieldType.cg);
+    if (uri == null) return const Icon(Icons.image_outlined);
+    return FutureBuilder<Uint8List>(
+      future: widget.resources.loadBytes(uri),
+      builder: (_, snapshot) => snapshot.hasData
+          ? Image.memory(
+              snapshot.data!,
+              width: 52,
+              height: 52,
+              fit: BoxFit.cover,
+            )
+          : const SizedBox(
+              width: 52,
+              height: 52,
+              child: Icon(Icons.image_outlined),
+            ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) => Dialog(
     child: SizedBox(
-      width: 560,
-      height: 600,
+      width: math.min(560, MediaQuery.sizeOf(context).width - 32),
+      height: math.min(600, MediaQuery.sizeOf(context).height - 48),
       child: Column(
         children: [
           Padding(
@@ -164,11 +262,7 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
                     onPressed: _upload,
                     icon: const Icon(Icons.upload_file),
                   ),
-                IconButton(
-                  tooltip: '清除素材',
-                  onPressed: () => Navigator.pop(context, ('', null)),
-                  icon: const Icon(Icons.clear),
-                ),
+
                 IconButton(
                   tooltip: '关闭',
                   onPressed: () => Navigator.pop(context),
@@ -203,39 +297,30 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  if (widget.current.isNotEmpty)
+                  if (true)
                     ListTile(
                       selected: widget.current == '',
                       leading: const Icon(Icons.block),
                       title: const Text('无素材 / 清除'),
                       onTap: () => Navigator.pop(context, ('', null)),
                     ),
-                  for (final (key, label) in matches.take(500))
-                    ListTile(
-                      dense: true,
-                      selected: key == widget.current,
-                      leading: Icon(
-                        key.startsWith('local_')
-                            ? Icons.phone_android
-                            : widget.field.type == FieldType.fx
-                            ? Icons.auto_awesome
-                            : image
-                            ? Icons.image
-                            : Icons.music_note,
-                      ),
-                      title: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: key.startsWith('local_')
-                          ? Text(
-                              key,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            )
-                          : null,
-                      onTap: () => Navigator.pop(context, (key, null)),
+
+                  if (image)
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final entry in matches.take(500))
+                          _materialTile(entry.$1, entry.$2),
+                      ],
+                    )
+                  else
+                    for (final entry in matches.take(500))
+                      _materialTile(entry.$1, entry.$2),
+                  if (matches.length > 500)
+                    const ListTile(
+                      leading: Icon(Icons.info_outline),
+                      title: Text('结果超过 500 项，请继续缩小搜索范围'),
                     ),
                   if (matches.isEmpty && error == null)
                     const ListTile(title: Text('没有匹配素材')),

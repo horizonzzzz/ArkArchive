@@ -435,6 +435,27 @@ table.table td code, table.table th code {
   vertical-align: middle; transform: rotate(45deg); background: #3b82f6; border-radius: 1px;
 }
 
+/* v0.2 修订新增：修订标记、拖动把手、缩略图、空态 */
+.pill.fix { background: #ede9fe; color: #5b21b6; }
+.pill.done { background: #dcfce7; color: #166534; }
+.mock .grip {
+  width: 9px; flex: none; color: #576570; font-size: 10px;
+  text-align: center; user-select: none;
+}
+.mock .thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
+.mock .thumb { border: 1px solid #354048; border-radius: 3px; overflow: hidden; background: #20272c; }
+.mock .thumb.on { border-color: #a5c7d5; }
+.mock .thumb .img { height: 36px; position: relative; background: linear-gradient(135deg, #33454f, #1b252b); }
+.mock .thumb .img .badge {
+  position: absolute; left: 3px; top: 3px; font-size: 7px; color: #c2ccd3;
+  background: rgba(12,16,19,0.72); border-radius: 2px; padding: 0 3px;
+}
+.mock .thumb .nm { font-size: 8px; color: #c2ccd3; padding: 2px 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mock .empty {
+  border: 1px dashed #354048; border-radius: 3px; color: #83939f;
+  text-align: center; padding: 8px 6px; margin-top: 6px; font-size: 9.5px; line-height: 1.7;
+}
+
 /* 尾页 */
 .end_page {
   margin-top: 28px; padding: 46px 26px; text-align: center;
@@ -473,21 +494,57 @@ table.table td code, table.table th code {
 <body class="mode-doc" data-palette="ink-blue">
 
 <section class="title">
-  <span class="kicker">PRODUCT DESIGN / v0.1</span>
-  <h1>剧情编辑器 · 产品分析设计</h1>
+  <span class="kicker">PRODUCT DESIGN / v0.2</span>
+  <h1>剧情编辑器 · 产品设计</h1>
   <div class="accent-line"></div>
-  <p>面向「方舟档案室」的本地创作工具：用 PRTS 素材与本地素材，编排一段可直接播放的剧情演出。本文覆盖产品定位、能力边界、核心模型、双端界面、效果映射、素材与导出方案、分期与验收，不包含代码实现。</p>
+  <p>面向「方舟档案室」的本地创作工具：用 PRTS 素材与本地素材，编排一段可直接播放的剧情演出。本文覆盖产品定位、能力边界、核心模型、双端界面、效果映射、素材与导出方案、分期与验收，不包含代码实现。v0.2 并入初版实现（M0）的走查结论：修复全部已确认交互缺陷，补齐「我的作品」查看与官方剧情派生两条主链路。</p>
   <div class="meta">
     <span>项目：arknights_story_player</span>
     <span>形态：桌面横屏 / 移动端竖屏</span>
     <span>画布：1280 × 720</span>
-    <span>更新：2026-11-12</span>
+    <span>更新：2026-11-22 · v0.2（初版走查修订版）</span>
   </div>
 </section>
 
 <aside class="callout">
   <p><strong>结论先行：</strong>编辑器不应做成「时间轴剪辑器」，也不应做成「脚本文本框」。推荐以 <em>分镜（Beat）</em> 为最小创作单位、以 <em>舞台状态</em> 为真相、以 <em>脚本</em> 为编译产物：一套数据模型，三种视图（故事板、舞台、时间轴），两端各自组织界面而不是缩放同一套界面。</p>
 </aside>
+
+<h1 class="heading">v0.2 修订摘要 · 初版走查结论落位</h1>
+
+<div class="doc-section">
+  <p class="paragraph">初版（M0）已按 v0.1 模型落地「作品 → 幕 → 分镜 → 指令」编辑、舞台拖动、素材双来源、试播、自动保存与导入导出。走查发现的问题按下表落位到本修订：三处由实际使用直接确认，两项产品缺口已拍板方案；逐项设计见「落点」章节。初版已经做对的（拖动即时反馈、临时资源不污染缓存、原始指令保真、原子写保存）全部保留。</p>
+  <div class="table-wrap">
+    <div class="table-caption">表 0　v0.1 → v0.2 修订清单</div>
+    <table class="table">
+      <colgroup><col style="width:9%"><col style="width:38%"><col style="width:41%"><col style="width:12%"></colgroup>
+      <thead><tr><th>级别</th><th>问题（初版现状）</th><th>v0.2 设计修订</th><th>落点</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill p0">P0</span></td><td>手机端三个对话框固定像素宽度，窄屏横向溢出，「选背景」这一核心操作在主投放平台不可用</td><td>全部对话框改为「宽度 = min(设计上限, 可用宽度 − 32px)」自适应约束，高度同理；手机上优先底部抽屉形态</td><td>§7.1 §10.2</td></tr>
+        <tr><td><span class="pill p0">P0</span></td><td>指令列表副标题恒为空，非对白指令只能逐条点开检查器才能分辨</td><td>每条指令生成语义摘要（说话人：台词 / 角色·槽位·坐标 / 素材名 / 秒数 / 特效名）</td><td>§8.2</td></tr>
+        <tr><td><span class="pill p0">P0</span></td><td>错误提示直接输出底层异常（如 StateError）；保存失败只有一闪而过的提示</td><td>统一为「发生了什么 + 该怎么办」的用户文案；保存失败在工具栏常驻红点警示并可重试</td><td>§12.3</td></tr>
+        <tr><td><span class="pill p0">P0</span></td><td>新作品空态无引导；首次进入自动创建并持久化「未命名剧情」草稿</td><td>空态提供「新建 / 导入 / 从剧情馆派生」三入口并附示例作品；草稿只在显式新建时创建</td><td>§6</td></tr>
+        <tr><td><span class="pill p0">P0</span></td><td><strong>素材选择窗有两个 ×</strong>：「清除」与「关闭」图标同形并排（用户补充）</td><td>右上角仅保留一个关闭 ×；「清除选择」作为列表首项呈现，与关闭明确区分</td><td>§10.2</td></tr>
+        <tr><td><span class="pill p0">P0</span></td><td><strong>背景 / 特效 / 立绘无预览</strong>，只能靠文件名想象（用户补充）</td><td>所有图片类选择器显示缩略图网格；特效显示首选贴图帧并标注「持续 / 单次」；音频行内试听</td><td>§10.2</td></tr>
+        <tr><td><span class="pill p0">P0</span></td><td><strong>指令与分镜列表没有左侧长按拖动排序</strong>，只能菜单逐步上移 / 下移（用户补充）</td><td>行左缘固定拖动把手：桌面按住拖动、移动端长按触发，拖动中显示插入占位；菜单移动降级为辅助</td><td>§8.2</td></tr>
+        <tr><td><span class="pill p1">P1</span></td><td>创作闭环断裂：作品只能在编辑器内小窗试播，没有「查看地」（<strong>已拍板：要</strong>）</td><td>「我的作品」页为消费端：作品行内「播放」进入正式播放器全片观看（不写观看进度）；试播条「全屏」共用同一链路</td><td>§6 §12.1</td></tr>
+        <tr><td><span class="pill p1">P1</span></td><td>不支持导入官方剧情（<strong>已拍板：要</strong>）</td><td>剧情馆条目菜单新增「派生到创作」：读取脚本 → 按对白切分分镜 → 高级指令保真保留；素材沿用原版 key</td><td>§3 §11.4</td></tr>
+        <tr><td><span class="pill p1">P1</span></td><td>导入的高级指令（decision / warp / interlude 等）只读，无法修改</td><td>高级指令升级为「可编辑源码」：结构化字段与源码双向，保存时逐条解析校验；支持粘贴脚本直接新建作品</td><td>§8.3 §11.4</td></tr>
+        <tr><td><span class="pill p1">P1</span></td><td>素材只增不减、无管理面板；角色差分 key（amiya#3$2）不可读；列表静默截断 500 条</td><td>新增作品素材面板（缩略图 / 引用计数 / 删除 / 体积分布）；差分显示「角色 · 别名 / 表情 N」；截断时尾部固定提示</td><td>§10.2 §10.5</td></tr>
+        <tr><td><span class="pill p1">P1</span></td><td>任何编辑（含改台词）都全量重建舞台；自动保存每次全量重写含素材的整文件</td><td>「舞台签名」增量重建：文本类编辑不再触发重建；草稿分层保存：结构每次写、素材仅在指纹变化时写</td><td>§5.2 §11.5</td></tr>
+        <tr><td><span class="pill p1">P1</span></td><td>草稿删除 / 重命名必须先打开该作品；列表无修改时间</td><td>作品行内操作（播放 / 编辑 / 重命名 / 复制 / 删除）+ 最近修改时间展示</td><td>§6</td></tr>
+        <tr><td><span class="pill p2">P2</span></td><td>试播只有「下一步」：无自动播放、暂停、重播、加载进度；警告不能定位；点遮罩即误关</td><td>试播控制条补齐：自动 / 暂停 / 重播 / 加载进度（已加载 x/y）/ 警告条目「前往」定位 / 显式退出才能关闭</td><td>§12.1</td></tr>
+        <tr><td><span class="pill p2">P2</span></td><td>舞台只有悬浮圆点，无对象轮廓；特效位置不可拖；无键盘微调</td><td>选中立绘 / 舞台文字显示轮廓框；特效把手可拖；方向键微调（Shift ×10）；拖动写回与检查器数值双向同步</td><td>§8.1 §8.6</td></tr>
+        <tr><td><span class="pill p2">P2</span></td><td>无桌面快捷键；指令只能尾部追加；移动端展开的检查器无法收起</td><td>Ctrl+Z / Ctrl+Shift+Z 全局撤销重做（一次输入会话合并为一步）；指令支持「在此之后插入」；再点已选中指令即收起</td><td>§8.6</td></tr>
+        <tr><td><span class="pill p2">P2</span></td><td>添加指令菜单 14 项平铺无分组无说明；「隐藏对白框」命名反直觉；导入入口重复；分镜删除后新增会重名</td><td>菜单按「对白 / 画面 / 音频 / 演出」分组并附一句说明；改称「清除对白框」；导入统一在「我的作品」页；分镜编号取未占用值</td><td>§8.2 §6</td></tr>
+        <tr><td><span class="pill p2">P2</span></td><td>关键列表与菜单无语义标签，键盘用户无法移动对象；工具按钮只靠 tooltip</td><td>指令 / 分镜行输出语义标签（类型 + 摘要 + 序号）；拖动提供键盘替代路径；工具按钮补语义标签</td><td>§8.6 §15</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <aside class="callout">
+    <p><strong>修订原则：</strong>所有改动都落在交互层与信息层，不推翻 v0.1 的「分镜 + 舞台」模型；已按优先级排入 M0.5 修复批（§14），验收标准同步新增（§15）。</p>
+  </aside>
+</div>
 
 <h1 class="heading">一、产品定位与目标</h1>
 
@@ -644,6 +701,7 @@ table.table td code, table.table th code {
   <ul class="list">
     <li><strong>舞台状态快照：</strong>每个分镜执行后记录背景、各槽位立绘、文字、遮罩、镜头、音轨的状态；编辑时在舞台下方以「当前状态」标签呈现。</li>
     <li><strong>确定性重演：</strong>从某个分镜预览时，从所属幕的开头重演到该分镜；重演不播放音效、不触发等待、不写观看进度，最多执行固定步数防止死循环。</li>
+    <li><strong>增量重建（v0.2）：</strong>舞台维护「签名」——仅影响画面状态的指令变化才触发重建；对白文本这类纯文字编辑不重建舞台，长作品打字不再伴随舞台闪烁与卡顿。</li>
     <li><strong>编辑不依赖回放：</strong>快照仅用于预览与拾取；作品文件仍以分镜参数为真相，避免把运行时状态写进作品导致漂移。</li>
   </ul>
 
@@ -685,11 +743,13 @@ table.table td code, table.table th code {
 <div class="doc-section">
   <p class="paragraph">编辑器是高频创作工具，但不能挤占「看剧情」这一主路径。建议在主导航新增一级入口「创作」，与剧情馆、人物档案、系统设置并列；移动端底栏变为四项，图标与文案保持现有视觉规范。</p>
   <div class="flow">
-    <div class="node"><b>我的作品</b>列表 / 新建 / 导入 / 排序</div>
+    <div class="node"><b>我的作品</b>列表 / 新建 / 导入 / 派生</div>
     <div class="arrow">→</div>
     <div class="node"><b>编辑器</b>故事板 / 舞台 / 检查器</div>
     <div class="arrow">→</div>
-    <div class="node"><b>预览</b>全片 / 从当前 / 单镜循环</div>
+    <div class="node"><b>试播</b>单镜 / 从当前 / 全片</div>
+    <div class="arrow">→</div>
+    <div class="node"><b>播放</b>正式播放器全片观看</div>
     <div class="arrow">→</div>
     <div class="node"><b>导出</b>剧本包 / 脚本 / 分享文件</div>
   </div>
@@ -699,10 +759,11 @@ table.table td code, table.table th code {
       <colgroup><col style="width:20%"><col style="width:42%"><col style="width:38%"></colgroup>
       <thead><tr><th>页面</th><th>内容</th><th>关键状态</th></tr></thead>
       <tbody>
-        <tr><td>我的作品</td><td>封面网格 / 列表、最近编辑、草稿、导入入口</td><td>空态给出「新建」与「导入剧本包」两条路；损坏作品单独标记</td></tr>
+        <tr><td>我的作品</td><td>封面网格 / 列表、最近修改时间、行内「播放 / 编辑 / 重命名 / 复制 / 删除」、导入剧本包、粘贴脚本新建、从剧情馆派生</td><td>空态给出「新建 / 导入 / 派生」三条路并附示例作品；<strong>不再自动创建「未命名」草稿</strong>；损坏作品单独标记</td></tr>
         <tr><td>作品设置</td><td>标题、简介、封面、默认打字速度、素材授权声明</td><td>只在创建与导出时出现，不占用编辑器主界面</td></tr>
         <tr><td>编辑器</td><td>分镜、舞台、检查器、时间轴、预览控制</td><td>自动保存、撤销栈、当前分镜、选中对象</td></tr>
-        <tr><td>预览</td><td>复用播放器画面与控制条，隐藏编辑控件</td><td>不写观看进度；退出回到原分镜</td></tr>
+        <tr><td>试播（编辑器内）</td><td>复用播放器画面与控制条：自动播放 / 暂停 / 重播 / 加载进度 / 警告可定位 / 全屏入口</td><td>不写观看进度；点遮罩不误关；退出回到原分镜</td></tr>
+        <tr><td>播放（我的作品）</td><td>复用正式播放器全屏播放完整作品</td><td>不写观看进度、不产生断点；退出回到作品页</td></tr>
         <tr><td>导出 / 导入</td><td>导出范围、是否打包 PRTS 素材、校验结果</td><td>失败项逐条列出，可定位到分镜</td></tr>
       </tbody>
     </table>
@@ -710,6 +771,25 @@ table.table td code, table.table th code {
   <aside class="callout" data-variant="tip">
     <p><strong>入口替代方案：</strong>若不想增加一级导航，可放在剧情馆的「创作」Tab 内。但编辑器是独立心智，且移动端底栏已有四项，长期看一级入口更清晰；建议先按一级入口设计，实施时再视导航容量取舍。</p>
   </aside>
+
+  <h2 class="heading">6.1 我的作品：管理与查看地（v0.2 已拍板）</h2>
+  <p class="paragraph">「我的作品」既是编辑入口，也是作品的<strong>查看地</strong>：每行提供「播放」，进入正式播放器全片观看自己的作品——创作闭环的终点不再只是编辑器内的小窗试播。播放不写观看进度、不与原版剧情断点混淆。行内操作就地完成管理，不再要求先打开作品才能删除或重命名；列表按最近修改排序并显示相对时间；导入入口只保留这一处，工具栏菜单不再重复。</p>
+  <div class="mock" style="max-width: 720px;">
+    <div class="bar">
+      <span class="brand">我的作品</span>
+      <span class="spacer"></span>
+      <span class="chip on">新建作品</span>
+      <span class="chip">从脚本新建</span>
+      <span class="chip">导入作品</span>
+    </div>
+    <div style="padding:8px;">
+      <div class="item sel"><span class="ic"></span><span class="txt">归乡的路<span class="sub"> · 2 幕 · 12 分镜 · 刚刚</span></span><span class="spacer"></span><span class="chip on">播放</span><span class="chip">编辑</span><span class="chip">⋯</span></div>
+      <div class="item"><span class="ic"></span><span class="txt">改编：长夜临光<span class="sub"> · 派生自官方剧情 · 昨天</span></span><span class="spacer"></span><span class="chip">播放</span><span class="chip">编辑</span><span class="chip">⋯</span></div>
+      <div class="item"><span class="ic"></span><span class="txt">庆典晚会草稿<span class="sub"> · 3 天前 · 7.1 MB</span></span><span class="spacer"></span><span class="chip">播放</span><span class="chip">编辑</span><span class="chip">⋯</span></div>
+      <div class="empty">还没有作品 → 新建作品 · 导入剧本包 · 从剧情馆「派生到创作」</div>
+    </div>
+  </div>
+  <p class="mock-note">行内「播放 / 编辑 / ⋯（重命名 / 复制 / 删除 / 导出）」；副标题显示幕数、分镜数、体积与最近修改时间。删除需二次确认，已导出的作品文件不受影响。空态给三条起点，不再自动生成「未命名」草稿。</p>
 </div>
 
 <h1 class="heading">七、双端界面设计</h1>
@@ -732,6 +812,10 @@ table.table td code, table.table th code {
     </table>
   </div>
 
+  <aside class="callout" data-variant="warning">
+    <p><strong>对话框自适应规则（初版走查修订）：</strong>所有弹窗禁止固定像素宽度。统一约束为「宽度 = min(设计上限, 可用宽度 − 32px)、高度 = min(设计上限, 可用高度 − 48px)」，内容超出转内部滚动；手机上素材选择器与作品列表优先用底部抽屉形态。初版在 390px 宽手机上素材选择器（560px）、作品列表（400px）、检查结果（460px）三个对话框全部横向溢出，属破坏性问题，M0.5 必须带窄屏回归。</p>
+  </aside>
+
   <h2 class="heading">7.2 桌面端：编排台</h2>
   <div class="mock mock-desktop">
     <div class="bar">
@@ -741,19 +825,21 @@ table.table td code, table.table th code {
       <span class="spacer"></span>
       <span class="chip">撤销</span>
       <span class="chip">重做</span>
-      <span class="chip">从当前播放</span>
-      <span class="chip on">导出</span>
+      <span class="chip">播放作品</span>
+      <span class="chip">试播 ▾</span>
+      <span class="chip">导出 ▾</span>
+      <span class="chip" style="color:#dfc080;">● 已自动保存</span>
     </div>
     <div class="body">
       <div class="left">
         <div class="panel-title">分镜 <span class="count">12</span></div>
         <div class="search">搜索台词或分镜…</div>
-        <div class="item sel"><span class="ic"></span><span class="txt">背景·罗德岛走廊</span></div>
-        <div class="item"><span class="ic"></span><span class="txt">对话·阿米娅</span></div>
-        <div class="item"><span class="ic"></span><span class="txt">立绘·博士入场</span></div>
-        <div class="item"><span class="ic"></span><span class="txt">运镜·缓慢推近</span></div>
-        <div class="item"><span class="ic"></span><span class="txt">对话·凯尔希</span></div>
-        <div class="item"><span class="ic"></span><span class="txt">黑屏转场</span></div>
+        <div class="item sel"><span class="grip">⠿</span><span class="ic"></span><span class="txt">背景·罗德岛走廊</span></div>
+        <div class="item"><span class="grip">⠿</span><span class="ic"></span><span class="txt">对话·阿米娅</span></div>
+        <div class="item"><span class="grip">⠿</span><span class="ic"></span><span class="txt">立绘·博士入场</span></div>
+        <div class="item"><span class="grip">⠿</span><span class="ic"></span><span class="txt">运镜·缓慢推近</span></div>
+        <div class="item"><span class="grip">⠿</span><span class="ic"></span><span class="txt">对话·凯尔希</span></div>
+        <div class="item"><span class="grip">⠿</span><span class="ic"></span><span class="txt">黑屏转场</span></div>
         <div class="panel-title" style="margin-top:8px;">素材</div>
         <div class="item"><span class="ic"></span><span class="txt">PRTS 立绘</span></div>
         <div class="item"><span class="ic"></span><span class="txt">PRTS 背景</span></div>
@@ -802,11 +888,11 @@ table.table td code, table.table th code {
         <div class="prop"><div class="k">循环</div><div class="v">关 <span class="u">○</span></div></div>
         <div class="panel-title" style="margin-top:8px;">高级</div>
         <div class="item"><span class="txt">查看生成命令</span></div>
-        <div class="item"><span class="txt">插入高级指令</span></div>
+        <div class="item"><span class="txt">编辑指令源码（高级指令可改）</span></div>
       </div>
     </div>
   </div>
-  <p class="mock-note">桌面端主视图：左栏在「分镜 / 素材」间切换，中间舞台保持 16:9 自适应，右栏检查器随选中对象变化，底部时间轴只表达当前分镜内部的并行动画。舞台上的拖动与右栏数值双向同步。</p>
+  <p class="mock-note">桌面端主视图：左栏在「分镜 / 素材」间切换，中间舞台保持 16:9 自适应，右栏检查器随选中对象变化，底部时间轴只表达当前分镜内部的并行动画。舞台上的拖动与右栏数值双向同步。分镜与指令行左缘的 ⠿ 是拖动把手（按住即拖）；工具栏常驻保存状态，失败时变为红色警示点并提供重试，另提供「播放作品」直达正式播放器。</p>
 
   <h2 class="heading">7.3 移动端竖屏：随身修改器</h2>
   <div class="phone-row">
@@ -862,6 +948,31 @@ table.table td code, table.table th code {
       </div>
       <div class="cap">属性抽屉 + 键盘态：舞台压缩为上下文，输入区不被遮挡</div>
     </div>
+    <div class="phone-wrap">
+      <div class="phone mock" style="margin-bottom:0;">
+        <div class="status"><span>9:41</span><span>选择背景</span></div>
+        <div class="appbar"><span class="ic"></span><span class="ttl">背景</span><span class="spacer"></span><span class="chip">上传图片</span><span class="ic" style="display:flex;align-items:center;justify-content:center;color:#c2ccd3;">×</span></div>
+        <div style="padding:0 8px;"><div class="search">搜索素材名称…</div></div>
+        <div style="padding:0 8px 8px;">
+          <div class="thumbs">
+            <div class="thumb on"><div class="img"><span class="badge">本地</span></div><div class="nm">走廊概念图</div></div>
+            <div class="thumb"><div class="img"><span class="badge">PRTS</span></div><div class="nm">bg_corridor</div></div>
+            <div class="thumb"><div class="img"><span class="badge">PRTS</span></div><div class="nm">bg_roof</div></div>
+            <div class="thumb"><div class="img"></div><div class="nm">bg_stairs</div></div>
+          </div>
+          <div class="thumbs">
+            <div class="thumb"><div class="img"></div><div class="nm">bg_cher_home</div></div>
+            <div class="thumb"><div class="img"></div><div class="nm">bg_lungmen</div></div>
+            <div class="thumb"><div class="img"></div><div class="nm">bg_snow</div></div>
+            <div class="thumb"><div class="img"></div><div class="nm">bg_desert</div></div>
+          </div>
+          <div class="item"><span class="ic"></span><span class="txt">无背景 / 清除</span></div>
+          <div class="empty">仅显示前 500 项，请用搜索缩小范围</div>
+        </div>
+        <div class="pnav"><div class="on">分镜</div><div>素材</div><div>属性</div><div>设置</div></div>
+      </div>
+      <div class="cap">素材选择器（修订后）：宽度自适应手机屏、缩略图预览、右上角唯一 ×、清除在列表首项、截断有提示</div>
+    </div>
   </div>
   <p class="mock-note">竖屏采用「舞台常驻 + 卡片式当前分镜 + 横滑分镜轨」结构。属性从底部抽屉进入，按「基础 / 演出 / 音频 / 高级」分段；键盘弹出时舞台缩为窄条或折叠，保证输入框与候选词可见。复杂动画参数在移动端只给预设与时长，数值微调让位给桌面端。</p>
 
@@ -882,8 +993,9 @@ table.table td code, table.table th code {
 <div class="doc-section">
   <h2 class="heading">8.1 舞台直编</h2>
   <ul class="list">
-    <li><strong>选择：</strong>点选最上层可见对象；再次点击穿透到下一层；左栏分镜点击可定位到对应对象。选中态显示包围框、对象名与快捷操作。</li>
-    <li><strong>拖动：</strong>立绘拖动写入槽位偏移（position），文字拖动写入 <code class="inline">x/y</code>，背景拖动写入图层位移。拖动时实时显示逻辑坐标，松手后吸附。</li>
+    <li><strong>选择：</strong>点选最上层可见对象；再次点击穿透到下一层；左栏分镜点击可定位到对应对象。选中态显示<strong>轮廓框</strong>（立绘按素材实际尺寸、舞台文字按排版框）与对象名——初版仅有悬浮圆点，用户无法把把手与对象关联。</li>
+    <li><strong>拖动：</strong>立绘拖动写入槽位偏移（position），文字拖动写入 <code class="inline">x/y</code>，背景拖动写入图层位移，<strong>特效把手拖动写入 x/y</strong>（原点为画面中心 640,360，y 向上；初版特效只能手填数字，v0.2 补齐把手）。拖动时实时显示逻辑坐标，松手后吸附。</li>
+    <li><strong>键盘微调（v0.2）：</strong>选中可拖动对象后用方向键移动，步进 1px、Shift 扩大 10px；与拖动写回同一条数据链路，检查器数值实时同步，也是无鼠标用户的替代路径。</li>
     <li><strong>吸附：</strong>立绘吸附三槽位中心、画面中线、底部基线；文字吸附左右安全边距与水平中线；按住修饰键或关闭吸附可自由摆放。</li>
     <li><strong>缩放与旋转：</strong>桌面用包围框手柄，移动用双指；立绘缩放写入 zoom 参数并保持锚点；旋转写入 angle，背景旋转是整幅画面旋转，需在属性中明确提示作用范围。</li>
     <li><strong>拖入素材：</strong>从素材库拖到舞台，按落点自动判断类型：拖到背景区域建背景，拖到立绘区域建立绘，拖到文字区域建文字；落点不确定时弹出类型选择。</li>
@@ -891,7 +1003,7 @@ table.table td code, table.table th code {
   </ul>
 
   <h2 class="heading">8.2 分镜卡片与插入</h2>
-  <p class="paragraph">分镜列表是编辑器的主干。每张卡片包含：类型图标、缩略图或对象摘要、说话人 / 素材名、首行文本、演出标签、时长与阻塞标记。卡片支持拖拽排序、多选、复制、禁用（临时跳过）、折叠。</p>
+  <p class="paragraph">分镜列表是编辑器的主干。每张卡片包含：类型图标、<strong>语义摘要</strong>、演出标签、时长与阻塞标记。<strong>摘要规则（初版走查修订）：</strong>对白显示「说话人：首句」；立绘显示「角色 · 槽位 · 坐标」；背景 / 插图 / BGM / 音效 / 特效显示素材名或特效名（本地素材显示上传文件名）；等待显示秒数；清除类指令显示「清除对白框 / 清空立绘」——初版非对白指令的副标题恒为空，长列表完全不可分辨。卡片<strong>左缘固定拖动把手 ⠿</strong>：桌面按住把手拖动、移动端长按行触发，拖动中显示插入占位；「向前 / 向后移动」菜单保留为辅助而非唯一手段。指令菜单同时提供「在此之后插入」，新增指令不必先追加到尾部再逐级上移。分镜默认编号取未占用值，删除后新增不再重名。</p>
   <div class="table-wrap">
     <div class="table-caption">表 5　插入菜单（按使用频率排序）</div>
     <table class="table">
@@ -908,13 +1020,30 @@ table.table td code, table.table th code {
     </table>
   </div>
 
+  <div class="mock" style="max-width: 560px;">
+    <div class="bar">
+      <span class="brand">分镜 5 · 演出指令</span>
+      <span class="spacer"></span>
+      <span class="chip on">＋ 添加指令 ▾</span>
+    </div>
+    <div style="padding:8px;">
+      <div class="item"><span class="grip">⠿</span><span style="color:#83939f;width:14px;flex:none;">01</span><span class="txt">背景 bg_corridor<span class="sub"> · 淡入 0.3s</span></span><span class="chip">⋯</span></div>
+      <div class="item"><span class="grip">⠿</span><span style="color:#83939f;width:14px;flex:none;">02</span><span class="txt">立绘 阿米娅 · 中位 · 640,0</span><span class="chip">⋯</span></div>
+      <div class="item sel"><span class="grip">⠿</span><span style="color:#83939f;width:14px;flex:none;">03</span><span class="txt">对白 阿米娅：博士，前面的路已经清理干净了。</span><span class="chip">⋯</span></div>
+      <div class="item"><span class="grip">⠿</span><span style="color:#83939f;width:14px;flex:none;">04</span><span class="txt">BGM $act5side_intro</span><span class="chip">⋯</span></div>
+      <div class="item" style="color:#83939f;"><span class="grip">⠿</span><span style="width:14px;flex:none;">05</span><span class="txt">高级指令 [decision(options="A;B")]<span class="sub"> · 可编辑源码</span></span><span class="chip">⋯</span></div>
+      <div class="empty">⋯ 菜单：复制 · 在此之后插入 · 删除　|　拖动 ⠿ 排序　|　添加菜单按「对白 / 画面 / 音频 / 演出」分组并附一句说明</div>
+    </div>
+  </div>
+  <p class="mock-note">指令列表修订版：左缘拖动把手 + 序号 + 语义摘要，同类指令可一眼区分；「隐藏对白框」更名「清除对白框」；高级指令可编辑源码并保留原文。</p>
+
   <h2 class="heading">8.3 检查器</h2>
   <p class="paragraph">检查器不是「所有参数的列表」，而是「当前对象最可能的下一步」。字段按对象类型动态生成，常用项在前，高级项折叠；每个数值字段同时提供滑杆、步进与直接输入，并显示单位与取值范围。</p>
   <ul class="list">
     <li><strong>基础：</strong>槽位、素材、差分、位置、透明度、时长。</li>
     <li><strong>演出：</strong>动作类型、起点与终点、缩放、旋转、缓动、循环、是否阻塞。</li>
     <li><strong>音频：</strong>BGM / 音效、音量、淡入淡出、是否循环。</li>
-    <li><strong>高级：</strong>只读展示将生成的命令与参数；可切换为「直接编辑命令」但不建议普通用户使用。</li>
+    <li><strong>高级（初版走查修订）：</strong>结构化字段与「指令源码」双向切换；导入的高级指令（decision / warp / interlude 等）不再只读——直接编辑源码，保存时逐条解析校验（每条必须恰好对应一条指令），失败就地标红并保留原文，不弹窗打断。</li>
   </ul>
 
   <h2 class="heading">8.4 分镜内时间轴</h2>
@@ -931,6 +1060,15 @@ table.table td code, table.table th code {
     <li><strong>批量替换：</strong>按作品范围替换说话人或素材，先预览影响的分镜数量再执行。</li>
     <li><strong>模板：</strong>把常用组合存为「演出模板」（背景淡入 + 双人入场 + 推近），插入后只替换素材与台词。</li>
     <li><strong>撤销：</strong>至少 50 步；舞台拖动合并为一次操作；撤销跨分镜有效。移动端提供常驻撤销按钮与轻提示。</li>
+  </ul>
+
+  <h2 class="heading">8.6 键盘、效率与可访问性（v0.2 新增）</h2>
+  <ul class="list">
+    <li><strong>全局撤销 / 重做：</strong>Ctrl+Z 与 Ctrl+Shift+Z / Ctrl+Y。文本框内维持字段级输入撤销，一次连续输入（未离开字段）在全局栈合并为一步，避免初版「框内 Ctrl+Z 只回退本字段、工具栏撤销回退整条指令」的双栈语义分裂。</li>
+    <li><strong>方向键微调：</strong>见 §8.1；与检查器数值双向同步。</li>
+    <li><strong>中位插入与批量：</strong>任意指令后可直接插入；多选后支持批量删除、复制、平移。</li>
+    <li><strong>移动端收起：</strong>窄屏展开的行内检查器，再次点按已选中指令即收起——初版没有任何收起方式，长表单会把指令列表顶出屏幕。</li>
+    <li><strong>语义标签：</strong>指令与分镜行为屏幕阅读器输出「类型 + 摘要 + 序号」；拖动提供键盘替代路径，工具按钮具备语义标签而不只依赖 tooltip。</li>
   </ul>
 </div>
 
@@ -1075,9 +1213,11 @@ table.table td code, table.table th code {
       <h3>PRTS 素材</h3>
       <p>沿用播放器现有的资源映射规则：立绘来自 <code class="inline">character.json</code>，背景来自 <code class="inline">background.json</code>，音频来自剧情变量表。编辑器只做选择器与预览，不复制一套地址规则。</p>
       <ul>
-        <li>立绘按角色名、别名、差分筛选；网格展示缩略图</li>
-        <li>背景 / CG 按目录分组，支持关键词搜索</li>
-        <li>BGM / 音效支持试听与最近使用</li>
+        <li><strong>所有图片类选择器一律显示缩略图网格</strong>：背景、插图、立绘与差分、特效首选贴图帧（标注「持续 / 单次」）——初版「看名选图」已被实际使用否决（用户补充）；缩略图走临时加载路径，不写入剧情缓存</li>
+        <li>立绘差分显示<strong>可读名</strong>「角色 · 别名 / 表情 N」，原始 key 降级为副标题，不再让用户直接面对 amiya#3$2 这类编码</li>
+        <li>背景 / CG 按目录分组，支持关键词搜索；搜索提示不暴露「命令键」等内部术语</li>
+        <li>BGM / 音效行内试听（再点即停）与最近使用；结果超过 500 条截断时，尾部固定提示「仅显示前 500 项，请用搜索缩小范围」</li>
+        <li><strong>单关闭规则（用户补充）：</strong>右上角仅一个关闭 ×；「清除选择」作为列表首项呈现，不再出现第二个同形 ×——初版「清除」与「关闭」两个 × 并排已确认是缺陷</li>
       </ul>
     </div>
     <div class="card">
@@ -1091,7 +1231,33 @@ table.table td code, table.table th code {
     </div>
   </div>
 
-  <h2 class="heading">10.2 本地立绘的对齐问题</h2>
+  <h2 class="heading">10.2 素材选择器（初版走查修订）</h2>
+  <div class="mock" style="max-width: 620px;">
+    <div class="bar">
+      <span class="brand">选择立绘</span>
+      <span class="chip">上传本地图片</span>
+      <span class="spacer"></span>
+      <span class="chip">×</span>
+    </div>
+    <div style="padding:10px;">
+      <div class="search">搜索素材名称…</div>
+      <div class="thumbs">
+        <div class="thumb on"><div class="img"><span class="badge">本地</span></div><div class="nm">主角立绘.png</div></div>
+        <div class="thumb"><div class="img"><span class="badge">PRTS</span></div><div class="nm">阿米娅</div></div>
+        <div class="thumb"><div class="img"><span class="badge">PRTS</span></div><div class="nm">阿米娅 · 微笑</div></div>
+        <div class="thumb"><div class="img"><span class="badge">PRTS</span></div><div class="nm">阿米娅 · 严肃</div></div>
+        <div class="thumb"><div class="img"></div><div class="nm">凯尔希</div></div>
+        <div class="thumb"><div class="img"></div><div class="nm">凯尔希 · 战备</div></div>
+        <div class="thumb"><div class="img"></div><div class="nm">陈</div></div>
+        <div class="thumb"><div class="img"></div><div class="nm">陈 · 立正</div></div>
+      </div>
+      <div class="item"><span class="ic"></span><span class="txt">无立绘 / 清空该槽位</span></div>
+      <div class="empty">仅显示前 500 项，请用搜索缩小范围</div>
+    </div>
+  </div>
+  <p class="mock-note">选择器修订版：缩略图网格 + 本地 / PRTS 徽标；差分用「角色 · 别名」可读名，原始 key 退居副标题；右上角唯一关闭 ×，「无立绘 / 清空」为列表首项；截断提示固定在尾部。宽度自适应可用空间，手机上不再溢出（窄屏形态见 §7.3 第三张线框）。</p>
+
+  <h2 class="heading">10.3 本地立绘的对齐问题</h2>
   <p class="paragraph">PRTS 立绘自带尺寸与锚点（<code class="inline">size</code> / <code class="inline">pos</code>），本地上传的图片没有这些元数据。若直接按原图尺寸摆放，会出现人物忽大忽小、脚底悬空。产品必须在导入时解决：</p>
   <ul class="list">
     <li><strong>自动读取像素尺寸</strong>，按「底部中心」作为默认锚点，按画面高度归一化到参考身高。</li>
@@ -1100,7 +1266,7 @@ table.table td code, table.table th code {
     <li><strong>不伪造差分</strong>：本地图片没有表情组，选择器只显示单张；需要多表情时由用户建立「素材组」，手动标注。</li>
   </ul>
 
-  <h2 class="heading">10.3 素材规范与版权提示</h2>
+  <h2 class="heading">10.4 素材规范与版权提示</h2>
   <div class="table-wrap">
     <div class="table-caption">表 7　素材规则</div>
     <table class="table">
@@ -1115,6 +1281,24 @@ table.table td code, table.table th code {
       </tbody>
     </table>
   </div>
+
+  <h2 class="heading">10.5 作品素材面板（v0.2 新增）</h2>
+  <p class="paragraph">初版素材只增不减、作品文件随无用素材持续膨胀。作品操作菜单新增「管理素材」：列出本作品全部素材（缩略图 / 名称 / 类型 / 体积），显示<strong>引用次数</strong>；未引用素材一键清理；删除仍被引用的素材需二次确认并列出引用位置（删除后对应指令在检查与试播中提示素材缺失，不静默）。跨作品的个人素材库列为 M4 可选——本期仍以作品为单位、按内容哈希去重，同一文件重复上传自动合并。</p>
+  <div class="mock" style="max-width: 620px;">
+    <div class="bar">
+      <span class="brand">管理素材 · 归乡的路</span>
+      <span class="spacer"></span>
+      <span class="chip on">清理未引用（1）</span>
+      <span class="chip">×</span>
+    </div>
+    <div style="padding:10px;">
+      <div class="item"><span class="ic" style="background:linear-gradient(135deg,#33454f,#1b252b);"></span><span class="txt">走廊概念图.png<span class="sub"> · 图片 · 1.8 MB · 引用 2 次</span></span><span class="spacer"></span><span class="chip">删除</span></div>
+      <div class="item"><span class="ic"></span><span class="txt">night_bgm.mp3<span class="sub"> · 音频 · 3.2 MB · 引用 1 次</span></span><span class="spacer"></span><span class="chip">删除</span></div>
+      <div class="item" style="color:#83939f;"><span class="ic"></span><span class="txt">旧版立绘.png<span class="sub"> · 图片 · 2.1 MB · 未引用</span></span><span class="spacer"></span><span class="chip on">清理</span></div>
+      <div class="empty">作品体积 7.1 MB / 上限 96 MB · 本地素材按 SHA-256 校验</div>
+    </div>
+  </div>
+  <p class="mock-note">素材面板：引用计数决定删除策略；未引用项高亮可清理；底部显示体积占用与完整性校验说明。</p>
 </div>
 
 <h1 class="heading">十一、作品数据与导出</h1>
@@ -1188,7 +1372,12 @@ table.table td code, table.table th code {
     <li><strong>冲突策略：</strong>同 id 作品导入时生成副本，不覆盖现有作品；素材按哈希去重。</li>
     <li><strong>版本迁移：</strong>schemaVersion 单调递增；旧版本导入时先迁移再打开，不原地改写源文件。</li>
     <li><strong>外部脚本导入：</strong>先按命令序列解析，再尝试归并为分镜；归并失败的命令进入「高级指令」，不丢内容。</li>
+    <li><strong>粘贴脚本新建（v0.2 新增）：</strong>新建作品可直接粘贴脚本文本，按对白 / 旁白自动切分分镜；解析错误逐行提示修正，不整篇拒绝。</li>
+    <li><strong>官方剧情派生（已拍板）：</strong>剧情馆条目菜单提供「派生到创作」：读取该篇脚本 → 按可识别模式归并分镜、高级指令保真保留 → 打开编辑器。素材沿用原版 key，试播与播放按需从 PRTS 临时加载；离线时明确提示素材不可用，不静默黑屏；原版脚本与缓存不被修改。</li>
   </ul>
+
+  <h2 class="heading">11.5 草稿分层保存（v0.2 新增）</h2>
+  <p class="paragraph">初版自动保存每次全量重写「结构 + 全部素材字节」，素材重的作品每停顿一次就重写几十 MB。草稿存储拆为两层：<strong>结构文件</strong>（分镜、参数、素材索引与素材指纹）按防抖高频写入；<strong>素材文件</strong>仅在素材集合指纹变化时重写——素材 key 由内容 SHA-256 构成，指纹相同即内容相同。旧版单文件草稿打开时自动迁移，不阻塞使用。导出的作品包仍为单文件，与草稿内部格式解耦。</p>
 </div>
 
 <h1 class="heading">十二、预览、校验与保存</h1>
@@ -1200,6 +1389,30 @@ table.table td code, table.table th code {
     <li><strong>从当前播放：</strong>从所属幕开头重演到当前分镜，再继续播放，用于检查状态衔接与 BGM。</li>
     <li><strong>全片预览：</strong>复用正式播放器，隐藏编辑控件，支持暂停、倍速与退出；不写观看进度、不修改断点。</li>
   </ul>
+  <h3 class="sub">试播控制条（初版走查修订）</h3>
+  <ul class="list">
+    <li><strong>控制补齐：</strong>自动播放开关、暂停 / 继续、重播当前范围、下一步——初版只有「下一步」，长分镜试播要连点数十次。</li>
+    <li><strong>加载进度：</strong>准备阶段显示「已加载 x/y 个资源」，替代无反馈的细进度条；资源多时可见剩余工作量。</li>
+    <li><strong>警告可定位：</strong>每条提示带「前往」——直接跳到对应幕 / 分镜 / 指令并选中，修复闭环不再断在「知道问题在哪」。</li>
+    <li><strong>误触保护：</strong>点击试播窗外遮罩不关闭，退出必须显式点按；控制条提供「全屏」，直达正式播放器链路（与「我的作品」播放共用）。</li>
+  </ul>
+  <div class="mock" style="max-width: 640px;">
+    <div class="bar">
+      <span class="brand">试播 · 归乡的路</span>
+      <span class="spacer"></span>
+      <span class="chip on">下一步 ▸</span>
+      <span class="chip">自动：开</span>
+      <span class="chip">↻ 重播</span>
+      <span class="chip" style="color:#dfc080;">⚠ 3</span>
+      <span class="chip">全屏</span>
+      <span class="chip">退出</span>
+    </div>
+    <div style="padding:6px 10px 8px;">
+      <div class="item" style="margin-bottom:2px;"><span class="txt">第 2 幕 / 分镜 5 / 指令 3：跳转目标不存在「结局 A」</span><span class="spacer"></span><span class="chip on">前往</span></div>
+      <div class="item"><span class="txt">已加载 12 / 48 个资源</span><span class="spacer"></span><span class="chip">仅当前分镜 ▾</span></div>
+    </div>
+  </div>
+  <p class="mock-note">试播控制条修订版：自动 / 重播 / 加载进度齐备；警告条目带「前往」直接定位到指令；点遮罩不再误关试播。</p>
   <aside class="callout" data-variant="warning">
     <p><strong>预览必须隔离：</strong>编辑器预览与正式观看的进度、断点、缓存作用域要分离。否则用户在编辑器里试看一段，会覆盖正式剧情的「继续观看」，这是不可接受的副作用。</p>
   </aside>
@@ -1220,7 +1433,8 @@ table.table td code, table.table th code {
 
   <h2 class="heading">12.3 保存与恢复</h2>
   <ul class="list">
-    <li>编辑即写入本地草稿（防抖 1~2 秒），不依赖手动保存；顶部显示「已保存 / 保存中 / 失败」。</li>
+    <li>编辑即写入本地草稿（防抖 1~2 秒），不依赖手动保存；顶部显示「已保存 / 保存中 / 失败」，<strong>失败转为常驻警示</strong>（工具栏红色圆点 + 点击重试，恢复成功才消失）——初版只有一闪而过的提示，漏看即继续丢改动。</li>
+    <li><strong>错误文案规则（v0.2 新增）：</strong>不向用户输出 StateError 等内部异常，统一为「发生了什么 + 该怎么办」：保存失败 →「草稿保存失败，点此重试」；试播定位失败 →「无法从这里开始播放，请改从上一分镜开始」；素材不可用 →「素材暂不可用（离线），试播将跳过该项」。</li>
     <li>每次打开作品保留最近 20 个自动快照，可回滚；快照只保留 project.json，不复制素材。</li>
     <li>崩溃或强制退出后，下次打开提示「恢复未保存的修改」，用户确认后才覆盖当前作品。</li>
     <li>素材导入与作品写入分开提交，避免一半素材写入导致作品损坏。</li>
@@ -1247,6 +1461,7 @@ table.table td code, table.table th code {
       </tbody>
     </table>
   </div>
+  <p class="paragraph">初版已落地的编辑器模块按本修订补强三处，优先级高于新增能力：<strong>舞台签名增量重建</strong>（对白文本编辑不触发舞台重建，画面相关参数变化才重演）、<strong>试播加载进度反馈</strong>、<strong>草稿分层保存</strong>（结构文件高频写、素材文件按指纹跳写）。这三处直接决定长作品的编辑流畅度与手机端的存储压力。</p>
   <h3 class="sub">主要技术风险</h3>
   <ul class="list">
     <li><strong>状态重建：</strong>现有断点恢复依赖「有对白或选项」才算有效停点，编辑器需要停在任意分镜，必须新增无副作用的 seek / replay 路径，并处理动画中间帧。</li>
@@ -1263,7 +1478,11 @@ table.table td code, table.table th code {
   <ol class="timeline">
     <li>
       <span class="when">M0　技术验证</span>
-      <div class="what"><strong>目标：</strong>证明「分镜 → 编译 → 播放器预览」链路可行。范围：单幕、对白 / 背景 / 立绘 / 舞台文字、桌面舞台直编、本地保存。验收：三个分镜的示例作品能导出并在播放器中完整播放。</div>
+      <div class="what"><strong>目标：</strong>证明「分镜 → 编译 → 播放器预览」链路可行。范围：单幕、对白 / 背景 / 立绘 / 舞台文字、桌面舞台直编、本地保存。验收：三个分镜的示例作品能导出并在播放器中完整播放。<strong>（已完成，走查结论见 v0.2 修订摘要）</strong></div>
+    </li>
+    <li>
+      <span class="when">M0.5　初版走查修复批（v0.2 核心）</span>
+      <div class="what"><strong>目标：</strong>按修订清单修复初版交互缺陷，补齐两条主链路。范围：P0 全部（对话框自适应、指令摘要、错误文案与保存警示、空态、双 ×、素材缩略图预览、拖动排序）＋ 已拍板 P1（我的作品播放、官方剧情派生、高级指令可编辑、素材面板、草稿行内管理、增量重建与分层保存）＋ P2 试播与舞台增强。验收：§15 新增验收项全部通过。</div>
     </li>
     <li>
       <span class="when">M1　可用版本</span>
@@ -1283,7 +1502,7 @@ table.table td code, table.table th code {
     </li>
   </ol>
   <aside class="callout" data-variant="tip">
-    <p><strong>排序理由：</strong>先打通「能演出来」，再解决「好用」，最后才是「能力全」。把时间轴、分支、CG 图层放到后面，是因为它们成本高、使用频率低，且不影响最小闭环。</p>
+    <p><strong>排序理由：</strong>先打通「能演出来」（M0 已完成），再修复「初版哪里不好用」（M0.5，收益最大且最安全的一批），然后才是「好用与能力全」。把时间轴、分支、CG 图层放到后面，是因为它们成本高、使用频率低，且不影响最小闭环；扩展前先按真实使用数据量化长尾。</p>
   </aside>
 </div>
 
@@ -1303,6 +1522,12 @@ table.table td code, table.table th code {
         <tr><td>导出正确性</td><td>导出脚本可被解析；所有命令均已注册；转义字符与换行不破坏参数</td><td>解析回读 + 播放抽查</td></tr>
         <tr><td>异常处理</td><td>素材缺失、坐标越界、跳转目标不存在时给出可定位的提示，不静默失败</td><td>构造异常作品逐项验证</td></tr>
         <tr><td>移动端可用性</td><td>单手可完成改台词、换表情、拖动文字；键盘不遮挡输入区；误触可撤销</td><td>真机竖屏走查</td></tr>
+        <tr><td>对话框适配（v0.2）</td><td>360px 宽手机上素材选择器、作品列表、检查结果等全部对话框无横向溢出且可完整操作</td><td>窄屏真机逐个打开验证</td></tr>
+        <tr><td>列表拖动（v0.2）</td><td>指令与分镜通过左缘把手 / 长按完成排序，撤销可回滚排序</td><td>双端各演示一次乱序恢复</td></tr>
+        <tr><td>素材预览（v0.2）</td><td>背景 / 立绘 / 特效选择器显示缩略图，加载失败有占位；音频可试听</td><td>弱网与离线各测一次</td></tr>
+        <tr><td>作品播放（v0.2）</td><td>「我的作品」行内播放进入正式播放器全片观看，全程不写观看进度与断点</td><td>播放前后核对进度记录</td></tr>
+        <tr><td>官方派生（v0.2）</td><td>剧情馆「派生到创作」打开后分镜完整、高级指令保真可编辑、可试播</td><td>取一篇含 decision 的剧情验证</td></tr>
+        <tr><td>保存可靠性（v0.2）</td><td>保存失败有常驻警示且可重试；文本编辑不触发舞台重建；素材未变时不重写素材文件</td><td>断网 / 只读目录注入故障</td></tr>
         <tr><td>性能</td><td>100 个分镜的作品打开 ≤ 2s；舞台拖动无明显掉帧；素材网格滚动流畅</td><td>中端安卓机与桌面各测一次</td></tr>
       </tbody>
     </table>
@@ -1312,7 +1537,7 @@ table.table td code, table.table th code {
 <h1 class="heading">十六、待拍板决策</h1>
 
 <div class="doc-section">
-  <p class="paragraph">以下五项会影响架构与排期，建议在进入设计稿前确认。每项给出推荐值，便于直接决策。</p>
+  <p class="paragraph">初版实现后，以下决策已按产品评审拍板或按 v0.2 修订；表内标注对应状态。</p>
   <div class="table-wrap">
     <div class="table-caption">表 12　需要确认的产品决策</div>
     <table class="table">
@@ -1327,7 +1552,7 @@ table.table td code, table.table th code {
         <tr>
           <td>入口位置</td>
           <td>一级导航「创作」/ 剧情馆内 Tab / 设置内入口</td>
-          <td>一级导航；移动端底栏四项可接受</td>
+          <td><span class="pill done">已拍板</span> 一级导航「创作」；移动端底栏四项</td>
         </tr>
         <tr>
           <td>导出是否打包 PRTS 素材</td>
@@ -1337,18 +1562,28 @@ table.table td code, table.table th code {
         <tr>
           <td>是否允许直接编辑原版剧情</td>
           <td>直接编辑会污染缓存与断点，且难以回滚</td>
-          <td>只允许「派生为新作品」，原脚本只读</td>
+          <td><span class="pill done">已拍板</span> 支持「派生到创作」：素材沿用原版 key、不复制；原版脚本只读</td>
         </tr>
         <tr>
           <td>高级指令的可见性</td>
           <td>完全隐藏会丢失导入内容；完全开放会增加误操作</td>
-          <td>只读展示 + 可排序删除，不提供自由文本编辑</td>
+          <td><span class="pill fix">v0.2 修订</span> 可编辑源码 + 逐条解析校验；错误就地标红保留原文，不弹窗打断</td>
+        </tr>
+        <tr>
+          <td>作品查看地（v0.2 新增）</td>
+          <td>作品只在编辑器内小窗试播，没有正式观看的落点，创作闭环缺失</td>
+          <td><span class="pill done">已拍板</span> 「我的作品」行内播放，复用正式播放器，不写进度</td>
+        </tr>
+        <tr>
+          <td>自动草稿（v0.2 新增）</td>
+          <td>初版首次进入自动创建并持久化「未命名剧情」，草稿列表积累垃圾</td>
+          <td><span class="pill fix">v0.2 修订</span> 只在显式新建时创建草稿</td>
         </tr>
       </tbody>
     </table>
   </div>
   <aside class="callout">
-    <p><strong>下一步建议：</strong>确认以上决策后，先出桌面与移动各一张高保真交互稿，再进入 M0 技术验证。编辑器的主要风险不在界面，而在「状态重建」与「本地素材解析」两条链路，建议用最小示例先验证，再铺开界面。</p>
+    <p><strong>下一步建议：</strong>M0 已验证「状态重建」与「本地素材解析」两条主链路可行。下一步按 M0.5 清单落地本修订（收益最大且最安全的一批），通过 §15 新增验收项后，再进入 M1 / M2 的能力扩展；扩展前先量化长尾使用率，决定时间轴与分支的投入。</p>
   </aside>
 </div>
 
@@ -1356,7 +1591,7 @@ table.table td code, table.table th code {
 
 <section class="title end_page">
   <h1>让创作停留在画面里</h1>
-  <p>本文为产品分析稿，不包含代码实现。确认方向后，可继续产出交互原型、数据结构定义与 M0 技术验证清单。</p>
+  <p>本文为产品设计稿（v0.2，并入初版走查修订），不包含代码实现。M0.5 修复批通过新增验收后，按 §14 继续 M1 / M2 能力扩展。</p>
 </section>
 
 </body>

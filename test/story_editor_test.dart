@@ -83,4 +83,13 @@ void main() {
     final json = asset.toJson()..['data'] = base64Encode([9, 9, 9]);
     expect(() => EditorAsset.fromJson(json), throwsFormatException);
   });
+  test('project metadata survives export and import', () {
+    final project = EditorProject.create('派生作品')
+        .copyWith(derivedFrom: 'story/main.txt');
+
+    final restored = EditorProject.decode(project.export());
+    expect(restored.title, '派生作品');
+    expect(restored.derivedFrom, 'story/main.txt');
+    expect(restored.updatedAt, project.updatedAt);
+  });
 }

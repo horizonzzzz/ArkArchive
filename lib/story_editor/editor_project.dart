@@ -140,7 +140,9 @@ class EditorProject {
     required this.title,
     required this.scenes,
     this.assets = const {},
-  });
+    DateTime? updatedAt,
+    this.derivedFrom,
+  }) : updatedAt = updatedAt ?? DateTime.now();
   factory EditorProject.create(String title) => EditorProject(
     id: newProjectId(),
     title: title,
@@ -152,18 +154,26 @@ class EditorProject {
   final String id, title;
   final List<EditorScene> scenes;
   final Map<String, EditorAsset> assets;
+  final DateTime updatedAt;
+  final String? derivedFrom;
 
   EditorProject copyWith({
     String? id,
     String? title,
     List<EditorScene>? scenes,
     Map<String, EditorAsset>? assets,
+    DateTime? updatedAt,
+    String? derivedFrom,
   }) => EditorProject(
     id: id ?? this.id,
     title: title ?? this.title,
     scenes: scenes ?? this.scenes,
     assets: assets ?? this.assets,
+    updatedAt: updatedAt ?? DateTime.now(),
+    derivedFrom: derivedFrom ?? this.derivedFrom,
   );
+
+  EditorProject touch() => copyWith(updatedAt: DateTime.now());
 
   List<String> validate() {
     final CompiledProject compiled;
@@ -276,6 +286,9 @@ class EditorProject {
         },
     ],
     'assets': [for (final asset in assets.values) asset.toJson()],
+    'updatedAt': updatedAt.toIso8601String(),
+    // ignore: use_null_aware_elements
+    if (derivedFrom != null) 'derivedFrom': derivedFrom!,
   };
 
   Uint8List export() =>
@@ -330,6 +343,8 @@ class EditorProject {
         title: title(data['title']),
         scenes: scenes,
         assets: assets,
+        updatedAt: DateTime.tryParse(data['updatedAt'] as String? ?? ''),
+        derivedFrom: data['derivedFrom'] as String?,
       );
     } on TypeError {
       throw const FormatException('作品文件结构无效');
@@ -452,7 +467,7 @@ const editorFields = <String, (String, List<EditorField>)>{
       EditorField('text', '台词', FieldType.multiline),
     ],
   ),
-  'dialog': ('隐藏对白框', []),
+  'dialog': ('清除对白框', []),
   'background': (
     '背景',
     [
