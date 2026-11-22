@@ -186,12 +186,8 @@ void main() {
       groupName: '',
       entryType: 'NONE',
       refs: [
-        AssetRef(AssetKind.music, 'first', [
-          AssetFile(first, 'extras/a.mp3'),
-        ]),
-        AssetRef(AssetKind.sfx, 'second', [
-          AssetFile(second, 'extras/a.mp3'),
-        ]),
+        AssetRef(AssetKind.music, 'first', [AssetFile(first, 'extras/a.mp3')]),
+        AssetRef(AssetKind.sfx, 'second', [AssetFile(second, 'extras/a.mp3')]),
       ],
       script: [],
       unresolved: [],
@@ -272,11 +268,14 @@ void main() {
     final paths = [
       for (final file in manifest['files'] as List) (file as Map)['path'],
     ];
-    expect(paths, containsAll([
-      'images/cg/shared.png',
-      'images/item/shared.png',
-      'images/background/a_b_.png',
-    ]));
+    expect(
+      paths,
+      containsAll([
+        'images/cg/shared.png',
+        'images/item/shared.png',
+        'images/background/a_b_.png',
+      ]),
+    );
     expect(paths, isNot(contains('images/background/a:b?.png')));
     expect(result.fileCount, 3);
   });
@@ -292,12 +291,11 @@ void main() {
 [Interlude(channel=3,type=3,name="actor#2")]
 [Interlude(channel=3,type=3,name="missing_char")]
 ''');
-    expect(
-      {for (final ref in catalog.collect(script, warnings)) ...[
+    expect({
+      for (final ref in catalog.collect(script, warnings)) ...[
         for (final file in ref.files) file.uri,
-      ]},
-      catalog.dependencies(script, [...warnings]),
-    );
+      ],
+    }, catalog.dependencies(script, [...warnings]));
   });
 
   test('未解析音频进入 warnings，不产生条目', () {
@@ -351,16 +349,20 @@ void main() {
     final mirror = Uri.parse('https://mirror.test/script.txt');
     final fakePng = Uri.parse('https://example.test/fake.png');
     final requested = <Uri>[];
+    final cache = MemoryCache();
     final store = AssetStore(
+      cache: cache,
       client: MockClient((request) async {
         requested.add(request.url);
         if (request.url == primary) {
           return http.Response('gone', 404);
         }
         if (request.url == fakePng) {
-          return http.Response('<html></html>', 200, headers: {
-            'content-type': 'text/html',
-          });
+          return http.Response(
+            '<html></html>',
+            200,
+            headers: {'content-type': 'text/html'},
+          );
         }
         return http.Response('mirror', 200);
       }),
@@ -371,10 +373,8 @@ void main() {
       utf8.encode('mirror'),
     );
     expect(requested, [primary, mirror]);
-    expect(
-      store.loadTransient(fakePng),
-      throwsA(isA<FormatException>()),
-    );
+    expect(cache.data, isEmpty);
+    expect(store.loadTransient(fakePng), throwsA(isA<FormatException>()));
   });
 
   test('cachedSize 只查磁盘不联网，故事层未命中回退共享层', () async {
@@ -382,7 +382,11 @@ void main() {
     final sharedOnly = Uri.parse('https://example.test/b.mp3');
     final missing = Uri.parse('https://example.test/c.mp3');
     final cache = MemoryCache();
-    await cache.write(uri, Uint8List.fromList(List.filled(10, 0)), story: 'story');
+    await cache.write(
+      uri,
+      Uint8List.fromList(List.filled(10, 0)),
+      story: 'story',
+    );
     await cache.write(sharedOnly, Uint8List.fromList(List.filled(4, 0)));
     final store = AssetStore(
       cache: cache,
@@ -397,13 +401,10 @@ void main() {
   test('PreviewCache 命中不重复加载并按 LRU 淘汰', () async {
     final loads = <Uri>[];
     Uint8List chunk(int size) => Uint8List.fromList(List.filled(size, 7));
-    final cache = PreviewCache(
-      (uri) async {
-        loads.add(uri);
-        return chunk(uri.pathSegments.last == 'a.png' ? 60 : 30);
-      },
-      maxBytes: 100,
-    );
+    final cache = PreviewCache((uri) async {
+      loads.add(uri);
+      return chunk(uri.pathSegments.last == 'a.png' ? 60 : 30);
+    }, maxBytes: 100);
     final a = Uri.parse('https://example.test/a.png');
     final b = Uri.parse('https://example.test/b.png');
     await cache.load(a);
@@ -470,8 +471,10 @@ void main() {
     expect(result.failures, hasLength(1));
     expect(result.failures.single.exportPath, 'images/cg/bad.png');
     expect(lastProgress, (3, 3, 3 + utf8.encode('net').length));
-    expect(File('${result.rootPath}/images/background/good.png').readAsBytes(),
-        completion([1, 2, 3]));
+    expect(
+      File('${result.rootPath}/images/background/good.png').readAsBytes(),
+      completion([1, 2, 3]),
+    );
     final manifest = jsonDecode(
       await File('${result.rootPath}/manifest.json').readAsString(),
     ) as Map<String, dynamic>;
@@ -487,9 +490,7 @@ void main() {
 
   test('取消导出抛出并清理未完成的目录', () async {
     final store = AssetStore(
-      client: MockClient(
-        (request) async => http.Response('net', 200),
-      ),
+      client: MockClient((request) async => http.Response('net', 200)),
     );
     addTearDown(store.close);
     final package = AssetPackage.fromRefs(
@@ -499,7 +500,10 @@ void main() {
       entryType: 'NONE',
       refs: [
         AssetRef(AssetKind.background, 'a', [
-          AssetFile(Uri.parse('https://example.test/a.png'), 'images/background/a.png'),
+          AssetFile(
+            Uri.parse('https://example.test/a.png'),
+            'images/background/a.png',
+          ),
         ]),
       ],
       script: [],
@@ -536,7 +540,10 @@ void main() {
     });
     final target = ExportTarget();
     final root = await target.createDirectory(dir.path, '章节/标题');
-    expect(root, '${dir.path}${Platform.pathSeparator}章节${Platform.pathSeparator}标题');
+    expect(
+      root,
+      '${dir.path}${Platform.pathSeparator}章节${Platform.pathSeparator}标题',
+    );
     // 同名目标不覆盖：第二个任务实例会拿到带序号的目录。
     final secondTarget = ExportTarget();
     final second = await secondTarget.createDirectory(dir.path, '章节/标题');
@@ -550,8 +557,9 @@ void main() {
       isTrue,
     );
     expect(
-      File('$root${Platform.pathSeparator}images${Platform.pathSeparator}bg${Platform.pathSeparator}what_ever_.png')
-          .existsSync(),
+      File(
+        '$root${Platform.pathSeparator}images${Platform.pathSeparator}bg${Platform.pathSeparator}what_ever_.png',
+      ).existsSync(),
       isTrue,
     );
     await target.deleteDirectory();
@@ -574,7 +582,10 @@ void main() {
       '$missing${Platform.pathSeparator}主线篇章${Platform.pathSeparator}14-11 行动后',
     );
     await target.writeFile('manifest.json', [1]);
-    expect(File('$root${Platform.pathSeparator}manifest.json').existsSync(), isTrue);
+    expect(
+      File('$root${Platform.pathSeparator}manifest.json').existsSync(),
+      isTrue,
+    );
     await target.deleteDirectory();
     // 只清理半成品根目录；自动创建的父级目录保留，不连带删除。
     expect(Directory(root).existsSync(), isFalse);

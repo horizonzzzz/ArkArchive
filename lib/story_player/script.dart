@@ -61,7 +61,11 @@ class StoryScript {
       final args = open < 0
           ? <String, String>{}
           : _arguments(header.substring(open + 1, header.length - 1));
-      commands.add(StoryCommand(tag, args, tail, line, raw));
+      // 创作脚本使用带引号的对白参数保留换行及前后空格。
+      final body = tag == 'dialogue' && tail.isEmpty
+          ? args['text'] ?? tail
+          : tail;
+      commands.add(StoryCommand(tag, args, body, line, raw));
     }
     return StoryScript(List.unmodifiable(commands));
   }

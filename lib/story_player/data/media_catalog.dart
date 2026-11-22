@@ -92,12 +92,20 @@ class MediaCatalog {
     Uri.parse('https://torappu.prts.wiki/assets/avg/background.json'),
   ];
 
-  static Future<MediaCatalog> load(AssetStore store) async {
+  static Future<MediaCatalog> load(
+    AssetStore store, {
+    bool transient = false,
+  }) async {
     final tables = <Map<String, dynamic>>[];
     for (final uri in tableUris) {
       tables.add(
-        jsonDecode(utf8.decode(await store.loadShared(uri)))
-            as Map<String, dynamic>,
+        jsonDecode(
+          utf8.decode(
+            await (transient
+                ? store.loadTransient(uri)
+                : store.loadShared(uri)),
+          ),
+        ) as Map<String, dynamic>,
       );
     }
     return MediaCatalog(

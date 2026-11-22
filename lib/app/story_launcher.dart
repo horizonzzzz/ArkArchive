@@ -10,6 +10,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../story_player/story_player.dart';
+import '../story_editor/editor_platform.dart';
+import '../story_editor/story_editor_page.dart';
 import 'activity_images.dart';
 import 'app_theme.dart';
 import 'app_update.dart';
@@ -55,6 +57,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
   static const _catalogPageSize = 10;
   final Map<int, int> _catalogPages = {};
   int _page = 0;
+  bool _editorOpened = false;
+  late final _editorStorage = EditorStorage();
   int _cacheReturnPage = 0;
   bool _busy = false;
   int _done = 0, _total = 0;
@@ -82,9 +86,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
 
   /// 是否有导出任务正在读取缓存；期间禁止清空、迁移或删除缓存，
   /// 否则未读取的文件会在导出中途消失（离线时尤其致命）。
-  bool get _hasActiveExports => _exportJobs.values.any(
-    (job) => job.status == ExportJobStatus.running,
-  );
+  bool get _hasActiveExports =>
+      _exportJobs.values.any((job) => job.status == ExportJobStatus.running);
 
   /// 「已处理 X / Y 幕」的已处理数：队列里已到达终态的任务数。
   int get _cachedDone =>
@@ -124,7 +127,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
   static const _navigation = [
     (Icons.library_books_outlined, '剧情馆', '01'),
     (Icons.people_outline, '人物档案', '02'),
-    (Icons.tune, '系统设置', '03'),
+    (Icons.edit_note, '创作', '03'),
+    (Icons.tune, '系统设置', '04'),
   ];
 
   @override
@@ -624,10 +628,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
 
   // ---------- 素材导出 ----------
 
-  StoryGroup? _lookupGroup(String path) =>
-      (_groups ?? const <StoryGroup>[])
-          .where((group) => group.entries.any((entry) => entry.path == path))
-          .firstOrNull;
+  StoryGroup? _lookupGroup(String path) => (_groups ?? const <StoryGroup>[])
+      .where((group) => group.entries.any((entry) => entry.path == path))
+      .firstOrNull;
 
   Future<String> _defaultExportDirectory() async {
     try {
@@ -750,10 +753,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   }
 
   Future<void> _deleteCached(List<StoryEntry> entries) async {
-    if (_busy ||
-        _deletingCache ||
-        _movingDirectory ||
-        _hasActiveExports) {
+    if (_busy || _deletingCache || _movingDirectory || _hasActiveExports) {
       return;
     }
     final confirm = await showDialog<bool>(
@@ -1055,9 +1055,12 @@ class _StoryLauncherState extends State<StoryLauncher> {
           context,
           ArchiveMotion.stateDuration,
         ),
-        selectedIndex: navigationPage == 3 ? 2 : navigationPage,
-        onDestinationSelected: (value) =>
-            setState(() => _page = value == 2 ? 3 : value),
+        selectedIndex: navigationPage == 4
+            ? 2
+            : navigationPage == 3
+            ? 3
+            : navigationPage,
+        onDestinationSelected: _selectDestination,
         destinations: [
           for (final item in _navigation)
             NavigationDestination(icon: Icon(item.$1), label: item.$2),
@@ -1167,6 +1170,16 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                         _busy ||
                                         _hasActiveExports,
                                   ),
+                                  if (_editorOpened)
+                                    TickerMode(
+                                      enabled: _page == 4,
+                                      child: StoryEditorPage(
+                                        storage: _editorStorage,
+                                        store: _repository.store,
+                                      ),
+                                    )
+                                  else
+                                    const SizedBox.shrink(),
                                 ],
                               ),
                             ),
@@ -1308,7 +1321,11 @@ class _StoryLauncherState extends State<StoryLauncher> {
                     child: ListTile(
                       selected:
                           (_page == 2 ? _cacheReturnPage : _page) ==
-                          (i == 2 ? 3 : i),
+                          (i == 2
+                              ? 4
+                              : i == 3
+                              ? 3
+                              : i),
                       selectedColor: AppColors.of(context).indicator,
                       selectedTileColor: AppColors.of(context).surface,
                       textColor: AppColors.of(context).subtext,
@@ -1318,7 +1335,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                         _navigation[i].$2,
                         style: const TextStyle(fontSize: 13),
                       ),
-                      onTap: () => setState(() => _page = i == 2 ? 3 : i),
+                      onTap: () => _selectDestination(i),
                     ),
                   ),
               ],
@@ -1339,6 +1356,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
     ),
   );
 
+  void _selectDestination(int index) => setState(() {
+    _page = index == 2 ? 4 : index;
+    if (_page == 4) _editorOpened = true;
+  });
   void _openCache() => setState(() {
     _cacheReturnPage = _page;
     _page = 2;
@@ -1950,9 +1971,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                     PopupMenuItem(
                       value: 'export',
                       enabled:
-                          !activeJob &&
-                          !_deletingCache &&
-                          !_movingDirectory,
+                          !activeJob && !_deletingCache && !_movingDirectory,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [

@@ -26,8 +26,10 @@ class JustAudioOutput implements StoryAudio {
     this.masterVolume = 1,
     this.bgmVolume = 1,
     this.sfxVolume = 1,
+    this.resolveSource,
   });
   final MediaCatalog catalog;
+  final Future<Uri> Function(Uri)? resolveSource;
   final AssetStore assets;
   final void Function(String) onWarning;
   final double masterVolume, bgmVolume, sfxVolume;
@@ -98,8 +100,13 @@ class JustAudioOutput implements StoryAudio {
     final uris = <Uri>[?intro, key];
     final sources = <AudioSource>[];
     for (final uri in uris) {
-      await assets.load(uri);
-      sources.add(AudioSource.uri(await assets.playableUri(uri)));
+      final resolve = resolveSource;
+      if (resolve != null) {
+        sources.add(AudioSource.uri(await resolve(uri)));
+      } else {
+        await assets.load(uri);
+        sources.add(AudioSource.uri(await assets.playableUri(uri)));
+      }
     }
     if (stale()) return;
     final track = _Track(channel);

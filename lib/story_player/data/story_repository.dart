@@ -464,6 +464,8 @@ class StoryRepository {
   }
 
   /// 导出清单加载顺序：先按候选地址读剧情层缓存，全部未命中再联网。
+  Future<StoryDocument> loadForEditor(StoryEntry entry) async =>
+      (await _loadDocumentForExport(entry)).$2;
   Future<(Uri, StoryDocument)> _loadDocumentForExport(StoryEntry entry) async {
     for (final uri in _entryUriCandidates(entry)) {
       try {

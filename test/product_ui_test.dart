@@ -704,7 +704,7 @@ void main() {
       await _mount(tester, size: size);
       final nav = find.byType(NavigationBar);
       if (size.width < 1100) {
-        expect(tester.widget<NavigationBar>(nav).destinations, hasLength(3));
+        expect(tester.widget<NavigationBar>(nav).destinations, hasLength(4));
       }
       await tester.enterText(find.byKey(const Key('story-search')), '行动后');
       await tester.pumpAndSettle();

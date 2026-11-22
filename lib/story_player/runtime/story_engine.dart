@@ -1220,12 +1220,25 @@ class StoryEngine extends ChangeNotifier {
   Future<bool> seekToStop(StoryStopPoint point) =>
       seekToCommand(point.commandIndex);
 
-  Future<bool> seekToCommand(int commandIndex) async {
+  Future<bool> seekToCommand(int commandIndex) =>
+      _rebuildTo(commandIndex, requireStop: true);
+
+  /// 创作预览可重建到任意分镜边界，不重演一次性音效和视频。
+  Future<bool> rebuildBefore(int nextIndex, {bool resumeAudio = false}) =>
+      _rebuildTo(nextIndex - 1, requireStop: false, resumeAudio: resumeAudio);
+
+  Future<bool> _rebuildTo(
+    int commandIndex, {
+    required bool requireStop,
+    bool resumeAudio = true,
+  }) async {
     if (_disposed ||
         state.metadata.isVideoOnly ||
-        commandIndex < 0 ||
+        commandIndex < (requireStop ? 0 : -1) ||
         commandIndex >= script.commands.length ||
-        _stopPointFor(commandIndex, script.commands[commandIndex]) == null) {
+        (requireStop &&
+            _stopPointFor(commandIndex, script.commands[commandIndex]) ==
+                null)) {
       return false;
     }
 
@@ -1276,7 +1289,7 @@ class StoryEngine extends ChangeNotifier {
         await _executeCommand(command);
 
         if (state.choices.isNotEmpty) {
-          if (index == commandIndex) {
+          if (requireStop && index == commandIndex) {
             reached = true;
             break;
           }
@@ -1287,14 +1300,19 @@ class StoryEngine extends ChangeNotifier {
           if (choice.disabled || !_applyChoice(choice.value)) return false;
         }
         if (index == commandIndex) {
-          reached = _waitingInput;
+          reached = !requireStop || _waitingInput;
           break;
         }
       }
 
-      if (!reached || _disposed) return false;
-      for (final command in _resumeTracks.values) {
-        await audio.execute(command);
+      if (_disposed || (requireStop ? !reached : cursor != commandIndex + 1)) {
+        return false;
+      }
+      if (!requireStop) _waitingInput = false;
+      if (resumeAudio) {
+        for (final command in _resumeTracks.values) {
+          await audio.execute(command);
+        }
       }
       if (wasPaused) await audio.pause();
       return true;

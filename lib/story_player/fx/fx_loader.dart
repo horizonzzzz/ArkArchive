@@ -33,7 +33,9 @@ String resolveFxName(String raw, Map<String, dynamic> variables) {
 }
 
 class FxLoader {
-  FxLoader(String root, this.store) : root = directory(root);
+  FxLoader(String root, this.store, {this.transient = false})
+    : root = directory(root);
+  final bool transient;
   final Uri root;
   final AssetStore store;
 
@@ -60,7 +62,8 @@ class FxLoader {
       );
       return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
     }
-    return uri.scheme == 'file' ? readFxFile(uri) : store.load(uri);
+    if (uri.scheme == 'file') return readFxFile(uri);
+    return transient ? store.loadTransient(uri) : store.load(uri);
   }
 
   Future<FxAsset> load(String name) async {
