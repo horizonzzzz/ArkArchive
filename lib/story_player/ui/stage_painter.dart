@@ -1,10 +1,11 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../data/media_catalog.dart';
 import '../stage_state.dart';
+import '../fx/fx_painter.dart';
 
 /// 1280×720 逻辑舞台的分层绘制；层级顺序与参考端 ir.attach 一致。
 class StagePainter extends CustomPainter {
@@ -25,6 +26,8 @@ class StagePainter extends CustomPainter {
   final Map<String, ui.Image> sprites;
   final String fontFamily;
   static const bounds = Rect.fromLTWH(0, 0, 1280, 720);
+  // focusout 失焦模糊换算（amount=0.8 时约 2.8px，与原游戏实拍背景及速度线模糊一致）。
+  static const _focusBlurSigma = 3.5;
 
   static const _curtainAngles = {
     0: 180.0,
@@ -48,6 +51,17 @@ class StagePainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(bounds);
     canvas.drawColor(Colors.black, BlendMode.src);
+    final eyeEffect = _eyeEffect();
+    if (eyeEffect != null) {
+      canvas.saveLayer(
+        bounds,
+        Paint()
+          ..imageFilter = ui.ImageFilter.blur(
+            sigmaX: eyeEffect.$1,
+            sigmaY: eyeEffect.$1,
+          ),
+      );
+    }
     // 镜头震动与灰度/反色只作用于场景层，不作用于 CG 道具、幕布与遮罩。
     final cameraFilter = _cameraFilter();
     canvas.save();
@@ -55,17 +69,34 @@ class StagePainter extends CustomPainter {
       canvas.saveLayer(bounds, Paint()..colorFilter = cameraFilter);
     }
     canvas.translate(state.shake.dx, state.shake.dy);
-    _withFocus(canvas, 'bg', (c) {
-      for (final image in state.backgrounds) {
-        _image(c, image);
-      }
-    });
-    _withFocus(canvas, 'lbg', (c) {
-      for (final scene in state.largeScenes) {
-        _largeScene(c, scene);
-      }
-    });
-    _withFocus(canvas, 'bg', (c) => _avgDisplays(c, 'bgover'));
+    // 背景与背景特效在同失焦级别下共用同一离屏层：既保留 Additive 叠加到背景，又同步承受 focusout 模糊。
+    final mergeBgLayer =
+        state.largeScenes.isEmpty || state.focus['bg'] == state.focus['lbg'];
+    if (mergeBgLayer) {
+      _withFocus(canvas, 'bg', (c) {
+        for (final image in state.backgrounds) {
+          _image(c, image);
+        }
+        for (final scene in state.largeScenes) {
+          _largeScene(c, scene);
+        }
+        _avgDisplays(c, 'bgover');
+        paintEffects(c, state.effects, textures, 'bgeffect');
+      });
+    } else {
+      _withFocus(canvas, 'bg', (c) {
+        for (final image in state.backgrounds) {
+          _image(c, image);
+        }
+      });
+      _withFocus(canvas, 'lbg', (c) {
+        for (final scene in state.largeScenes) {
+          _largeScene(c, scene);
+        }
+      });
+      _withFocus(canvas, 'bg', (c) => _avgDisplays(c, 'bgover'));
+      paintEffects(canvas, state.effects, textures, 'bgeffect');
+    }
     canvas.save();
     canvas.translate(640, 360);
     canvas.rotate(state.imageRotation * math.pi / 180);
@@ -79,6 +110,13 @@ class StagePainter extends CustomPainter {
       }
     });
     canvas.restore();
+    paintEffects(
+      canvas,
+      state.effects,
+      textures,
+      'bgeffect',
+      afterImages: true,
+    );
     _withFocus(canvas, 'cg', (c) => _avgDisplays(c, 'cgover'));
     for (final window in state.cutins.values) {
       _cutinWindow(c: canvas, window: window);
@@ -95,21 +133,64 @@ class StagePainter extends CustomPainter {
       }
     });
     _withFocus(canvas, 'char', (c) => _avgDisplays(c, 'charover'));
+    paintEffects(canvas, state.effects, textures, 'effect');
     if (cameraFilter != null) {
       canvas.restore();
+    }
+    if (eyeEffect != null) {
+      canvas.restore();
+      if (eyeEffect.$2 > 0) {
+        canvas.drawRect(
+          bounds,
+          Paint()
+            ..shader = ui.Gradient.radial(
+              const Offset(640, 360),
+              800,
+              [
+                Colors.transparent,
+                Colors.transparent,
+                Colors.black.withValues(alpha: eyeEffect.$2),
+              ],
+              const [0, .52, 1],
+            ),
+        );
+      }
     }
     canvas.restore();
     for (final item in state.cgItems.values) {
       _cgItem(canvas, item);
     }
+    paintScreenOverlays(canvas, bounds, state.effects);
     for (final entry in state.curtains.entries) {
       _curtain(canvas, entry.key, entry.value);
     }
     canvas.restore();
     _blocker(canvas);
+    paintEffects(canvas, state.effects, textures, 'effect', afterBlocker: true);
     for (final stamp in state.stamps) {
       _stamp(canvas, stamp);
     }
+  }
+
+  (double, double)? _eyeEffect() {
+    final active =
+        state.effects
+            .where(
+              (effect) => effect.simulation.asset.screenEffect['type'] == 'eye',
+            )
+            .toList()
+          ..sort((a, b) => a.layer.compareTo(b.layer));
+    if (active.isEmpty) return null;
+    final effect = active.last;
+    final progress =
+        (effect.simulation.elapsed / effect.simulation.asset.duration).clamp(
+          0.0,
+          1.0,
+        );
+    final closing =
+        effect.simulation.asset.screenEffect['direction'] == 'close';
+    final amount = closing ? progress : 1 - progress;
+    return (amount * 5, amount * .82);
   }
 
   ColorFilter? _cameraFilter() {
@@ -156,8 +237,8 @@ class StagePainter extends CustomPainter {
     final paint = Paint();
     if (state.focusBlur) {
       paint.imageFilter = ui.ImageFilter.blur(
-        sigmaX: amount * 8,
-        sigmaY: amount * 8,
+        sigmaX: amount * _focusBlurSigma,
+        sigmaY: amount * _focusBlurSigma,
       );
     }
     if (state.focusColor != 'None') {
@@ -357,8 +438,8 @@ class StagePainter extends CustomPainter {
       final paint = Paint();
       if (state.focusBlur) {
         paint.imageFilter = ui.ImageFilter.blur(
-          sigmaX: focusAmount * 8,
-          sigmaY: focusAmount * 8,
+          sigmaX: focusAmount * _focusBlurSigma,
+          sigmaY: focusAmount * _focusBlurSigma,
         );
       }
       if (state.focusColor != 'None') {
@@ -934,8 +1015,7 @@ class StagePainter extends CustomPainter {
                   art.faceRect!.width * bodyScaleX,
                   art.faceRect!.height * bodyScaleY,
                 );
-          final isTerminal =
-              frame.maskId == 'group_interclude_square_common';
+          final isTerminal = frame.maskId == 'group_interclude_square_common';
           final contentScaleX = faceRect == null && isTerminal
               ? window.width / frame.size.dx
               : 1.0;

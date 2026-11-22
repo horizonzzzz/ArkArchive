@@ -54,9 +54,10 @@ app.*.map.json
 
 # Build and staging artifacts
 /dist/
-.temp
 
 /.cache/
+# 会话中间产物（脚本缓存、解包素材等），不入库
+/.temp/
 # Android 发布签名（密钥库与口令绝不能入库）
 *.jks
 *.keystore

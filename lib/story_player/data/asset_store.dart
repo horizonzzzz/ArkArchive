@@ -40,6 +40,9 @@ class AssetStore {
   static final _completedStoriesUri = Uri.parse(
     'https://local.invalid/story-completed-v1',
   );
+  static final _exportDirectoryUri = Uri.parse(
+    'https://local.invalid/story-export-directory-v1',
+  );
   final Set<String> completedStories = {};
 
   /// 用户已批准在移动数据网络下缓存；为 true 时不再弹确认框。
@@ -101,6 +104,7 @@ class AssetStore {
           _playbackProgressUri,
           _completedStoriesUri,
           _mobileDataApprovedUri,
+          _exportDirectoryUri,
           ...keep,
         },
       );
@@ -261,6 +265,30 @@ class AssetStore {
           (_) => _cache.write(
             _settingsUri,
             Uint8List.fromList(utf8.encode('$value')),
+          ),
+        );
+    _settingsWrite = write;
+    await write;
+  }
+
+  /// 清空媒体缓存时保留导出目录记忆：它属于用户偏好而非素材。
+  Future<String?> exportDirectory() async {
+    try {
+      final data = await _cache.read(_exportDirectoryUri);
+      return data == null || data.isEmpty ? null : utf8.decode(data);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> setExportDirectory(String path) async {
+    if (_movingCache) throw StateError('缓存目录迁移中');
+    final write = _settingsWrite
+        .catchError((_) {})
+        .then(
+          (_) => _cache.write(
+            _exportDirectoryUri,
+            Uint8List.fromList(utf8.encode(path)),
           ),
         );
     _settingsWrite = write;
@@ -480,12 +508,89 @@ class AssetStore {
     return _memory[uri] = bytes;
   }
 
-  Future<Uri> playableUri(Uri uri) async {
+  Future<Uri> playableUri(Uri uri, {String? story}) async {
     try {
-      return await _cache.playableUri(uri, story: _storyScope());
+      return await _cache.playableUri(uri, story: story ?? _storyScope());
     } catch (_) {
       return uri;
     }
+  }
+
+  Future<Uri> playableVideoUri(Uri uri, {String? story}) async {
+    try {
+      return await _cache.playableVideoUri(uri, story: story ?? _storyScope());
+    } catch (_) {
+      return uri;
+    }
+  }
+
+  void releaseVideoSource(Uri source) {
+    _cache.releaseVideoSource(source);
+  }
+
+  /// 已缓存资源在磁盘上的字节数；两层都未命中返回 null，不发起网络请求。
+  Future<int?> cachedSize(Uri uri, {String? story}) async {
+    if (_movingCache) throw StateError('缓存目录迁移中');
+    try {
+      if (story != null) {
+        final size = await _cache.sizeOf(uri, story: story);
+        if (size != null) return size;
+      }
+      return await _cache.sizeOf(uri);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 瞬态加载：预览与导出共用。已缓存（剧情层或共享层）直接读取，
+  /// 未命中走网络；主地址失败时按序尝试备用地址（脚本镜像）。
+  /// 结果不写入任何缓存层，也不驻留内存，避免导出悄悄改变缓存统计。
+  Future<Uint8List> loadTransient(
+    Uri uri, {
+    String? story,
+    List<Uri> alternates = const [],
+  }) async {
+    if (_movingCache) throw StateError('缓存目录迁移中');
+    if (!['http', 'https'].contains(uri.scheme)) {
+      throw FormatException('仅支持 HTTP(S) 资源：$uri');
+    }
+    try {
+      if (story != null) {
+        final local = await _cache.read(uri, story: story, allowShared: false);
+        if (local != null && local.isNotEmpty) return local;
+      }
+      final shared = await _cache.read(uri);
+      if (shared != null && shared.isNotEmpty) return shared;
+    } catch (_) {
+      // 缓存不可读时继续走网络；失败在结果中报告。
+    }
+    Object? failure;
+    for (final candidate in [uri, ...alternates]) {
+      try {
+        return await _fetchValidated(candidate);
+      } on http.ClientException catch (error) {
+        if (error is http.RequestAbortedException) rethrow;
+        failure ??= error;
+      }
+    }
+    throw failure ?? FormatException('资源为空：$uri');
+  }
+
+  Future<Uint8List> _fetchValidated(Uri uri) async {
+    final response = await _get(uri);
+    if (response.statusCode != 200) {
+      throw http.ClientException('HTTP ${response.statusCode}：$uri', uri);
+    }
+    final contentType = response.headers['content-type']?.toLowerCase() ?? '';
+    if (contentType.contains('text/html') &&
+        RegExp(
+          r'\.(png|mp3|json|txt)$',
+          caseSensitive: false,
+        ).hasMatch(uri.path)) {
+      throw FormatException('资源地址返回了 HTML 页面：$uri');
+    }
+    if (response.bodyBytes.isEmpty) throw FormatException('资源为空：$uri');
+    return response.bodyBytes;
   }
 
   Future<List<String>> preload(

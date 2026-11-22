@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:file_selector/file_selector.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../story_player/story_player.dart';
@@ -19,7 +20,11 @@ import 'character_archive_data.dart';
 import 'character_replay.dart';
 import 'cache_page.dart';
 import 'cache_job.dart';
+import 'export_job.dart';
+import 'story_export_page.dart';
+import '../story_player/data/asset_package.dart';
 import '../story_player/data/cache_control.dart';
+import '../story_player/data/story_export.dart';
 import 'settings_page.dart';
 import '../story_player/data/playback_settings.dart';
 
@@ -75,6 +80,12 @@ class _StoryLauncherState extends State<StoryLauncher> {
   /// 队列中是否存在进行中的下载任务；期间可继续添加任务，也可播放已缓存剧情。
   bool get _hasActiveJobs => _cacheJobs.values.any(_isJobActive);
 
+  /// 是否有导出任务正在读取缓存；期间禁止清空、迁移或删除缓存，
+  /// 否则未读取的文件会在导出中途消失（离线时尤其致命）。
+  bool get _hasActiveExports => _exportJobs.values.any(
+    (job) => job.status == ExportJobStatus.running,
+  );
+
   /// 「已处理 X / Y 幕」的已处理数：队列里已到达终态的任务数。
   int get _cachedDone =>
       _cacheJobs.values.where((job) => !_isJobActive(job)).length;
@@ -103,6 +114,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
 
   bool _deletingCache = false;
   bool _movingDirectory = false;
+
+  final Map<String, ExportJob> _exportJobs = {};
+  String? _exportDirectory;
 
   int? _cacheBytes;
   String? _cacheLocation;
@@ -148,6 +162,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   Future<void> _initialize() async {
     unawaited(_loadAppVersion());
     await _repository.store.loadSettings();
+    _exportDirectory = await _repository.store.exportDirectory();
     if (mounted) {
       widget.onThemeChanged?.call(
         _repository.store.playbackSettings.lightTheme,
@@ -269,11 +284,23 @@ class _StoryLauncherState extends State<StoryLauncher> {
       path.runes.any((rune) => rune > 0x7f);
 
   Future<void> _moveCacheDirectory() async {
-    if (_busy || _hasActiveJobs || _deletingCache || _movingDirectory) return;
+    if (_busy ||
+        _hasActiveJobs ||
+        _hasActiveExports ||
+        _deletingCache ||
+        _movingDirectory) {
+      return;
+    }
     setState(() => _movingDirectory = true);
     try {
       final path = await getDirectoryPath(confirmButtonText: '选择缓存目录');
       if (path == null || !mounted) return;
+      if (_hasActiveExports) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('有素材导出任务进行中，请等待完成后再切换缓存目录。')),
+        );
+        return;
+      }
       if (_pathBreaksAudio(path)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -595,8 +622,140 @@ class _StoryLauncherState extends State<StoryLauncher> {
     });
   }
 
+  // ---------- 素材导出 ----------
+
+  StoryGroup? _lookupGroup(String path) =>
+      (_groups ?? const <StoryGroup>[])
+          .where((group) => group.entries.any((entry) => entry.path == path))
+          .firstOrNull;
+
+  Future<String> _defaultExportDirectory() async {
+    try {
+      final base =
+          await getDownloadsDirectory() ??
+          await getApplicationDocumentsDirectory();
+      final separator = defaultTargetPlatform == TargetPlatform.windows
+          ? r'\'
+          : '/';
+      return '${base.path}$separator方舟档案室';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// 打开素材导出对话框；已有任务时直接挂接到同一任务查看进度或结果。
+  Future<void> _openExportDialog(StoryEntry entry) async {
+    if (!_repository.store.isDesktop) return;
+    final parentPath = _exportDirectory ?? await _defaultExportDirectory();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => StoryExportDialog(
+        repository: _repository,
+        entry: entry,
+        group: _lookupGroup(entry.path),
+        parentPath: parentPath,
+        cached: _cached.contains(entry.path),
+        appVersion: _appVersion,
+        existingJob: _exportJobs[entry.path],
+        onStartExport: _startExport,
+      ),
+    );
+    if (!mounted) return;
+    // 终态任务随对话框关闭移除；运行中的任务保留供后台继续。
+    final job = _exportJobs[entry.path];
+    if (job != null && job.status != ExportJobStatus.running) {
+      setState(() => _exportJobs.remove(entry.path));
+    }
+  }
+
+  ExportJob _startExport(
+    AssetPackage package,
+    List<AssetItem> items,
+    String parentPath,
+  ) {
+    final job = ExportJob(
+      package: package,
+      items: items,
+      parentPath: parentPath,
+    );
+    _exportJobs[package.storyPath] = job;
+    _exportDirectory = parentPath;
+    unawaited(_repository.store.setExportDirectory(parentPath));
+    // 立即重建，让设置页/缓存页的缓存维护按钮反映「导出中」。
+    setState(() {});
+    unawaited(_runExportJob(job));
+    return job;
+  }
+
+  Future<void> _runExportJob(ExportJob job) async {
+    final store = _repository.store;
+    try {
+      await store.runCacheDownload(
+        () async {
+          final result = await StoryExporter(store).export(
+            target: job.target,
+            package: job.package,
+            items: job.items,
+            parentPath: job.parentPath,
+            appVersion: _appVersion,
+            control: job.control,
+            onProgress: (done, total, bytes) =>
+                job.apply(done: done, total: total, bytes: bytes),
+          );
+          job.apply(status: ExportJobStatus.completed, result: result);
+        },
+        control: job.control,
+        story: job.package.storyPath,
+      );
+      if (job.status == ExportJobStatus.completed) _notifyExportFinished(job);
+    } on CacheCancelled {
+      try {
+        await job.target.deleteDirectory();
+      } catch (_) {}
+      job.apply(status: ExportJobStatus.cancelled);
+    } catch (error) {
+      job.apply(status: ExportJobStatus.failed, error: '$error');
+    } finally {
+      // 终态解除缓存维护禁用；菜单文字由任务监听器自行刷新。
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _notifyExportFinished(ExportJob job) {
+    if (!mounted) return;
+    final result = job.result;
+    if (result == null) return;
+    final hasFailure = result.failures.isNotEmpty;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            hasFailure
+                ? '素材导出完成，${result.failures.length} 个文件失败，详见 manifest.json。'
+                : '素材已导出到 ${result.rootPath}',
+          ),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: '打开文件夹',
+            onPressed: () async {
+              try {
+                await job.target.openInFileManager();
+              } catch (_) {}
+            },
+          ),
+        ),
+      );
+  }
+
   Future<void> _deleteCached(List<StoryEntry> entries) async {
-    if (_busy || _deletingCache || _movingDirectory) return;
+    if (_busy ||
+        _deletingCache ||
+        _movingDirectory ||
+        _hasActiveExports) {
+      return;
+    }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -618,7 +777,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
         !mounted ||
         _busy ||
         _deletingCache ||
-        _movingDirectory) {
+        _movingDirectory ||
+        _hasActiveExports) {
       return;
     }
     setState(() => _deletingCache = true);
@@ -663,7 +823,13 @@ class _StoryLauncherState extends State<StoryLauncher> {
   }
 
   Future<void> _clearCache() async {
-    if (_hasActiveJobs || _busy || _deletingCache || _movingDirectory) return;
+    if (_hasActiveJobs ||
+        _hasActiveExports ||
+        _busy ||
+        _deletingCache ||
+        _movingDirectory) {
+      return;
+    }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -689,6 +855,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
     if (confirm != true ||
         !mounted ||
         _hasActiveJobs ||
+        _hasActiveExports ||
         _busy ||
         _deletingCache ||
         _movingDirectory) {
@@ -962,6 +1129,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                     onRemoveJob: _removeCacheJob,
                                     onDeleteCached: _deleteCached,
                                     deleting: _deletingCache,
+                                    exporting: _hasActiveExports,
                                     onBrowse: () => setState(() {
                                       _page = 0;
                                       _activeGroup = null;
@@ -996,7 +1164,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
                                         _movingDirectory ||
                                         _hasActiveJobs ||
                                         _deletingCache ||
-                                        _busy,
+                                        _busy ||
+                                        _hasActiveExports,
                                   ),
                                 ],
                               ),
@@ -1619,6 +1788,25 @@ class _StoryLauncherState extends State<StoryLauncher> {
     );
   }
 
+  /// 导出菜单文案：运行中显示进度，其余状态下打开结果或新对话框。
+  Widget _exportMenuLabel(StoryEntry entry) {
+    final job = _exportJobs[entry.path];
+    if (job == null) return const Text('导出素材…');
+    return AnimatedBuilder(
+      animation: job,
+      builder: (context, _) {
+        if (job.status == ExportJobStatus.running) {
+          final percent = (job.progress * 100).round();
+          return Text(job.total == 0 ? '导出中…' : '导出中 $percent%');
+        }
+        final result = job.result;
+        if (result != null && result.completed) return const Text('已导出，点击查看');
+        if (result != null) return const Text('部分失败，点击查看');
+        return const Text('查看导出结果');
+      },
+    );
+  }
+
   Widget _stageRow(StoryEntry entry) {
     final hasProgress =
         _repository.store.getPlaybackProgress(entry.path) != null;
@@ -1725,7 +1913,11 @@ class _StoryLauncherState extends State<StoryLauncher> {
                 // 置零消除 under 模式对 IconButton 默认 padding 的 8px 补偿，
                 // 使菜单恰好落在按钮下方而不与按钮重叠。
                 padding: EdgeInsets.zero,
-                onSelected: (_) => _cacheEntry(entry),
+                onSelected: (value) => switch (value) {
+                  'cache' => _cacheEntry(entry),
+                  'export' => _openExportDialog(entry),
+                  _ => null,
+                },
                 itemBuilder: (context) => [
                   PopupMenuItem(
                     value: 'cache',
@@ -1754,6 +1946,26 @@ class _StoryLauncherState extends State<StoryLauncher> {
                       ],
                     ),
                   ),
+                  if (_repository.store.isDesktop)
+                    PopupMenuItem(
+                      value: 'export',
+                      enabled:
+                          !activeJob &&
+                          !_deletingCache &&
+                          !_movingDirectory,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.collections_outlined,
+                            size: 20,
+                            color: AppColors.of(context).secondary,
+                          ),
+                          const SizedBox(width: 12),
+                          _exportMenuLabel(entry),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ],
@@ -1766,6 +1978,9 @@ class _StoryLauncherState extends State<StoryLauncher> {
   @override
   void dispose() {
     for (final job in _cacheJobs.values) {
+      job.control.cancel();
+    }
+    for (final job in _exportJobs.values) {
       job.control.cancel();
     }
     unawaited(_cacheNetworkSubscription?.cancel());

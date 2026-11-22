@@ -5,6 +5,7 @@ import 'package:html/parser.dart' as html;
 import 'package:http/http.dart' as http;
 
 import '../script.dart';
+import 'asset_package.dart';
 import 'asset_store.dart';
 import 'cache_control.dart';
 import 'media_catalog.dart';
@@ -419,6 +420,62 @@ class StoryRepository {
       }
     }
     throw failure!;
+  }
+
+  /// 构建一篇剧情的素材导出清单：脚本优先读剧情层缓存，未命中走网络；
+  /// 素材条目由 MediaCatalog.collect 聚合，脚本镜像作为备用地址。
+  /// 只加载脚本，不下载任何素材字节。
+  Future<AssetPackage> packageEntry(
+    StoryEntry entry, {
+    StoryGroup? group,
+  }) async {
+    final (scriptUri, document) = await _loadDocumentForExport(entry);
+    final candidates = _entryUriCandidates(entry);
+    final catalog = await _loadCacheCatalog();
+    final warnings = <String>[];
+    final refs = catalog.collect(document.script, warnings);
+    return AssetPackage.fromRefs(
+      storyTitle: entry.title,
+      storyPath: entry.path,
+      groupName: group?.name ?? '',
+      entryType: group?.entryType ?? 'NONE',
+      refs: refs,
+      script: [
+        AssetFile(
+          scriptUri,
+          'script/${_scriptExportName(entry)}',
+          alternates: [
+            for (final uri in candidates)
+              if (uri != scriptUri) uri,
+          ],
+        ),
+      ],
+      unresolved: warnings,
+    );
+  }
+
+  /// 导出用的脚本文件名：静态脚本取末段，PRTS 页面条目取页面名。
+  String _scriptExportName(StoryEntry entry) {
+    final uri = Uri.tryParse(entry.path);
+    final last = uri != null && uri.hasScheme
+        ? Uri.decodeComponent(uri.pathSegments.last)
+        : entry.path.split('/').last;
+    return '${sanitizeFileName(last)}.txt';
+  }
+
+  /// 导出清单加载顺序：先按候选地址读剧情层缓存，全部未命中再联网。
+  Future<(Uri, StoryDocument)> _loadDocumentForExport(StoryEntry entry) async {
+    for (final uri in _entryUriCandidates(entry)) {
+      try {
+        final bytes = await store.readStoryCache(uri, entry.path);
+        if (bytes != null && bytes.isNotEmpty) {
+          return (uri, _parseDocument(uri, bytes, title: entry.title));
+        }
+      } catch (_) {
+        // 缓存不可读时继续尝试下一个候选。
+      }
+    }
+    return _loadEntryDocument(entry);
   }
 
   List<StoryGroup> _parseGameplayIndex(String source) {

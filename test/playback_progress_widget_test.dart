@@ -1,7 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:arknights_story_player/story_player/story_player.dart';
 import 'package:arknights_story_player/story_player/ui/story_stage.dart';
+
+import 'story_video_test.dart' show FakeStoryVideo;
 
 Future<StoryEngine> _mountPlayer(
   WidgetTester tester, {
@@ -10,6 +12,7 @@ Future<StoryEngine> _mountPlayer(
   required List<PlaybackCheckpoint?> saved,
   bool archiveMode = false,
   int? initialCommandIndex,
+  StoryVideo? video,
 }) async {
   final assets = AssetStore();
   addTearDown(assets.close);
@@ -25,6 +28,7 @@ Future<StoryEngine> _mountPlayer(
         home: StoryPlayer(
           story: story,
           audio: SilentStoryAudio(),
+          video: video,
           resumable: resumable,
           archiveMode: archiveMode,
           initialCommandIndex: initialCommandIndex,
@@ -46,6 +50,58 @@ Future<StoryEngine> _mountPlayer(
 }
 
 void main() {
+  testWidgets('取消后继续播放视频，确认后继续剧情', (tester) async {
+    final video = FakeStoryVideo();
+    final engine = await _mountPlayer(
+      tester,
+      script: StoryScript.parse('[Video(res="video/mid.mp4")]\n视频后对白'),
+      saved: [],
+      video: video,
+    );
+    final skip = find.byTooltip('跳过视频');
+    expect(skip, findsNothing);
+    await tester.tap(find.text('开始播放'));
+    await tester.pumpAndSettle();
+    await tester.tap(skip);
+    await tester.pumpAndSettle();
+    expect(find.text('跳过视频播放？'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(video.active, isTrue);
+    expect(engine.state.text, isEmpty);
+
+    await tester.tap(skip);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('跳过'));
+    await tester.pumpAndSettle();
+    expect(video.stops, 1);
+    expect(engine.state.text, '视频后对白');
+    expect(skip, findsNothing);
+  });
+
+  testWidgets('跳过片尾视频后自动完成并清除断点', (tester) async {
+    final video = FakeStoryVideo();
+    final saved = <PlaybackCheckpoint?>[];
+    final engine = await _mountPlayer(
+      tester,
+      script: StoryScript.parse('片尾前对白\n[Video(res="video/end.mp4")]'),
+      saved: saved,
+      video: video,
+    );
+    await tester.tap(find.text('开始播放'));
+    await tester.pumpAndSettle();
+    if (engine.typing) await engine.advance();
+    final playback = engine.advance();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('跳过视频'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('跳过'));
+    await tester.pumpAndSettle();
+    await playback;
+    expect(engine.finished, isTrue);
+    expect(find.text('重新播放'), findsOneWidget);
+    expect(saved.last, isNull);
+  });
   testWidgets('尚未开始就退出不会替换旧断点', (tester) async {
     final saved = <PlaybackCheckpoint?>[];
     await _mountPlayer(tester, script: StoryScript.parse('正文'), saved: saved);

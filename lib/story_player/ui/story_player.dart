@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/app_theme.dart';
+import '../data/asset_store.dart';
 import '../data/media_catalog.dart';
 import '../data/playback_progress.dart';
 import '../data/story_repository.dart';
@@ -14,8 +16,12 @@ import '../data/playback_settings.dart';
 import '../runtime/just_audio_output.dart';
 import '../runtime/story_audio.dart';
 import '../runtime/story_engine.dart';
+import '../runtime/story_video.dart';
+import '../runtime/video_player_output.dart';
 import '../runtime/playback_checkpoint.dart';
 import '../stage_state.dart';
+import '../fx/fx_asset.dart';
+import '../fx/fx_loader.dart';
 import 'story_stage.dart';
 import 'stage_painter.dart';
 import 'story_text.dart';
@@ -26,6 +32,7 @@ class StoryPlayer extends StatefulWidget {
     super.key,
     required this.story,
     this.audio,
+    this.video,
     this.settings = const PlaybackSettings(),
     this.resumable,
     this.onProgress,
@@ -35,6 +42,11 @@ class StoryPlayer extends StatefulWidget {
   });
   final PreparedStory story;
   final StoryAudio? audio;
+
+  /// 可注入的视频输出；测试或特殊宿主可传 [NoopStoryVideo]。缺省时按
+  /// 平台能力选择：有官方 video_player 实现的平台用 [VideoPlayerStoryVideo]，
+  /// 其余平台降级为 Noop 并记录诊断。
+  final StoryVideo? video;
   final PlaybackSettings settings;
 
   /// 可选恢复点：存在时开始画面额外提供「从上次继续」入口，
@@ -53,6 +65,7 @@ class StoryPlayer extends StatefulWidget {
 class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   late final StoryEngine engine;
   final Map<Uri, ui.Image> textures = {};
+  final Map<String, FxAsset> effectAssets = {};
   final Map<String, ui.Image> sprites = {};
   ui.FragmentShader? slideMaskShader;
   ui.Image? slideMask;
@@ -65,6 +78,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   late bool _archiveMode;
   String? _archiveNotice;
   Future<void>? _seekQueue;
+  int _seekRevision = 0;
   int _savedRevision = 0;
   bool _scrubbing = false;
   double? _scrubPosition;
@@ -77,8 +91,6 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   bool _progressHovered = false, _previewVisible = false;
   StoryStopPoint? _displayedPreviewStop;
   Timer? _previewDebounce, _previewShowTimer, _previewDismissTimer;
-  Timer? _thumbSnapTimer;
-  bool _thumbSnapping = false;
   StoryStopPoint? _previewStop;
   double? _scrubDragOriginX, _scrubDragOriginY;
   double _scrubStartPosition = 0;
@@ -116,8 +128,12 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     engine = StoryEngine(
       widget.story.document.script,
       variables: widget.story.catalog.variables,
+      effectAssets: effectAssets,
       typingInterval: Duration(milliseconds: widget.settings.typingMs.round()),
       autoWaitSeconds: widget.settings.autoDelay,
+      video:
+          widget.video ??
+          _createVideoOutput(widget.story.catalog, widget.story.assets),
       audio:
           widget.audio ??
           JustAudioOutput(
@@ -147,7 +163,95 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     unawaited(_prepare());
   }
 
+  /// 平台能力选择：官方 video_player 支持 Android/iOS/macOS/Web；
+  /// Windows 由 video_player_win（Media Foundation）补齐；Linux 无官方或
+  /// 轻量实现，降级为 Noop 并在诊断中说明。
+  StoryVideo _createVideoOutput(MediaCatalog catalog, AssetStore assets) {
+    final supported =
+        kIsWeb ||
+        [
+          TargetPlatform.android,
+          TargetPlatform.iOS,
+          TargetPlatform.macOS,
+          TargetPlatform.windows,
+        ].contains(defaultTargetPlatform);
+    if (supported) {
+      return VideoPlayerStoryVideo(
+        catalog,
+        assets,
+        onWarning: (message) {
+          if (mounted) {
+            engine.warn(message);
+            setState(() {});
+          }
+        },
+      );
+    }
+    return NoopStoryVideo(
+      reason: 'Linux 平台暂无剧情内嵌视频的官方或轻量播放器实现，视频段落已跳过',
+      // 显式注入的 Noop 同样要把跳过诊断回传引擎，与引擎默认 Noop 一致。
+      onWarning: (message) {
+        if (mounted) {
+          engine.warn(message);
+          setState(() {});
+        }
+      },
+    );
+  }
+
+  Future<void> _prepareEffects() async {
+    if (storyFxRoot.isEmpty) return;
+    late final FxLoader loader;
+    try {
+      loader = FxLoader(storyFxRoot, widget.story.assets);
+    } catch (e) {
+      engine.warn('特效目录配置失败：$e');
+      return;
+    }
+    final names = <String>{};
+    for (final c in widget.story.document.script.commands) {
+      if ((c.tag == 'bgeffect' || c.tag == 'effect') &&
+          c.value('name').isNotEmpty) {
+        try {
+          names.add(
+            resolveFxName(c.value('name'), widget.story.catalog.variables),
+          );
+        } catch (e) {
+          engine.warn('特效名称解析失败：$e');
+        }
+      }
+    }
+    for (final name in names) {
+      final decoded = <Uri, ui.Image>{};
+      try {
+        final asset = await loader.load(name);
+        if (!mounted) return;
+        for (final file in asset.textures) {
+          final uri = asset.textureUri(file);
+          final codec = await ui.instantiateImageCodec(await loader.bytes(uri));
+          try {
+            decoded[uri] = (await codec.getNextFrame()).image;
+          } finally {
+            codec.dispose();
+          }
+          if (!mounted) return;
+        }
+        effectAssets[name] = asset;
+        textures.addAll(decoded);
+        decoded.clear();
+      } catch (e) {
+        if (mounted) engine.warn('特效 $name 加载失败：$e');
+      } finally {
+        for (final image in decoded.values) {
+          image.dispose();
+        }
+      }
+    }
+  }
+
   Future<void> _prepare() async {
+    await _prepareEffects();
+    if (!mounted) return;
     final uris = widget.story.catalog.dependencies(
       widget.story.document.script,
       [],
@@ -257,11 +361,20 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     _progressHideTimer?.cancel();
     if (state != AppLifecycleState.resumed) {
       unawaited(_saveProgress(force: true));
+      // 切后台暂停剧情视频（音频/动画保持既有后台行为）：初始化窗口的
+      // 意图式暂停会阻止控制器就绪后自动开播。
+      unawaited(engine.video.pause());
+    } else {
+      // 引擎全局暂停（用户手动暂停）时不抢着恢复。
+      if (!engine.paused) unawaited(engine.video.resume());
     }
   }
 
   void _progressChanged() {
     unawaited(_saveProgress());
+    if (!_scrubbing && !_seekFlash && engine.cursor != _lastCursor) {
+      _scrubPosition = null;
+    }
     // 开始播放的头几秒展示进度条（功能可发现性），随后自动让位给剧情。
     if (_lastCursor == 0 && engine.cursor > 0 && _progressRevealed) {
       _scheduleProgressHide();
@@ -305,7 +418,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   StoryStopPoint? _nearestStop(double position) {
     final points = engine.stopPoints;
     if (points.isEmpty) return null;
-    final target = position * engine.script.commands.length;
+    final target = position * engine.script.commands.length - 1;
     var low = 0, high = points.length;
     while (low < high) {
       final middle = (low + high) >> 1;
@@ -324,7 +437,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   }
 
   /// [seekToPointer] 仅为单击跳转服务：按下点即映射为位置；
-  /// 按住拖动（粗扫）走增量映射——起始比例 + Δx，拖回原位即可取消（§0/S4）。
+  /// 按住拖动（粗扫）走增量映射——起始比例 + Δx，拖回原位即可恢复原位置。
   void _startScrub(
     DragStartDetails details,
     double width, {
@@ -332,8 +445,6 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   }) {
     if (_progressDisabled) return;
 
-    _thumbSnapTimer?.cancel();
-    _thumbSnapping = false;
     _previewDebounce?.cancel();
     _previewShowTimer?.cancel();
     _previewDismissTimer?.cancel();
@@ -343,7 +454,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     _finePull = 0;
     _scrubDragOriginX = details.localPosition.dx;
     _scrubDragOriginY = details.localPosition.dy;
-    _scrubStartPosition = engine.progress;
+    _scrubStartPosition = _scrubPosition ?? engine.progress;
     _previewStop = null;
     _displayedPreviewStop = null;
     _previewVisible = false;
@@ -440,57 +551,44 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     });
   }
 
-  void _finishScrub({bool allowSmallSeek = false}) {
+  void _finishScrub() {
     if (!_scrubbing) return;
     final position = _scrubPosition ?? engine.progress;
-    final moved = (position - _scrubStartPosition).abs();
-    final shouldSeek = allowSmallSeek || moved >= .015;
-
-    final target = shouldSeek ? _nearestStop(position) : null;
-
-    final snapPosition = target == null
-        ? _scrubStartPosition
-        : ((target.commandIndex + 1) / engine.script.commands.length).clamp(
-            0.0,
-            1.0,
-          );
+    final target = _nearestStop(position);
     setState(() {
       _scrubbing = false;
       _fineScrubbing = false;
       _finePull = 0;
       _scrubDragOriginX = null;
       _scrubDragOriginY = null;
-      _scrubPosition = snapPosition;
-      _thumbSnapping = true;
+      if (target == null) _scrubPosition = null;
     });
     _dismissPreview();
-    _thumbSnapTimer?.cancel();
-    _thumbSnapTimer = Timer(const Duration(milliseconds: 300), () {
-      if (!mounted) return;
-      setState(() {
-        if (target == null) _scrubPosition = null;
-        _thumbSnapping = false;
-      });
-    });
-    if (target == null) {
+    if (target == null ||
+        (!_seekFlash && target.commandIndex == _currentStop?.commandIndex)) {
       _revealProgress();
       return;
     }
-    unawaited(_seekWithFlash(target.commandIndex));
+    unawaited(_seekWithFlash(target.commandIndex, preserveScrubPosition: true));
   }
 
   /// 统一的 seek 通道：黑闪 100ms 入 → 确定性重放 → 黑闪 180ms 出（§5-A8）。
   /// 进度条松手、单击轨道与 Log 行跳转共用。
-  Future<void> _seekWithFlash(int commandIndex) {
+  Future<void> _seekWithFlash(
+    int commandIndex, {
+    bool preserveScrubPosition = false,
+  }) {
+    final revision = ++_seekRevision;
+    if (!preserveScrubPosition && !_scrubbing) _scrubPosition = null;
     final previous = _seekQueue;
     final operation = previous == null
-        ? _performSeekWithFlash(commandIndex)
-        : previous.then((_) => _performSeekWithFlash(commandIndex));
+        ? _performSeekWithFlash(commandIndex, revision)
+        : previous.then((_) => _performSeekWithFlash(commandIndex, revision));
     _seekQueue = operation;
     return operation;
   }
 
-  Future<void> _performSeekWithFlash(int commandIndex) async {
+  Future<void> _performSeekWithFlash(int commandIndex, int revision) async {
     if (!mounted) return;
 
     setState(() => _seekFlash = true);
@@ -504,9 +602,9 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
           .showSnackBar(const SnackBar(content: Text('该处剧情暂不支持跳转')));
     }
     setState(() => _seekFlash = false);
-    // 快速连拖时旧回调不得清掉进行中的新拖动位置。
-    if (!mounted || _scrubbing) return;
-    setState(() => _scrubPosition = null);
+    // 快速连拖时旧回调不得清掉新的拖动位置。
+    if (_scrubbing || revision != _seekRevision) return;
+    if (!ok) setState(() => _scrubPosition = null);
     _revealProgress();
   }
 
@@ -679,7 +777,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                         ? null
                         : (details) {
                             // 隐藏态轻点只呼出不跳转（防误触）；
-                            // 显示态轻点才吸附最近停顿点跳转。
+                            // 显示态轻点才跳转到附近的停顿点。
                             if (!_progressActive) {
                               _revealProgress();
                               return;
@@ -691,7 +789,7 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                               constraints.maxWidth,
                               seekToPointer: true,
                             );
-                            _finishScrub(allowSmallSeek: true);
+                            _finishScrub();
                           },
                     onPanStart: disabled
                         ? null
@@ -745,35 +843,20 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                                   final thumbRadius = thickness <= 10
                                       ? 4 + (thickness - 4) * 2 / 3
                                       : 8 + (thickness - 10) / 6;
-                                  return TweenAnimationBuilder<double>(
-                                    tween: Tween<double>(end: position),
-                                    duration: Duration(
-                                      milliseconds: _thumbSnapping ? 300 : 0,
+                                  return CustomPaint(
+                                    painter: _ProgressTrackPainter(
+                                      value: position,
+                                      disabled: disabled,
+                                      thickness: thickness,
+                                      thumbRadius: thumbRadius,
+                                      // 精细模式刻度点（S2）：随展开淡入。
+                                      tickAlpha: _fineScrubbing ? fineEased : 0,
+                                      tickFractions: [
+                                        for (final stop in stopPoints)
+                                          (stop.commandIndex + 1) /
+                                              engine.script.commands.length,
+                                      ],
                                     ),
-                                    curve: _thumbSnapping
-                                        ? Curves.easeOutBack
-                                        : Curves.linear,
-                                    builder: (context, animatedPosition, _) =>
-                                        CustomPaint(
-                                          painter: _ProgressTrackPainter(
-                                            value: animatedPosition,
-                                            disabled: disabled,
-                                            thickness: thickness,
-                                            thumbRadius: thumbRadius,
-                                            // 精细模式刻度点（S2）：随展开淡入。
-                                            tickAlpha: _fineScrubbing
-                                                ? fineEased
-                                                : 0,
-                                            tickFractions: [
-                                              for (final stop in stopPoints)
-                                                (stop.commandIndex + 1) /
-                                                    engine
-                                                        .script
-                                                        .commands
-                                                        .length,
-                                            ],
-                                          ),
-                                        ),
                                   );
                                 },
                               ),
@@ -1025,6 +1108,25 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
     },
   );
 
+  Future<void> _confirmSkipVideo(Object session) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('跳过视频播放？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('跳过'),
+          ),
+        ],
+      ),
+    );
+    if (mounted && confirmed == true) await engine.skipVideo(session);
+  }
   Future<void> _continueFromArchive() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1238,6 +1340,14 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
                 ),
               ),
             ),
+          // 剧情内嵌视频覆盖层（[Video] 指令）：黑底全屏、按原比例居中，
+          // 盖住舞台与对白，但让位给进度条、顶部工具条与 seek 黑闪层。
+          // 点击穿透到舞台：引擎播放视频时 advance 无效，与参考端一致。
+          Positioned.fill(
+            child: IgnorePointer(
+              child: engine.video.buildSurface() ?? const SizedBox.shrink(),
+            ),
+          ),
           if (!ready)
             const Center(
               child: Column(
@@ -1376,66 +1486,81 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
           ),
           AnimatedBuilder(
             animation: engine,
-            builder: (context, _) => AnimatedOpacity(
-              opacity: engine.theaterMode ? 0 : 1,
-              duration: const Duration(milliseconds: 200),
-              child: IgnorePointer(
-                ignoring: engine.theaterMode,
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: SafeArea(
-                    bottom: false,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _overlayButton(
-                            tooltip: '退出播放器',
-                            icon: Icons.arrow_back,
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
+            builder: (context, _) {
+              final videoSession = engine.videoSession;
+              final hideToolbar = engine.theaterMode && videoSession == null;
+              return AnimatedOpacity(
+                opacity: hideToolbar ? 0 : 1,
+                duration: const Duration(milliseconds: 200),
+                child: IgnorePointer(
+                  ignoring: hideToolbar,
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: SafeArea(
+                      bottom: false,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            if (!engine.theaterMode)
                               _overlayButton(
-                                tooltip: '对话记录',
-                                icon: Icons.history,
-                                onPressed: () => _showLog(),
-                              ),
-                              _overlayButton(
-                                tooltip: '资源与指令诊断',
-                                icon: Icons.info_outline,
-                                onPressed: () => _showLog(diagnostics: true),
-                                badge: engine.warnings.isNotEmpty,
-                              ),
-                              _overlayButton(
-                                tooltip: engine.autoMode != 'default'
-                                    ? '自动播放：开启'
-                                    : '手动播放：开启',
-                                icon: engine.autoMode != 'default'
-                                    ? Icons.play_circle_outline
-                                    : Icons.touch_app,
-                                onPressed: !engine.state.metadata.isAutoable
-                                    ? null
-                                    : () => engine.setAutoMode(
-                                        engine.autoMode == 'default'
-                                            ? 'button_auto'
-                                            : 'default',
-                                      ),
-                              ),
-                            ],
-                          ),
-                        ],
+                                tooltip: '退出播放器',
+                                icon: Icons.arrow_back,
+                                onPressed: () => Navigator.pop(context),
+                              )
+                            else
+                              const SizedBox.shrink(),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (!engine.theaterMode) ...[
+                                  _overlayButton(
+                                    tooltip: '对话记录',
+                                    icon: Icons.history,
+                                    onPressed: () => _showLog(),
+                                  ),
+                                  _overlayButton(
+                                    tooltip: '资源与指令诊断',
+                                    icon: Icons.info_outline,
+                                    onPressed: () => _showLog(diagnostics: true),
+                                    badge: engine.warnings.isNotEmpty,
+                                  ),
+                                  _overlayButton(
+                                    tooltip: engine.autoMode != 'default'
+                                        ? '自动播放：开启'
+                                        : '手动播放：开启',
+                                    icon: engine.autoMode != 'default'
+                                        ? Icons.play_circle_outline
+                                        : Icons.touch_app,
+                                    onPressed: !engine.state.metadata.isAutoable
+                                        ? null
+                                        : () => engine.setAutoMode(
+                                            engine.autoMode == 'default'
+                                                ? 'button_auto'
+                                                : 'default',
+                                          ),
+                                  ),
+                                ],
+                                if (videoSession != null)
+                                  _overlayButton(
+                                    tooltip: '跳过视频',
+                                    icon: Icons.skip_next,
+                                    onPressed: () => _confirmSkipVideo(videoSession),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
           if (_archiveMode && ready)
             Positioned(
@@ -1481,7 +1606,6 @@ class _StoryPlayerState extends State<StoryPlayer> with WidgetsBindingObserver {
   @override
   void dispose() {
     _previewDebounce?.cancel();
-    _thumbSnapTimer?.cancel();
     _previewShowTimer?.cancel();
     _previewDismissTimer?.cancel();
     _progressHideTimer?.cancel();

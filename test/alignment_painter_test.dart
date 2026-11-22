@@ -1,7 +1,11 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:arknights_story_player/story_player/data/asset_store.dart';
 import 'package:arknights_story_player/story_player/data/media_catalog.dart';
+import 'package:arknights_story_player/story_player/fx/fx_asset.dart';
+import 'package:arknights_story_player/story_player/fx/fx_loader.dart';
+import 'package:arknights_story_player/story_player/fx/fx_simulation.dart';
 import 'package:arknights_story_player/story_player/stage_state.dart';
 import 'package:arknights_story_player/story_player/script.dart';
 import 'package:arknights_story_player/story_player/ui/stage_painter.dart';
@@ -53,6 +57,176 @@ void main() {
     final offset = (y * 1280 + x) * 4;
     return List.generate(4, (i) => bytes.getUint8(offset + i));
   }
+
+  test('白黑遮罩只影响边缘，旧电视色调按独立图层叠加', () async {
+    final store = AssetStore();
+    addTearDown(store.close);
+    final loader = FxLoader('asset:///assets/fx-runtime/', store);
+    final gray = await solid(const ui.Color(0xff808080));
+    final state = StageState()..images.add(StageImage('gray')..fit = 'fill');
+    const grayPixel = [128, 128, 128, 255];
+    final textures = {catalog.image('gray'): gray};
+
+    Future<StageEffect> effect(String name, int layer) async => StageEffect(
+      FxSimulation(await loader.load(name)),
+      group: 'bgeffect',
+      layer: layer,
+      offset: const ui.Offset(300, 0),
+    );
+    Future<List<int>> sample([int x = 640]) =>
+        pixel(state, textures: textures, x: x);
+
+    final white = await effect('avg_062_white_01', 1);
+    state.effects.add(white);
+    expect(await sample(), grayPixel);
+    final whiteEdge = await sample(4);
+    expect(whiteEdge[0], greaterThan(148));
+    expect((await sample(1275))[0], closeTo(whiteEdge[0], 1));
+    white.delayRemaining = 1;
+    expect(await sample(4), grayPixel);
+    white
+      ..delayRemaining = 0
+      ..alpha = .5;
+    expect((await sample(4))[0], inExclusiveRange(128, whiteEdge[0]));
+
+    final black = await effect('avg_062_black_01', 1);
+    state.effects
+      ..clear()
+      ..add(black);
+    expect(await sample(), grayPixel);
+    expect((await sample(4))[0], lessThan(100));
+    final oldTv = await effect('avg_old_tv_01', 2);
+    state.effects.add(oldTv);
+    final warmCenter = await sample();
+    expect(warmCenter[0], greaterThan(128));
+    expect(warmCenter[2], lessThan(128));
+    state.effects.remove(oldTv);
+    expect(await sample(), grayPixel);
+    state.blockerAlpha = 1;
+    state.effects
+      ..clear()
+      ..add(white);
+    expect(await sample(4), [0, 0, 0, 255]);
+  });
+
+  test('背景特效按资源设置绘制在 CG 前面或后面', () async {
+    final red = await solid(const ui.Color(0xffff0000));
+    final green = await solid(const ui.Color(0xff00ff00));
+    Future<List<int>> sample({
+      required bool afterImages,
+      bool afterBlocker = false,
+    }) async {
+      final asset = FxAsset.parse({
+        'version': 1,
+        'name': 'layer_test',
+        'duration': 1,
+        'isLoop': true,
+        if (afterImages) 'drawAfterImages': true,
+        'drawAfterBlocker': afterBlocker,
+        'emitters': [
+          {
+            'name': 'quad',
+            'kind': 'mesh',
+            'scale': [100, 100],
+            'material': {'main': 'red.png', 'srcBlend': 5, 'dstBlend': 10},
+          },
+        ],
+      }, base: Uri.parse('https://example.test/fx/'));
+      final state = StageState()
+        ..images.add(StageImage('color')..fit = 'fill')
+        ..effects.add(
+          StageEffect(FxSimulation(asset), group: 'bgeffect', layer: 0),
+        );
+      return pixel(
+        state,
+        textures: {
+          catalog.image('color'): green,
+          asset.textureUri('red.png'): red,
+        },
+      );
+    }
+
+    expect(await sample(afterImages: false), [0, 255, 0, 255]);
+    expect(await sample(afterImages: true), [255, 0, 0, 255]);
+    expect(await sample(afterImages: false, afterBlocker: true), [
+      0,
+      255,
+      0,
+      255,
+    ]);
+    expect(await sample(afterImages: true, afterBlocker: true), [
+      255,
+      0,
+      0,
+      255,
+    ]);
+  });
+
+  test('背景失焦时背景特效与背景共用离屏层，保留叠加混合并同步模糊', () async {
+    final darkBlue = await solid(const ui.Color(0xff102030));
+    final addGreen = await solid(const ui.Color(0xff004000));
+    final asset = FxAsset.parse({
+      'version': 1,
+      'name': 'bg_add_focus',
+      'duration': 1,
+      'isLoop': true,
+      'emitters': [
+        {
+          'name': 'quad',
+          'kind': 'mesh',
+          'scale': [400, 400],
+          'material': {'main': 'green.png', 'srcBlend': 5, 'dstBlend': 1},
+        },
+      ],
+    }, base: Uri.parse('https://example.test/fx/'));
+    final state = StageState()
+      ..backgrounds.add(StageImage('bg')..fit = 'fill')
+      ..focus['bg'] = 0.8
+      ..effects.add(
+        StageEffect(FxSimulation(asset), group: 'bgeffect', layer: 1),
+      );
+    final rgba = await pixel(
+      state,
+      textures: {
+        catalog.image('bg'): darkBlue,
+        asset.textureUri('green.png'): addGreen,
+      },
+    );
+    // 同层 Additive 叠加应在原暗蓝背景 (16, 32, 48) 上增加绿色分量，而不是覆盖成纯绿。
+    expect(rgba[0], closeTo(16, 2));
+    expect(rgba[1], closeTo(96, 2));
+    expect(rgba[2], closeTo(48, 2));
+    expect(rgba[3], 255);
+  });
+
+  test('声明前景的刀光在完整黑幕上绘制，普通特效仍受遮罩覆盖', () async {
+    final red = await solid(const ui.Color(0xffff0000));
+    for (final foreground in [false, true]) {
+      final asset = FxAsset.parse({
+        'version': 1,
+        'name': 'slash',
+        'duration': 1,
+        'isLoop': false,
+        'drawAfterBlocker': foreground,
+        'emitters': [
+          {
+            'name': 'quad',
+            'kind': 'mesh',
+            'scale': [100, 100],
+            'material': {'main': 'red.png', 'srcBlend': 5, 'dstBlend': 10},
+          },
+        ],
+      });
+      final state = StageState()..blockerAlpha = 1;
+      state.effects.add(
+        StageEffect(FxSimulation(asset), group: 'effect', layer: 1),
+      );
+      expect(
+        await pixel(state, textures: {asset.textureUri('red.png'): red}),
+        foreground ? [255, 0, 0, 255] : [0, 0, 0, 255],
+      );
+    }
+  });
 
   for (final focus in [false, true]) {
     test(

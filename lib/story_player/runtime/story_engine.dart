@@ -6,7 +6,11 @@ import 'package:flutter/foundation.dart';
 
 import '../script.dart';
 import '../stage_state.dart';
+import '../fx/fx_asset.dart';
+import '../fx/fx_loader.dart';
+import '../fx/fx_simulation.dart';
 import 'story_audio.dart';
+import 'story_video.dart';
 import 'playback_checkpoint.dart';
 
 typedef CommandHandler = Future<void> Function(StoryCommand command);
@@ -21,7 +25,7 @@ class StoryPreviewCharacter {
   final double brightness;
 }
 
-/// 可供进度条吸附的剧情停顿点。commandIndex 是脚本命令索引，而不是行号。
+/// 进度条可跳转的剧情停顿点。commandIndex 是脚本命令索引，而不是行号。
 class StoryStopPoint {
   const StoryStopPoint({
     required this.commandIndex,
@@ -360,6 +364,7 @@ class StoryEngine extends ChangeNotifier {
   StoryEngine(
     this.script, {
     StoryAudio? audio,
+    StoryVideo? video,
     this.elapsed,
     this.variables = const {},
     this.typingInterval = const Duration(milliseconds: 40),
@@ -367,7 +372,13 @@ class StoryEngine extends ChangeNotifier {
     this.firstRead = true,
     this.characterArtSize,
     this.imageNaturalWidth,
-  }) : audio = audio ?? SilentStoryAudio() {
+    this.effectAssets = const {},
+  }) : audio = audio ?? SilentStoryAudio(),
+       video = video ?? NoopStoryVideo() {
+    // 默认注入的 Noop 输出把警告回传引擎诊断，与旧版跳过行为一致。
+    if (video == null) {
+      (this.video as NoopStoryVideo).onWarning = warn;
+    }
     defaultSpeed = PlaySpeed(
       typingMs: typingInterval.inMicroseconds / 1000,
       animateRatio: 1,
@@ -383,6 +394,7 @@ class StoryEngine extends ChangeNotifier {
 
   final StoryScript script;
   final StoryAudio audio;
+  final StoryVideo video;
   final Map<String, dynamic> variables;
   final Duration typingInterval;
   final double? autoWaitSeconds;
@@ -394,6 +406,7 @@ class StoryEngine extends ChangeNotifier {
 
   /// 图片原始宽度（像素），供 showitem cutin 窗口缺省宽度计算（参考端回退 100）。
   final double? Function(String image)? imageNaturalWidth;
+  final Map<String, FxAsset> effectAssets;
   final Map<String, CommandHandler> handlers = {};
   final List<String> warnings = [];
   final Map<String, _Animation> _animations = {};
@@ -410,6 +423,29 @@ class StoryEngine extends ChangeNotifier {
   final List<int> _playbackTrace = [];
   final Map<String, StoryCommand> _resumeTracks = {};
   bool _rebuilding = false;
+  (int, Completer<void>)? _videoPlayback;
+
+  /// 当前视频的标识，用于确认框关闭后核对仍是同一段视频。
+  Object? get videoSession {
+    final playback = _videoPlayback;
+    return playback != null && playback.$1 == _epoch ? playback.$2 : null;
+  }
+
+  Future<void> skipVideo(Object session) async {
+    final skip = _videoPlayback?.$2;
+    if (_disposed ||
+        skip == null ||
+        skip.isCompleted ||
+        !identical(session, videoSession)) {
+      return;
+    }
+    skip.complete();
+    try {
+      await video.stop();
+    } catch (e) {
+      if (!_disposed) warn('停止视频失败：$e');
+    }
+  }
 
   int get checkpointRevision =>
       cursor > 0 || running || _playbackTrace.isNotEmpty
@@ -639,6 +675,18 @@ class StoryEngine extends ChangeNotifier {
     _lastTick = now;
     if (paused || _disposed || _rebuilding) return;
     var changed = false;
+    for (final effect in state.effects.toList()) {
+      final delayMs = effect.delayRemaining * 1000;
+      final advanceMs = math.max(0.0, dt - delayMs).toDouble();
+      effect.delayRemaining = math.max(0.0, delayMs - dt).toDouble() / 1000;
+      if (delayMs > 0 && advanceMs == 0) {
+        changed = true;
+        continue;
+      }
+      effect.simulation.advance(advanceMs / 1000);
+      changed = true;
+      if (!effect.simulation.active) state.effects.remove(effect);
+    }
     for (final frame in state.interludes.values) {
       if (!frame.voiceActive || !frame.visible) continue;
       frame.voicePhase = (frame.voicePhase + dt / 1000) % (math.pi * 2);
@@ -843,6 +891,110 @@ class StoryEngine extends ChangeNotifier {
       node.shakeOffsetX = 0;
       node.shakeOffsetY = 0;
       node.jumpOffsetY = 0;
+    }
+  }
+
+  Future<void> _effect(StoryCommand c) async {
+    final group = c.tag;
+    final layer = c.number('layer').toInt();
+    final name = c.value('name');
+    final seconds = scaled(c.number('fadetime', .3));
+    final fades = c.flag('fade');
+    final delay = math.max(0.0, scaled(c.number('delay'))).toDouble();
+    final key = 'fx:$group:$layer';
+    if (_rebuilding && group == 'effect') return;
+    if (name.isEmpty) {
+      final clearing = state.effects
+          .where(
+            (e) =>
+                e.group == group &&
+                (!c.args.containsKey('layer') || e.layer == layer),
+          )
+          .toList();
+      Future<void> clear(StageEffect effect) async {
+        if (effect.delayRemaining > 0) {
+          _cancelAnimation(
+            'fx:${effect.group}:${effect.layer}:${identityHashCode(effect)}',
+          );
+          state.effects.remove(effect);
+          _changed();
+          return;
+        }
+        final alpha = effect.alpha;
+        await animate(
+          'fx:$group:${effect.layer}:${identityHashCode(effect)}',
+          fades ? seconds : 0,
+          (t) => effect.alpha = alpha * (1 - t),
+        );
+        state.effects.remove(effect);
+        _changed();
+      }
+
+      final done = Future.wait(clearing.map(clear));
+      if (c.flag('block')) {
+        await done;
+      } else {
+        unawaited(done);
+      }
+      return;
+    }
+    if (group == 'bgeffect') {
+      final replaced = state.effects
+          .where((e) => e.group == group && e.layer == layer)
+          .toList();
+      for (final previous in replaced) {
+        _cancelAnimation('$key:${identityHashCode(previous)}');
+        state.effects.remove(previous);
+      }
+    }
+    late final String resolved;
+    try {
+      resolved = resolveFxName(name, variables);
+    } on FormatException catch (e) {
+      warn('第 ${c.line} 行：${e.message}');
+      return;
+    }
+    final asset = effectAssets[resolved];
+    if (asset == null) {
+      warn('第 ${c.line} 行：特效 $resolved 未加载（未打包或资源加载失败）');
+      return;
+    }
+    final effect = StageEffect(
+      FxSimulation(asset, seed: c.line, loop: group == 'effect' ? false : null),
+      group: group,
+      layer: layer,
+      flip: c.number('flip').toInt(),
+      offset: Offset(c.number('x'), c.number('y')),
+      rotation: c.number('roz') * math.pi / 180,
+      rotation3D: Offset(c.number('rox'), c.number('roy')) * (math.pi / 180),
+      delayRemaining: delay,
+      scale:
+          asset.emitters.any(
+            (e) =>
+                e.geometry != null ||
+                e.transform3D != null ||
+                e.animation != null,
+          )
+          ? const Offset(1, 1)
+          : Offset(
+              math.cos(c.number('roy') * math.pi / 180),
+              math.cos(c.number('rox') * math.pi / 180),
+            ),
+    );
+    state.effects.add(effect);
+    final done = animate(
+      '$key:${identityHashCode(effect)}',
+      fades ? seconds : 0,
+      (t) => effect.alpha = t,
+      delay: delay,
+    );
+    if (c.flag('block')) {
+      if (!fades && delay > 0) {
+        await animate('$key:start:${identityHashCode(effect)}', delay, (_) {});
+      }
+      await done;
+    } else {
+      unawaited(done);
     }
   }
 
@@ -1083,6 +1235,7 @@ class StoryEngine extends ChangeNotifier {
     _cancelShake();
     _resetMotions();
     clearOverlays();
+    unawaited(video.stop());
     final metadata = state.metadata;
     state = StageState()..metadata = metadata;
     cursor = 0;
@@ -1197,6 +1350,7 @@ class StoryEngine extends ChangeNotifier {
     _waitingInput = false;
     final epoch = _epoch;
     _autoClickAt = -1;
+    var playedVideo = false;
     _changed();
     try {
       while (!_disposed && epoch == _epoch && cursor < script.commands.length) {
@@ -1207,16 +1361,18 @@ class StoryEngine extends ChangeNotifier {
         if (c.tag == 'endtip' && autoMode == 'default') continue;
         _playbackTrace.add(cursor - 1);
         if (await _executeCommand(c)) break;
+        if (c.tag == 'video') playedVideo = true;
         if (epoch != _epoch || _disposed || state.choices.isNotEmpty) break;
         if (_waitingInput) break;
       }
       if (epoch == _epoch &&
           cursor >= script.commands.length &&
           state.choices.isEmpty &&
-          !state.dialogueVisible &&
+          (!state.dialogueVisible || playedVideo) &&
           !_waitingInput) {
         _finishCleanup();
         finished = true;
+        state.dialogueVisible = false;
         _waitingInput = false;
       }
     } finally {
@@ -1296,6 +1452,8 @@ class StoryEngine extends ChangeNotifier {
     _resetMultiline();
     _resetMotions();
     clearOverlays();
+    // 跳过节点中断正在播放的剧情视频（参考端 pendingWait.interrupt）。
+    unawaited(video.stop());
     running = false;
     _waitingInput = false;
     _autoClickAt = -1;
@@ -1388,6 +1546,22 @@ class StoryEngine extends ChangeNotifier {
           track.line,
           track.raw,
         );
+      }
+    }
+  }
+
+  Future<void> _executeVideo(StoryCommand c) async {
+    // 断点重建与 seek 重演不重播视频（一次性演出，与非循环音效一致）。
+    if (_rebuilding) return;
+    final skip = Completer<void>();
+    _videoPlayback = (_epoch, skip);
+    _changed();
+    try {
+      await Future.any([video.execute(c), skip.future]);
+    } finally {
+      if (identical(_videoPlayback?.$2, skip)) {
+        _videoPlayback = null;
+        _changed();
       }
     }
   }
@@ -1604,6 +1778,7 @@ class StoryEngine extends ChangeNotifier {
     _itemSlotInUse = false;
     _resetMultiline();
     await audio.stop();
+    unawaited(video.stop());
     if (!_disposed) {
       _changed();
       await advance();
@@ -1614,7 +1789,9 @@ class StoryEngine extends ChangeNotifier {
     paused = value;
     if (value) {
       await audio.pause();
+      await video.pause();
     } else {
+      await video.resume();
       await audio.resume();
     }
     _changed();
@@ -1711,18 +1888,12 @@ class StoryEngine extends ChangeNotifier {
       }
       _changed();
     });
-    register('bgeffect', (c) async {
-      warn('第 ${c.line} 行：bgeffect 参考端同样不支持，跳过');
-    });
-    register('effect', (c) async {
-      warn('第 ${c.line} 行：effect 参考端同样不支持，跳过');
-    });
-    register('video', (c) async {
-      warn('第 ${c.line} 行：video 需要平台播放器（Windows 无官方实现），本轮跳过');
-    });
-    register('spellsticker', (c) async {
-      warn('第 ${c.line} 行：spellsticker 依赖 FZTYSK/RoHMinSink 字体（未获授权），本轮跳过');
-    });
+    register('bgeffect', _effect);
+    register('effect', _effect);
+    // 参考端（StoryPlayer.DH9HUkmm.js case`video`）：url 优先、res 次之；
+    // 播放阻塞指令队列直到结束或出错，重建路径不重演，中断由 stop 触发。
+    // URL 解析与平台播放器在 StoryVideo 输出层，与音频同构。
+    register('video', _executeVideo);
     register('spellstickerclear', (_) async {});
     for (final tag in [
       'playmusic',
@@ -2434,11 +2605,12 @@ class StoryEngine extends ChangeNotifier {
     switch (action) {
       case 'move':
         final fromX = node.actionX, fromY = node.actionY;
-        await animate('characterMotion:$slot', seconds, (t) {
+        final move = animate('characterMotion:$slot', seconds, (t) {
           final e = _easeOutCubic(t);
           node.actionX = _lerp(fromX, fromX + xOffset, e);
           node.actionY = _lerp(fromY, fromY + yOffset, e);
         });
+        if (c.flag('isblock', c.flag('block', true))) await move;
       case 'jump':
         _startJump(
           slot,
@@ -2837,6 +3009,7 @@ class StoryEngine extends ChangeNotifier {
   // ============ avgdisplay ============
 
   Future<void> _avgDisplay(StoryCommand c) async {
+    // 保留参考端的数字样式名称用于诊断，不代表支持对应样式的渲染。
     const styleMap = {
       1: 'animetext',
       2: 'spine',
@@ -3706,6 +3879,7 @@ class StoryEngine extends ChangeNotifier {
     _cancelShake();
     _clock.stop();
     unawaited(audio.dispose());
+    unawaited(video.dispose());
     super.dispose();
   }
 }

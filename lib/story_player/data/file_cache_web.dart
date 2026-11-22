@@ -71,6 +71,12 @@ class FileCache {
     await web.window.caches.delete(_storyCacheName(story)).toDart;
   }
 
+  Future<int?> sizeOf(Uri uri, {String? story}) async {
+    // 浏览器端读取大小需要完整拉回响应体，成本与 read 相同；
+    // 预览体积统计对 Web 暂不提供精确值。
+    return null;
+  }
+
   Future<Uint8List?> read(
     Uri uri, {
     String? story,
@@ -95,8 +101,30 @@ class FileCache {
 
   Future<Uri> playableUri(Uri uri, {String? story}) async {
     final bytes = await read(uri, story: story);
-    return bytes == null
-        ? uri
-        : Uri.dataFromBytes(bytes, mimeType: 'audio/mpeg');
+    if (bytes == null) return uri;
+    // Web 用 data URI 内联播放；缓存无 MIME 记录，按扩展名标注：
+    // 现有素材音频均为 .mp3，剧情视频均为 .mp4，其余回退音频类型
+    // 保持旧行为。
+    final name = uri.pathSegments.isNotEmpty
+        ? uri.pathSegments.last
+        : uri.toString();
+    final mime = name.toLowerCase().endsWith('.mp4')
+        ? 'video/mp4'
+        : 'audio/mpeg';
+    return Uri.dataFromBytes(bytes, mimeType: mime);
+  }
+
+  Future<Uri> playableVideoUri(Uri uri, {String? story}) async {
+    final bytes = await read(uri, story: story);
+    if (bytes == null) return uri;
+    final blob = web.Blob(
+      [bytes.toJS].toJS,
+      web.BlobPropertyBag(type: 'video/mp4'),
+    );
+    return Uri.parse(web.URL.createObjectURL(blob));
+  }
+
+  void releaseVideoSource(Uri source) {
+    if (source.scheme == 'blob') web.URL.revokeObjectURL(source.toString());
   }
 }

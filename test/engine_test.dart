@@ -130,6 +130,33 @@ void main() {
     }
   });
 
+  testWidgets('非阻塞移动与后续遮罩并行', (tester) async {
+    final start = tester.binding.clock.now();
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[Character(name="left",name2="right")]
+[CharacterAction(name="left",type="move",xpos=160,fadetime=0.3,block=false)]
+[CharacterAction(name="right",type="move",xpos=50,fadetime=1,block=false)]
+[Blocker(a=1,fadetime=0.1,block=true)]
+结束
+'''),
+      elapsed: () => tester.binding.clock.now().difference(start),
+    );
+    try {
+      final ready = engine.start();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(engine.state.blockerAlpha, 1);
+      expect(engine.state.text, '结束');
+      await ready;
+      final right = engine.state.characters.singleWhere((c) => c.slot == 'r');
+      expect(right.actionX, inExclusiveRange(0, 50));
+      await tester.pump(const Duration(seconds: 1));
+      expect(right.actionX, closeTo(50, .001));
+    } finally {
+      engine.dispose();
+    }
+  });
   testWidgets('暂停冻结动画，重播取消旧的等待，不会串到新剧情', (tester) async {
     final initial = tester.binding.clock.now();
     final engine = StoryEngine(

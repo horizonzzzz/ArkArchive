@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "name": "avg_072_snow",
+  "duration": 0.01,
+  "isLoop": false,
+  "emitters": [
+    {
+      "name": "disabled_custom_shader",
+      "kind": "particle",
+      "position": [560, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "material": {
+        "main": "AVG_xue_02.png",
+        "tint": [1, 1, 1, 0],
+        "mainColor": [1, 1, 1, 1],
+        "srcBlend": 5,
+        "dstBlend": 10
+      },
+      "uv": {"enabled": true, "tiles": [2, 1], "timeMode": 0, "frame": {"scalar": 0}, "start": {"state": 3, "scalar": 1, "min": 0}, "cycles": 1},
+      "sorting": 0,
+      "loop": false,
+      "duration": 0.01,
+      "maxParticles": 0,
+      "rate": {"scalar": 0},
+      "bursts": [],
+      "lifetime": {"scalar": 2.2},
+      "speed": {"scalar": 0},
+      "size": {"scalar": 0},
+      "sizeY": {"scalar": 0},
+      "startRotation": {"state": 3, "scalar": 0.2, "min": -0.2},
+      "gravity": {"scalar": 0},
+      "startColor": [[0, 1, 1, 1, 0.8]],
+      "shape": {"enabled": true, "type": 5, "scale": [2.4, 8]},
+      "velocity": {"enabled": true, "x": {"scalar": -5.2}, "y": {"scalar": -0.2}}
+    }
+  ]
+}

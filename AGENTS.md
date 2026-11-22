@@ -20,6 +20,7 @@
 - [剧情馆与应用导航](docs/story-library.md)：目录来源、搜索分页、页面状态与播放入口。
 - [剧情播放器](docs/story-player.md)：脚本解释、演出时序、音频、断点与人物回放保护。
 - [资源映射与离线缓存](docs/asset-cache.md)：资源作用域、完整缓存、任务取消、平台存储和目录迁移。
+- [素材导出](docs/story-export.md)：资源清单模型、预览与试听、导出流程、平台边界。
 - [设置、应用更新与发行](docs/settings-and-updates.md)：偏好持久化、更新产物选择与发行约定。
 - [人物档案](docs/character-archive.md)：人物数据、构建验收、人工维护和台词定位回放。
 
