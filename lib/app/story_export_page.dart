@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../story_player/data/asset_package.dart';
 import '../story_player/data/asset_store.dart';
+import '../story_player/data/export_target.dart';
 import '../story_player/data/media_catalog.dart';
 import '../story_player/data/preview_cache.dart';
 import '../story_player/data/story_repository.dart';
@@ -59,6 +60,10 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
   int _audioFilter = 0;
   ExportJob? _job;
   bool _opening = false;
+
+  /// 平台展示能力（目的地文案、目录选择、完成动作）由导出目标提供，
+  /// 界面不散落平台判断；任务视图内再以 job.target 为准。
+  final _target = ExportTarget();
 
   static const _imageCategories = [
     (Icons.image_outlined, '图片'),
@@ -210,21 +215,28 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
   Widget build(BuildContext context) {
     final job = _job;
     return Dialog(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 880, maxHeight: 660),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _header(context),
-            Flexible(
-              child: job == null
-                  ? _browseBody(context)
-                  : _jobBody(context, job),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // 按对话框可用宽度选布局：窄屏（手机竖屏）单列，宽屏双栏。
+          // 固定 176 的侧栏会把右侧预览区挤成细条，不能沿用到手机。
+          final compact = constraints.maxWidth < 700;
+          return ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 880, maxHeight: 660),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _header(context),
+                Flexible(
+                  child: job == null
+                      ? _browseBody(context, compact)
+                      : _jobBody(context, job),
+                ),
+                _footer(context, compact),
+              ],
             ),
-            _footer(context),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -278,7 +290,7 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
     );
   }
 
-  Widget _browseBody(BuildContext context) {
+  Widget _browseBody(BuildContext context, bool compact) {
     final package = _package;
     if (_loadError != null) {
       return Column(
@@ -313,13 +325,47 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
         ),
       );
     }
+    if (compact) {
+      // 竖屏窄屏：分类横向置顶，条目网格占满宽度。
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _categoryBar(context),
+          Expanded(child: _itemsPanel(context, compact)),
+        ],
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(width: 176, child: _navPanel(context)),
         VerticalDivider(width: 1, color: AppColors.of(context).borderSubtle),
-        Expanded(child: _itemsPanel(context)),
+        Expanded(child: _itemsPanel(context, compact)),
       ],
+    );
+  }
+
+  /// 窄屏分类栏：与侧栏同一组分类，带计数，横向可滚动。
+  Widget _categoryBar(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
+      child: Row(
+        children: [
+          for (var i = 0; i < _imageCategories.length; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            ChoiceChip(
+              label: Text('${_imageCategories[i].$2} ${_categoryItems(i).length}'),
+              selected: _category == i,
+              onSelected: (_) => setState(() {
+                _category = i;
+                _imageFilter = 0;
+                _audioFilter = 0;
+              }),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -401,7 +447,7 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
     );
   }
 
-  Widget _itemsPanel(BuildContext context) {
+  Widget _itemsPanel(BuildContext context, bool compact) {
     final items = _filteredItems();
     final chips = _filterChips(context, items.length);
     return Column(
@@ -422,7 +468,7 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
               : switch (_category) {
                   2 => _audioList(context, items),
                   3 => _scriptRow(context, items.single),
-                  _ => _assetGrid(context, items),
+                  _ => _assetGrid(context, items, compact),
                 },
         ),
       ],
@@ -478,15 +524,24 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
     );
   }
 
-  Widget _assetGrid(BuildContext context, List<AssetItem> items) {
+  Widget _assetGrid(BuildContext context, List<AssetItem> items, bool compact) {
     return GridView.builder(
       padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 176,
-        childAspectRatio: 0.92,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-      ),
+      // 窄屏：两列固定行高，宽度随对话框伸缩；比例换算在窄列下
+      // 会把固定 96 高的缩略图压出溢出。宽屏保持原自适应网格。
+      gridDelegate: compact
+          ? const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisExtent: 172,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+            )
+          : const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 176,
+              childAspectRatio: 0.92,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+            ),
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
@@ -707,15 +762,20 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               FilledButton.icon(
-                onPressed: _opening ? null : () => _openExportFolder(job),
+                onPressed: _opening ? null : () => _openExportResult(job),
                 icon: _opening
                     ? const SizedBox(
                         width: 14,
                         height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.folder_open, size: 18),
-                label: const Text('打开文件夹'),
+                    : Icon(
+                        job.target.supportsDirectorySelection
+                            ? Icons.folder_open
+                            : Icons.share_outlined,
+                        size: 18,
+                      ),
+                label: Text(job.target.openActionLabel),
               ),
               const SizedBox(width: 12),
               TextButton(
@@ -778,14 +838,20 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
     );
   }
 
-  Future<void> _openExportFolder(ExportJob job) async {
+  Future<void> _openExportResult(ExportJob job) async {
     setState(() => _opening = true);
     try {
-      await job.target.openInFileManager();
+      await job.target.openResult();
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('无法打开导出目录：$error')),
+          SnackBar(
+            content: Text(
+              job.target.supportsDirectorySelection
+                  ? '无法打开导出目录：$error'
+                  : '无法打开分享面板：$error',
+            ),
+          ),
         );
       }
     } finally {
@@ -795,36 +861,49 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
 
   // ---------- 底栏 ----------
 
-  Widget _footer(BuildContext context) {
+  Widget _footer(BuildContext context, bool compact) {
     final package = _package;
     final job = _job;
     final exporting = job != null;
+    final canPick = job == null && package != null;
     return Container(
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: AppColors.of(context).borderSubtle)),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+      padding: EdgeInsets.fromLTRB(compact ? 16 : 20, 14, compact ? 16 : 20, 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Icon(Icons.folder_outlined,
-                  size: 16, color: AppColors.of(context).subtext),
+              Icon(
+                _target.supportsDirectorySelection
+                    ? Icons.folder_outlined
+                    : Icons.folder_zip_outlined,
+                size: 16,
+                color: AppColors.of(context).subtext,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '保存到 $_parentPath${_parentPath.isEmpty ? '' : '/'}${exportDirectoryName(groupName: widget.group?.name ?? '', title: widget.entry.title)}',
+                  _target.destinationSummary(
+                    _parentPath,
+                    exportDirectoryName(
+                      groupName: widget.group?.name ?? '',
+                      title: widget.entry.title,
+                    ),
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 12, color: AppColors.of(context).secondary),
                 ),
               ),
-              TextButton(
-                onPressed: exporting ? null : _pickDirectory,
-                child: const Text('更改'),
-              ),
+              if (_target.supportsDirectorySelection)
+                TextButton(
+                  onPressed: exporting ? null : _pickDirectory,
+                  child: const Text('更改'),
+                ),
             ],
           ),
           const SizedBox(height: 6),
@@ -836,33 +915,93 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
               height: 1.5,
             ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: package == null
-                    ? const SizedBox.shrink()
-                    : Text(
-                        _selectionSummary(),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.of(context).subtext,
-                        ),
+          if (compact) ...[
+            // 窄屏：统计与全选/清空同一行，动作按钮单独一行，
+            // 避免四个按钮加统计在窄对话框里横向溢出。
+            if (canPick) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _selectionSummary(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.of(context).subtext,
                       ),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('取消'),
-              ),
-              const SizedBox(width: 12),
-              FilledButton(
-                onPressed: !exporting && package != null && _selected.isNotEmpty && _parentPath.isNotEmpty
-                    ? _startExport
-                    : null,
-                child: Text(_exportButtonLabel()),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _selected.length == package.items.length
+                        ? null
+                        : _selectAll,
+                    child: const Text('全选'),
+                  ),
+                  TextButton(
+                    onPressed: _selected.isEmpty
+                        ? null
+                        : () => setState(_selected.clear),
+                    child: const Text('清空'),
+                  ),
+                ],
               ),
             ],
-          ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: !exporting &&
+                          package != null &&
+                          _selected.isNotEmpty &&
+                          (!_target.supportsDirectorySelection ||
+                              _parentPath.isNotEmpty)
+                      ? _startExport
+                      : null,
+                  child: Text(_exportButtonLabel()),
+                ),
+              ],
+            ),
+          ] else ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: package == null
+                      ? const SizedBox.shrink()
+                      : Text(
+                          _selectionSummary(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.of(context).subtext,
+                          ),
+                        ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+                const SizedBox(width: 12),
+                FilledButton(
+                  onPressed: !exporting &&
+                          package != null &&
+                          _selected.isNotEmpty &&
+                          (!_target.supportsDirectorySelection ||
+                              _parentPath.isNotEmpty)
+                      ? _startExport
+                      : null,
+                  child: Text(_exportButtonLabel()),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

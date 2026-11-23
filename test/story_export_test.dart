@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -11,6 +12,8 @@ import 'package:arknights_story_player/story_player/data/asset_package.dart';
 import 'package:arknights_story_player/story_player/data/asset_store.dart';
 import 'package:arknights_story_player/story_player/data/cache_control.dart';
 import 'package:arknights_story_player/story_player/data/export_target.dart';
+import 'package:arknights_story_player/story_player/data/export_target_android.dart';
+import 'package:arknights_story_player/story_player/data/export_target_desktop.dart';
 import 'package:arknights_story_player/story_player/data/file_cache.dart';
 import 'package:arknights_story_player/story_player/data/media_catalog.dart';
 import 'package:arknights_story_player/story_player/data/preview_cache.dart';
@@ -186,12 +189,8 @@ void main() {
       groupName: '',
       entryType: 'NONE',
       refs: [
-        AssetRef(AssetKind.music, 'first', [
-          AssetFile(first, 'extras/a.mp3'),
-        ]),
-        AssetRef(AssetKind.sfx, 'second', [
-          AssetFile(second, 'extras/a.mp3'),
-        ]),
+        AssetRef(AssetKind.music, 'first', [AssetFile(first, 'extras/a.mp3')]),
+        AssetRef(AssetKind.sfx, 'second', [AssetFile(second, 'extras/a.mp3')]),
       ],
       script: [],
       unresolved: [],
@@ -241,7 +240,7 @@ void main() {
       script: [],
       unresolved: [],
     );
-    final target = ExportTarget();
+    final target = ExportTarget(backend: DesktopExportBackend());
     final dir = await Directory.systemTemp.createTemp('export-unique-');
     addTearDown(() async {
       if (await dir.exists()) await dir.delete(recursive: true);
@@ -272,11 +271,14 @@ void main() {
     final paths = [
       for (final file in manifest['files'] as List) (file as Map)['path'],
     ];
-    expect(paths, containsAll([
-      'images/cg/shared.png',
-      'images/item/shared.png',
-      'images/background/a_b_.png',
-    ]));
+    expect(
+      paths,
+      containsAll([
+        'images/cg/shared.png',
+        'images/item/shared.png',
+        'images/background/a_b_.png',
+      ]),
+    );
     expect(paths, isNot(contains('images/background/a:b?.png')));
     expect(result.fileCount, 3);
   });
@@ -292,12 +294,11 @@ void main() {
 [Interlude(channel=3,type=3,name="actor#2")]
 [Interlude(channel=3,type=3,name="missing_char")]
 ''');
-    expect(
-      {for (final ref in catalog.collect(script, warnings)) ...[
+    expect({
+      for (final ref in catalog.collect(script, warnings)) ...[
         for (final file in ref.files) file.uri,
-      ]},
-      catalog.dependencies(script, [...warnings]),
-    );
+      ],
+    }, catalog.dependencies(script, [...warnings]));
   });
 
   test('未解析音频进入 warnings，不产生条目', () {
@@ -358,9 +359,11 @@ void main() {
           return http.Response('gone', 404);
         }
         if (request.url == fakePng) {
-          return http.Response('<html></html>', 200, headers: {
-            'content-type': 'text/html',
-          });
+          return http.Response(
+            '<html></html>',
+            200,
+            headers: {'content-type': 'text/html'},
+          );
         }
         return http.Response('mirror', 200);
       }),
@@ -371,10 +374,7 @@ void main() {
       utf8.encode('mirror'),
     );
     expect(requested, [primary, mirror]);
-    expect(
-      store.loadTransient(fakePng),
-      throwsA(isA<FormatException>()),
-    );
+    expect(store.loadTransient(fakePng), throwsA(isA<FormatException>()));
   });
 
   test('cachedSize 只查磁盘不联网，故事层未命中回退共享层', () async {
@@ -382,7 +382,11 @@ void main() {
     final sharedOnly = Uri.parse('https://example.test/b.mp3');
     final missing = Uri.parse('https://example.test/c.mp3');
     final cache = MemoryCache();
-    await cache.write(uri, Uint8List.fromList(List.filled(10, 0)), story: 'story');
+    await cache.write(
+      uri,
+      Uint8List.fromList(List.filled(10, 0)),
+      story: 'story',
+    );
     await cache.write(sharedOnly, Uint8List.fromList(List.filled(4, 0)));
     final store = AssetStore(
       cache: cache,
@@ -397,13 +401,10 @@ void main() {
   test('PreviewCache 命中不重复加载并按 LRU 淘汰', () async {
     final loads = <Uri>[];
     Uint8List chunk(int size) => Uint8List.fromList(List.filled(size, 7));
-    final cache = PreviewCache(
-      (uri) async {
-        loads.add(uri);
-        return chunk(uri.pathSegments.last == 'a.png' ? 60 : 30);
-      },
-      maxBytes: 100,
-    );
+    final cache = PreviewCache((uri) async {
+      loads.add(uri);
+      return chunk(uri.pathSegments.last == 'a.png' ? 60 : 30);
+    }, maxBytes: 100);
     final a = Uri.parse('https://example.test/a.png');
     final b = Uri.parse('https://example.test/b.png');
     await cache.load(a);
@@ -449,7 +450,7 @@ void main() {
       script: [],
       unresolved: [r'未解析音频：$xxx'],
     );
-    final target = ExportTarget();
+    final target = ExportTarget(backend: DesktopExportBackend());
     final dir = await Directory.systemTemp.createTemp('export-test-');
     addTearDown(() async {
       if (await dir.exists()) await dir.delete(recursive: true);
@@ -470,8 +471,10 @@ void main() {
     expect(result.failures, hasLength(1));
     expect(result.failures.single.exportPath, 'images/cg/bad.png');
     expect(lastProgress, (3, 3, 3 + utf8.encode('net').length));
-    expect(File('${result.rootPath}/images/background/good.png').readAsBytes(),
-        completion([1, 2, 3]));
+    expect(
+      File('${result.rootPath}/images/background/good.png').readAsBytes(),
+      completion([1, 2, 3]),
+    );
     final manifest = jsonDecode(
       await File('${result.rootPath}/manifest.json').readAsString(),
     ) as Map<String, dynamic>;
@@ -487,9 +490,7 @@ void main() {
 
   test('取消导出抛出并清理未完成的目录', () async {
     final store = AssetStore(
-      client: MockClient(
-        (request) async => http.Response('net', 200),
-      ),
+      client: MockClient((request) async => http.Response('net', 200)),
     );
     addTearDown(store.close);
     final package = AssetPackage.fromRefs(
@@ -499,14 +500,17 @@ void main() {
       entryType: 'NONE',
       refs: [
         AssetRef(AssetKind.background, 'a', [
-          AssetFile(Uri.parse('https://example.test/a.png'), 'images/background/a.png'),
+          AssetFile(
+            Uri.parse('https://example.test/a.png'),
+            'images/background/a.png',
+          ),
         ]),
       ],
       script: [],
       unresolved: [],
     );
     final control = CacheControl();
-    final target = ExportTarget();
+    final target = ExportTarget(backend: DesktopExportBackend());
     final dir = await Directory.systemTemp.createTemp('export-test-');
     addTearDown(() async {
       if (await dir.exists()) await dir.delete(recursive: true);
@@ -534,11 +538,14 @@ void main() {
     addTearDown(() async {
       if (await dir.exists()) await dir.delete(recursive: true);
     });
-    final target = ExportTarget();
+    final target = ExportTarget(backend: DesktopExportBackend());
     final root = await target.createDirectory(dir.path, '章节/标题');
-    expect(root, '${dir.path}${Platform.pathSeparator}章节${Platform.pathSeparator}标题');
+    expect(
+      root,
+      '${dir.path}${Platform.pathSeparator}章节${Platform.pathSeparator}标题',
+    );
     // 同名目标不覆盖：第二个任务实例会拿到带序号的目录。
-    final secondTarget = ExportTarget();
+    final secondTarget = ExportTarget(backend: DesktopExportBackend());
     final second = await secondTarget.createDirectory(dir.path, '章节/标题');
     expect(second, endsWith('标题 (2)'));
     await secondTarget.deleteDirectory();
@@ -550,8 +557,9 @@ void main() {
       isTrue,
     );
     expect(
-      File('$root${Platform.pathSeparator}images${Platform.pathSeparator}bg${Platform.pathSeparator}what_ever_.png')
-          .existsSync(),
+      File(
+        '$root${Platform.pathSeparator}images${Platform.pathSeparator}bg${Platform.pathSeparator}what_ever_.png',
+      ).existsSync(),
       isTrue,
     );
     await target.deleteDirectory();
@@ -567,17 +575,195 @@ void main() {
     // 模拟「下载目录/方舟档案室」：拼接出来、从未创建过的默认路径。
     final missing = '${base.path}${Platform.pathSeparator}方舟档案室';
     expect(Directory(missing).existsSync(), isFalse);
-    final target = ExportTarget();
+    final target = ExportTarget(backend: DesktopExportBackend());
     final root = await target.createDirectory(missing, '主线篇章/14-11 行动后');
     expect(
       root,
       '$missing${Platform.pathSeparator}主线篇章${Platform.pathSeparator}14-11 行动后',
     );
     await target.writeFile('manifest.json', [1]);
-    expect(File('$root${Platform.pathSeparator}manifest.json').existsSync(), isTrue);
+    expect(
+      File('$root${Platform.pathSeparator}manifest.json').existsSync(),
+      isTrue,
+    );
     await target.deleteDirectory();
     // 只清理半成品根目录；自动创建的父级目录保留，不连带删除。
     expect(Directory(root).existsSync(), isFalse);
     expect(Directory(missing).existsSync(), isTrue);
+  });
+
+  test('ExportTarget 按平台分发：Android 选 zip 后端，桌面选目录后端', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      expect(ExportTarget().supportsDirectorySelection, isFalse);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      expect(ExportTarget().supportsDirectorySelection, isTrue);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  test('Android 后端提供 zip 分享文案，桌面后端提供目录文案', () {
+    final android = AndroidExportBackend();
+    expect(android.supportsDirectorySelection, isFalse);
+    expect(
+      android.destinationSummary('', '主线篇章/14-11 行动后'),
+      '打包为 主线篇章_14-11 行动后.zip，完成后通过系统分享保存',
+    );
+    expect(
+      android.describeCompletion('主线篇章_14-11 行动后.zip'),
+      '素材已打包为 主线篇章_14-11 行动后.zip',
+    );
+    expect(android.openActionLabel, '分享');
+
+    final desktop = DesktopExportBackend();
+    expect(desktop.supportsDirectorySelection, isTrue);
+    expect(
+      desktop.destinationSummary(r'C:\Exports', '主线篇章/14-11 行动后'),
+      r'保存到 C:\Exports/主线篇章/14-11 行动后',
+    );
+    expect(desktop.describeCompletion('目录'), '素材已导出到 目录');
+    expect(desktop.openActionLabel, '打开文件夹');
+  });
+
+  test('Android 导出把素材逐文件写入 zip，manifest 也在包内；分享手动拉起', () async {
+    final cache = MemoryCache();
+    final good = Uri.parse('https://example.test/good.png');
+    final script = Uri.parse('https://example.test/story.txt');
+    await cache.write(good, Uint8List.fromList([1, 2, 3]), story: 'story');
+    await cache.write(
+      script,
+      Uint8List.fromList(utf8.encode('剧情脚本')),
+      story: 'story',
+    );
+    final store = AssetStore(
+      cache: cache,
+      client: MockClient((request) async => fail('已缓存条目不应联网')),
+    );
+    addTearDown(store.close);
+    final package = AssetPackage.fromRefs(
+      storyTitle: '14-11 行动后',
+      storyPath: 'story',
+      groupName: '主线篇章',
+      entryType: 'MAINLINE',
+      refs: [
+        AssetRef(AssetKind.background, 'good', [
+          AssetFile(good, 'images/background/good.png'),
+        ]),
+      ],
+      script: [AssetFile(script, 'script/14-11 行动后.txt')],
+      unresolved: [],
+    );
+    final base = await Directory.systemTemp.createTemp('export-zip-');
+    addTearDown(() async {
+      if (await base.exists()) await base.delete(recursive: true);
+    });
+    final shared = <(String, String)>[];
+    final target = ExportTarget(
+      backend: AndroidExportBackend(
+        cacheDirectory: () async => base,
+        share: (path, displayName) async => shared.add((path, displayName)),
+      ),
+    );
+    final result = await StoryExporter(store).export(
+      target: target,
+      package: package,
+      items: package.items,
+      // 移动端没有目录概念，parentPath 一律忽略。
+      parentPath: '/storage/emulated/0/ignored',
+      appVersion: '1.2.0',
+    );
+    expect(result.completed, isTrue);
+    // 展示位置是压缩包文件名，不是应用内部路径。
+    expect(result.rootPath, '主线篇章_14-11 行动后.zip');
+    final zipPath =
+        '${base.path}${Platform.pathSeparator}方舟档案室导出'
+        '${Platform.pathSeparator}主线篇章_14-11 行动后.zip';
+    final archive = ZipDecoder().decodeBytes(await File(zipPath).readAsBytes());
+    expect(
+      [for (final entry in archive.files) entry.name],
+      containsAll([
+        'images/background/good.png',
+        'script/14-11 行动后.txt',
+        'manifest.json',
+      ]),
+    );
+    expect(archive.findFile('images/background/good.png')!.content, [1, 2, 3]);
+    final manifest = jsonDecode(
+      utf8.decode(archive.findFile('manifest.json')!.content as Uint8List),
+    ) as Map<String, dynamic>;
+    expect(manifest['version'], '1.2.0');
+    expect(manifest['story']['title'], '14-11 行动后');
+    // 完成不自动拉起分享面板，由用户在结果页或提示条手动分享。
+    expect(shared, isEmpty);
+    await target.openResult();
+    expect(shared.single, (zipPath, '主线篇章_14-11 行动后.zip'));
+  });
+
+  test('Android 同名 zip 追加序号不覆盖；取消删除半成品', () async {
+    final base = await Directory.systemTemp.createTemp('export-zip-unique-');
+    addTearDown(() async {
+      if (await base.exists()) await base.delete(recursive: true);
+    });
+    String zipOf(String name) =>
+        '${base.path}${Platform.pathSeparator}方舟档案室导出'
+        '${Platform.pathSeparator}$name';
+    final target = ExportTarget(
+      backend: AndroidExportBackend(cacheDirectory: () async => base),
+    );
+    expect(
+      await target.createDirectory('', '主线篇章/14-11 行动后'),
+      '主线篇章_14-11 行动后.zip',
+    );
+    final secondTarget = ExportTarget(
+      backend: AndroidExportBackend(cacheDirectory: () async => base),
+    );
+    expect(
+      await secondTarget.createDirectory('', '主线篇章/14-11 行动后'),
+      '主线篇章_14-11 行动后 (2).zip',
+    );
+    await target.writeFile('images/bg/a.png', [1]);
+    await target.commit();
+    expect(File(zipOf('主线篇章_14-11 行动后.zip')).existsSync(), isTrue);
+    // 未提交的第二个包取消后删除，不影响已提交的第一个包。
+    await secondTarget.deleteDirectory();
+    expect(secondTarget.rootPath, isNull);
+    expect(File(zipOf('主线篇章_14-11 行动后 (2).zip')).existsSync(), isFalse);
+    expect(File(zipOf('主线篇章_14-11 行动后.zip')).existsSync(), isTrue);
+  });
+  test('Android 并发同名导出独占不同 zip，两个包均可解压', () async {
+    final base = await Directory.systemTemp.createTemp('export-zip-race-');
+    addTearDown(() async {
+      if (await base.exists()) await base.delete(recursive: true);
+    });
+    final first = ExportTarget(
+      backend: AndroidExportBackend(cacheDirectory: () async => base),
+    );
+    final second = ExportTarget(
+      backend: AndroidExportBackend(cacheDirectory: () async => base),
+    );
+    final names = await Future.wait([
+      first.createDirectory('', '章节/同名'),
+      second.createDirectory('', '章节/同名'),
+    ]);
+    expect(names.toSet(), {'章节_同名.zip', '章节_同名 (2).zip'});
+    await Future.wait([
+      first.writeFile('payload.txt', [1]),
+      second.writeFile('payload.txt', [2]),
+    ]);
+    await Future.wait([first.commit(), second.commit()]);
+    final folder = Directory('${base.path}${Platform.pathSeparator}方舟档案室导出');
+    // Future.wait 保留输入顺序，但先占到原始文件名的任务不固定。
+    for (final (index, name) in names.indexed) {
+      final archive = ZipDecoder().decodeBytes(
+        await File('${folder.path}${Platform.pathSeparator}$name')
+            .readAsBytes(),
+      );
+      expect(archive.findFile('payload.txt')!.content, [index + 1]);
+    }
   });
 }

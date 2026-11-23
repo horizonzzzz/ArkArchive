@@ -1019,8 +1019,9 @@ void main() {
     final buttonRect = tester.getRect(button);
     await tester.tap(button);
     await tester.pumpAndSettle();
-    // 菜单在触发按钮下方展开，不遮挡按钮本身。
-    final item = find.bySubtype<PopupMenuItem<String>>();
+    // 菜单在触发按钮下方展开，不遮挡按钮本身；首项即「缓存」，
+    // 平台差异会让菜单条目数不同，只取第一项。
+    final item = find.bySubtype<PopupMenuItem<String>>().first;
     expect(tester.getRect(item).top, greaterThan(buttonRect.bottom));
   });
 

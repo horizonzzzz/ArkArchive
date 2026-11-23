@@ -1,5 +1,7 @@
 allprojects {
     repositories {
+        maven { url = java.net.URI("https://maven.aliyun.com/repository/google") }
+        maven { url = java.net.URI("https://maven.aliyun.com/repository/public") }
         google()
         mavenCentral()
     }

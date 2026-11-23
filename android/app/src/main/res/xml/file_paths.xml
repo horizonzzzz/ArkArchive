@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通过 FileProvider 对外暴露的应用目录：
+     external-files-path / files-path 用于应用内更新的安装包
+     （对应 path_provider 的 getExternalStorageDirectory() 与
+     getApplicationSupportDirectory() 兜底路径）；
+     cache-path 用于素材导出的 zip
+     （对应 getTemporaryDirectory() 下的「方舟档案室导出/」）。 -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-files-path
+        name="update_external"
+        path="." />
+    <files-path
+        name="update_internal"
+        path="." />
+    <cache-path
+        name="export_cache"
+        path="." />
+</paths>

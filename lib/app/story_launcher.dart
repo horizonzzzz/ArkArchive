@@ -630,6 +630,8 @@ class _StoryLauncherState extends State<StoryLauncher> {
           .firstOrNull;
 
   Future<String> _defaultExportDirectory() async {
+    // Android 导出为 zip 并走系统分享，没有目录概念，无需拼接默认路径。
+    if (!_repository.store.isDesktop) return '';
     try {
       final base =
           await getDownloadsDirectory() ??
@@ -645,7 +647,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
 
   /// 打开素材导出对话框；已有任务时直接挂接到同一任务查看进度或结果。
   Future<void> _openExportDialog(StoryEntry entry) async {
-    if (!_repository.store.isDesktop) return;
+    if (!_repository.store.supportsExport) return;
     final parentPath = _exportDirectory ?? await _defaultExportDirectory();
     if (!mounted) return;
     await showDialog<void>(
@@ -681,7 +683,10 @@ class _StoryLauncherState extends State<StoryLauncher> {
     );
     _exportJobs[package.storyPath] = job;
     _exportDirectory = parentPath;
-    unawaited(_repository.store.setExportDirectory(parentPath));
+    // 目录记忆是桌面偏好；Android 的 zip 后端不使用 parentPath，不持久化。
+    if (_repository.store.isDesktop) {
+      unawaited(_repository.store.setExportDirectory(parentPath));
+    }
     // 立即重建，让设置页/缓存页的缓存维护按钮反映「导出中」。
     setState(() {});
     unawaited(_runExportJob(job));
@@ -734,14 +739,14 @@ class _StoryLauncherState extends State<StoryLauncher> {
           content: Text(
             hasFailure
                 ? '素材导出完成，${result.failures.length} 个文件失败，详见 manifest.json。'
-                : '素材已导出到 ${result.rootPath}',
+                : job.target.describeCompletion(result.rootPath),
           ),
           duration: const Duration(seconds: 6),
           action: SnackBarAction(
-            label: '打开文件夹',
+            label: job.target.openActionLabel,
             onPressed: () async {
               try {
-                await job.target.openInFileManager();
+                await job.target.openResult();
               } catch (_) {}
             },
           ),
@@ -1946,7 +1951,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                       ],
                     ),
                   ),
-                  if (_repository.store.isDesktop)
+                  if (_repository.store.supportsExport)
                     PopupMenuItem(
                       value: 'export',
                       enabled:
