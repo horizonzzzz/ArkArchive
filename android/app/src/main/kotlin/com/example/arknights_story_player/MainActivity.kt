@@ -8,11 +8,12 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity : FlutterActivity() {
-    private var channel: MethodChannel? = null
+    private var installChannel: MethodChannel? = null
+    private var shareChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        channel = MethodChannel(
+        installChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "app_update/install",
         ).also {
@@ -34,11 +35,36 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+        shareChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "story_export/share",
+        ).also {
+            it.setMethodCallHandler { call, result ->
+                if (call.method == "shareZip") {
+                    val path = call.argument<String>("path")
+                    val displayName = call.argument<String>("displayName")
+                    if (path.isNullOrEmpty()) {
+                        result.error("invalid_arguments", "缺少导出文件路径", null)
+                    } else {
+                        try {
+                            shareZip(File(path), displayName ?: "素材.zip")
+                            result.success(true)
+                        } catch (error: Exception) {
+                            result.error("share_failed", error.message, null)
+                        }
+                    }
+                } else {
+                    result.notImplemented()
+                }
+            }
+        }
     }
 
     override fun onDestroy() {
-        channel?.setMethodCallHandler(null)
-        channel = null
+        installChannel?.setMethodCallHandler(null)
+        installChannel = null
+        shareChannel?.setMethodCallHandler(null)
+        shareChannel = null
         super.onDestroy()
     }
 
@@ -52,5 +78,20 @@ class MainActivity : FlutterActivity() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(intent)
+    }
+
+    // 素材导出的 zip 交给系统分享面板，由用户保存到文件、网盘或发给其他应用；
+    // zip 位于应用缓存目录，FileProvider 需暴露 cache-path。
+    private fun shareZip(file: File, displayName: String) {
+        if (!file.exists()) {
+            throw IllegalArgumentException("导出文件不存在")
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, displayName))
     }
 }

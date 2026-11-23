@@ -13,7 +13,8 @@ class ExportJob extends ChangeNotifier {
     required this.package,
     required this.items,
     required this.parentPath,
-  });
+    ExportTarget? target,
+  }) : target = target ?? ExportTarget();
 
   final AssetPackage package;
   final List<AssetItem> items;
@@ -27,8 +28,9 @@ class ExportJob extends ChangeNotifier {
   ExportResult? result;
   String? error;
 
-  /// 完成后用于「打开文件夹」；失败或取消后仍保留，可打开已写入的部分。
-  final target = ExportTarget();
+  /// 完成后用于「打开文件夹」或「分享」；失败或取消后仍保留，
+  /// 可打开已写入的部分。测试可注入固定后端。
+  final ExportTarget target;
 
   double get progress =>
       total == 0 ? 0 : (done / total).clamp(0.0, 1.0);

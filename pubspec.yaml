@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.1.2+10
+version: 1.2.1+12
 
 environment:
   sdk: ^3.13.7
@@ -49,6 +49,9 @@ dependencies:
       path: just_audio_windows
   path_provider: ^2.1.6
   crypto: ^3.0.8
+  # Android 素材导出：逐文件流式写入 zip（ZipFileEncoder），纯 Dart 无原生依赖，
+  # 桌面导出仍是散文件目录，不经过此包。
+  archive: ^3.6.1
   web: ^1.1.1
   html: ^0.15.7
   connectivity_plus: ^7.3.2

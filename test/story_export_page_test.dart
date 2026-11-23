@@ -14,7 +14,10 @@ import 'package:arknights_story_player/app/export_job.dart';
 import 'package:arknights_story_player/app/story_export_page.dart';
 import 'package:arknights_story_player/app/story_launcher.dart';
 import 'package:arknights_story_player/story_player/data/asset_package.dart';
+import 'package:arknights_story_player/story_player/data/export_target.dart';
+import 'package:arknights_story_player/story_player/data/export_target_backend.dart';
 import 'package:arknights_story_player/story_player/data/file_cache.dart';
+import 'package:arknights_story_player/story_player/data/story_export.dart';
 import 'package:arknights_story_player/story_player/story_player.dart';
 
 class _MemoryCache extends FileCache {
@@ -158,8 +161,9 @@ Future<void> _mountDialog(
   StoryRepository repository, {
   ExportJob? existingJob,
   ExportJob Function(AssetPackage, List<AssetItem>, String)? onStart,
+  Size size = const Size(1280, 900),
 }) async {
-  await tester.binding.setSurfaceSize(const Size(1280, 900));
+  await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
@@ -205,6 +209,63 @@ class _PackageRepository extends _UiRepository {
   @override
   Future<AssetPackage> packageEntry(StoryEntry entry, {StoryGroup? group}) async =>
       package;
+}
+
+/// 记录完成动作的假后端：真实后端（目录写盘、zip 打包）的行为由
+/// story_export_test 在真实事件循环中覆盖，这里只验证结果视图与
+/// 完成按钮的接线，不碰真实文件 IO。
+class _RecordingExportBackend implements ExportTargetBackend {
+  _RecordingExportBackend({
+    required String actionLabel,
+    required this.directorySelection,
+  }) : openActionLabel = actionLabel;
+
+  @override
+  final String openActionLabel;
+
+  final bool directorySelection;
+  String? _rootName;
+  final opened = <String>[];
+
+  @override
+  String? get rootPath => _rootName;
+
+  @override
+  bool get supportsDirectorySelection => directorySelection;
+
+  @override
+  String destinationSummary(String parentPath, String rootName) => directorySelection
+      ? '保存到 $parentPath/$rootName'
+      : '打包为 ${rootName.replaceAll('/', '_')}.zip';
+
+  @override
+  String describeCompletion(String rootPath) => directorySelection
+      ? '素材已导出到 $rootPath'
+      : '素材已打包为 $rootPath';
+
+  @override
+  Future<String> createDirectory(String parentPath, String name) async =>
+      _rootName = directorySelection
+          ? '$parentPath/$name'
+          : '${name.replaceAll('/', '_')}.zip';
+
+  @override
+  Future<void> writeFile(String relativePath, List<int> bytes) async {}
+
+  @override
+  Future<void> commit() async {}
+
+  @override
+  Future<void> deleteDirectory() async {
+    _rootName = null;
+  }
+
+  @override
+  Future<void> openResult() async {
+    final root = _rootName;
+    if (root == null) throw StateError('尚未创建导出目录');
+    opened.add(root);
+  }
 }
 
 Future<void> _mountLauncher(WidgetTester tester, StoryRepository repository) async {
@@ -380,7 +441,7 @@ void main() {
     expect(find.textContaining('已选 2 项 · 800 B / 2 个文件'), findsOneWidget);
   });
 
-  testWidgets('桌面端剧情行菜单提供导出入口，移动端不提供', (tester) async {
+  testWidgets('桌面端剧情行菜单提供导出入口', (tester) async {
     final repository = _UiRepository();
     addTearDown(repository.store.close);
     // 基础校验在测试体结束时进行，平台覆盖必须在体内恢复。
@@ -401,17 +462,183 @@ void main() {
     }
   });
 
-  testWidgets('移动端菜单不提供导出入口', (tester) async {
-    final repository = _UiRepository();
-    addTearDown(repository.store.close);
+  testWidgets('Android 菜单同样提供导出入口并打开对话框', (tester) async {
     // flutter test 默认目标平台是 android，无需覆盖。
+    final package = AssetPackage.fromRefs(
+      storyTitle: _entry.title,
+      storyPath: _entry.path,
+      groupName: _group.name,
+      entryType: 'MAINLINE',
+      refs: [
+        AssetRef(AssetKind.background, 'bg', [
+          AssetFile(Uri.parse('https://x.test/bg.png'), 'images/background/bg.png'),
+        ]),
+      ],
+      script: [],
+      unresolved: [],
+    );
+    final repository = _PackageRepository(package);
+    addTearDown(repository.store.close);
     await _mountLauncher(tester, repository);
     await tester.tap(find.byKey(const ValueKey('chapter-慈悲灯塔')));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('14-1 余火 行动前的更多操作'));
     await tester.pumpAndSettle();
-    expect(find.text('导出素材…'), findsNothing);
-    expect(find.text('缓存'), findsOneWidget);
+    expect(find.text('导出素材…'), findsOneWidget);
+    await tester.tap(find.text('导出素材…'));
+    await tester.pumpAndSettle();
+    expect(find.text('导出《14-1 余火 行动前》素材'), findsOneWidget);
+    // 底栏提示 zip 打包，不提供目录选择。
+    expect(
+      find.textContaining('打包为 慈悲灯塔_14-1 余火 行动前.zip'),
+      findsOneWidget,
+    );
+    expect(find.text('更改'), findsNothing);
+  });
+
+  testWidgets('桌面底栏显示保存目录并提供更改', (tester) async {
+    final repository = await _seededRepository();
+    addTearDown(repository.store.close);
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      await _mountDialog(tester, repository);
+      expect(
+        find.text(r'保存到 C:\Exports/慈悲灯塔/14-1 余火 行动前'),
+        findsOneWidget,
+      );
+      expect(find.text('更改'), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('Android 底栏显示打包 zip 说明且不提供目录更改', (tester) async {
+    final repository = await _seededRepository();
+    addTearDown(repository.store.close);
+    // 默认 android 平台。
+    await _mountDialog(tester, repository);
+    expect(
+      find.textContaining('打包为 慈悲灯塔_14-1 余火 行动前.zip，完成后通过系统分享保存'),
+      findsOneWidget,
+    );
+    expect(find.text('更改'), findsNothing);
+    expect(find.textContaining('保存到'), findsNothing);
+  });
+
+  testWidgets('窄屏竖屏改用顶部分类栏与全宽网格，右侧不再被挤成细条', (tester) async {
+    final repository = await _seededRepository();
+    addTearDown(repository.store.close);
+    // 手机竖屏：分类改为顶部横向标签，条目网格独占整宽。
+    await _mountDialog(tester, repository, size: const Size(390, 844));
+    expect(find.text('图片 1'), findsOneWidget);
+    expect(find.text('立绘 1'), findsOneWidget);
+    expect(find.text('音频 1'), findsOneWidget);
+    expect(find.text('脚本 1'), findsOneWidget);
+    // 旧的双栏侧栏不再出现（其标题是独立的「图片」等文本）。
+    expect(find.text('图片'), findsNothing);
+    final grid = tester.getSize(find.byType(GridView));
+    expect(grid.width, greaterThan(250));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('窄屏底栏提供全选与清空，统计在同一位置', (tester) async {
+    final repository = await _seededRepository();
+    addTearDown(repository.store.close);
+    await _mountDialog(tester, repository, size: const Size(390, 844));
+    expect(find.text('全选'), findsOneWidget);
+    expect(find.textContaining('已选 4 项'), findsOneWidget);
+    await tester.tap(find.text('清空'));
+    await tester.pumpAndSettle();
+    expect(find.text('未选择素材'), findsOneWidget);
+    await tester.tap(find.text('全选'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('已选 4 项'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('宽屏保持左侧分类栏双栏布局', (tester) async {
+    final repository = await _seededRepository();
+    addTearDown(repository.store.close);
+    await _mountDialog(tester, repository);
+    // 侧栏标题与底部操作仍在；紧凑标签不出现。
+    expect(find.text('图片'), findsOneWidget);
+    expect(find.text('图片 1'), findsNothing);
+    expect(find.text('全选'), findsOneWidget);
+  });
+
+  testWidgets('Android 完成视图提供分享并调用系统分享', (tester) async {
+    final repository = await _seededRepository();
+    addTearDown(repository.store.close);
+    final package = await repository.packageEntry(_entry, group: _group);
+    final backend = _RecordingExportBackend(
+      actionLabel: '分享',
+      directorySelection: false,
+    );
+    final target = ExportTarget(backend: backend);
+    await target.createDirectory('', '慈悲灯塔/14-1 余火 行动前');
+    final job = ExportJob(
+      package: package,
+      items: package.items,
+      parentPath: '',
+      target: target,
+    )..apply(
+        status: ExportJobStatus.completed,
+        result: ExportResult(
+          rootPath: '慈悲灯塔_14-1 余火 行动前.zip',
+          fileCount: 5,
+          totalBytes: 2048,
+          failures: const [],
+          manifest: const {},
+        ),
+      );
+    await _mountDialog(tester, repository, existingJob: job);
+
+    expect(find.text('素材已导出'), findsOneWidget);
+    // zip 名出现在结果位置行与底栏目的地提示两处。
+    expect(
+      find.textContaining('慈悲灯塔_14-1 余火 行动前.zip'),
+      findsNWidgets(2),
+    );
+    await tester.tap(find.text('分享'));
+    await tester.pumpAndSettle();
+    expect(backend.opened, ['慈悲灯塔_14-1 余火 行动前.zip']);
+  });
+
+  testWidgets('桌面完成视图提供打开文件夹', (tester) async {
+    final repository = await _seededRepository();
+    addTearDown(repository.store.close);
+    final package = await repository.packageEntry(_entry, group: _group);
+    final backend = _RecordingExportBackend(
+      actionLabel: '打开文件夹',
+      directorySelection: true,
+    );
+    final target = ExportTarget(backend: backend);
+    await target.createDirectory(r'C:\Exports', '慈悲灯塔/14-1 余火 行动前');
+    final job = ExportJob(
+      package: package,
+      items: package.items,
+      parentPath: r'C:\Exports',
+      target: target,
+    )..apply(
+        status: ExportJobStatus.completed,
+        result: ExportResult(
+          rootPath: r'C:\Exports/慈悲灯塔/14-1 余火 行动前',
+          fileCount: 5,
+          totalBytes: 2048,
+          failures: const [],
+          manifest: const {},
+        ),
+      );
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      await _mountDialog(tester, repository, existingJob: job);
+      expect(find.text('打开文件夹'), findsOneWidget);
+      await tester.tap(find.text('打开文件夹'));
+      await tester.pumpAndSettle();
+      expect(backend.opened, [r'C:\Exports/慈悲灯塔/14-1 余火 行动前']);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }

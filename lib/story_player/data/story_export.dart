@@ -76,26 +76,34 @@ class StoryExporter {
     final entries = <Map<String, dynamic>>[];
     for (final (item, file) in files) {
       await control?.checkpoint();
+      List<int> data;
       try {
-        final data = await store.loadTransient(
+        data = await store.loadTransient(
           file.uri,
           story: package.storyPath,
           alternates: file.alternates,
         );
-        await target.writeFile(file.exportPath, data);
-        bytes += data.length;
-        entries.add({
-          'path': file.exportPath,
-          'kind': item.kind.name,
-          'url': file.uri.toString(),
-          'bytes': data.length,
-          'sha256': sha256.convert(data).toString(),
-        });
       } on CacheCancelled {
         rethrow;
       } catch (error) {
         failures.add(ExportFailure(file.uri, file.exportPath, '$error'));
+        onProgress?.call(++done, files.length, bytes);
+        continue;
       }
+      try {
+        await target.writeFile(file.exportPath, data);
+      } catch (_) {
+        await target.deleteDirectory();
+        rethrow;
+      }
+      bytes += data.length;
+      entries.add({
+        'path': file.exportPath,
+        'kind': item.kind.name,
+        'url': file.uri.toString(),
+        'bytes': data.length,
+        'sha256': sha256.convert(data).toString(),
+      });
       onProgress?.call(++done, files.length, bytes);
     }
     final manifest = <String, dynamic>{
@@ -126,14 +134,16 @@ class StoryExporter {
         'manifest.json',
         utf8.encode(const JsonEncoder.withIndent('  ').convert(manifest)),
       );
-    } catch (error) {
-      failures.add(
-        ExportFailure(
-          Uri.parse('https://local.invalid/export-manifest'),
-          'manifest.json',
-          '$error',
-        ),
-      );
+    } catch (_) {
+      await target.deleteDirectory();
+      rethrow;
+    }
+    // 收尾：zip 后端在此写中央目录，桌面的散文件后端为空实现。
+    try {
+      await target.commit();
+    } catch (_) {
+      await target.deleteDirectory();
+      rethrow;
     }
     return ExportResult(
       rootPath: rootPath,

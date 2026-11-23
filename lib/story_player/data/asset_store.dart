@@ -73,6 +73,12 @@ class AssetStore {
           defaultTargetPlatform == TargetPlatform.macOS ||
           defaultTargetPlatform == TargetPlatform.linux);
 
+  /// 提供素材导出的平台：桌面写散文件目录，Android 打 zip 走系统分享；
+  /// iOS 与 Web 暂不提供。菜单入口与对话框统一由本门控控制。
+  bool get supportsExport =>
+      isDesktop ||
+      (!kIsWeb && defaultTargetPlatform == TargetPlatform.android);
+
   Future<T> runCacheDownload<T>(
     Future<T> Function() action, {
     CacheControl? control,

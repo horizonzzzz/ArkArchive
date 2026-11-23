@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -11,6 +12,8 @@ import 'package:arknights_story_player/story_player/data/asset_package.dart';
 import 'package:arknights_story_player/story_player/data/asset_store.dart';
 import 'package:arknights_story_player/story_player/data/cache_control.dart';
 import 'package:arknights_story_player/story_player/data/export_target.dart';
+import 'package:arknights_story_player/story_player/data/export_target_android.dart';
+import 'package:arknights_story_player/story_player/data/export_target_desktop.dart';
 import 'package:arknights_story_player/story_player/data/file_cache.dart';
 import 'package:arknights_story_player/story_player/data/media_catalog.dart';
 import 'package:arknights_story_player/story_player/data/preview_cache.dart';
@@ -237,7 +240,7 @@ void main() {
       script: [],
       unresolved: [],
     );
-    final target = ExportTarget();
+    final target = ExportTarget(backend: DesktopExportBackend());
     final dir = await Directory.systemTemp.createTemp('export-unique-');
     addTearDown(() async {
       if (await dir.exists()) await dir.delete(recursive: true);
@@ -450,7 +453,7 @@ void main() {
       script: [],
       unresolved: [r'未解析音频：$xxx'],
     );
-    final target = ExportTarget();
+    final target = ExportTarget(backend: DesktopExportBackend());
     final dir = await Directory.systemTemp.createTemp('export-test-');
     addTearDown(() async {
       if (await dir.exists()) await dir.delete(recursive: true);
@@ -510,7 +513,7 @@ void main() {
       unresolved: [],
     );
     final control = CacheControl();
-    final target = ExportTarget();
+    final target = ExportTarget(backend: DesktopExportBackend());
     final dir = await Directory.systemTemp.createTemp('export-test-');
     addTearDown(() async {
       if (await dir.exists()) await dir.delete(recursive: true);
@@ -538,14 +541,14 @@ void main() {
     addTearDown(() async {
       if (await dir.exists()) await dir.delete(recursive: true);
     });
-    final target = ExportTarget();
+    final target = ExportTarget(backend: DesktopExportBackend());
     final root = await target.createDirectory(dir.path, '章节/标题');
     expect(
       root,
       '${dir.path}${Platform.pathSeparator}章节${Platform.pathSeparator}标题',
     );
     // 同名目标不覆盖：第二个任务实例会拿到带序号的目录。
-    final secondTarget = ExportTarget();
+    final secondTarget = ExportTarget(backend: DesktopExportBackend());
     final second = await secondTarget.createDirectory(dir.path, '章节/标题');
     expect(second, endsWith('标题 (2)'));
     await secondTarget.deleteDirectory();
@@ -575,7 +578,7 @@ void main() {
     // 模拟「下载目录/方舟档案室」：拼接出来、从未创建过的默认路径。
     final missing = '${base.path}${Platform.pathSeparator}方舟档案室';
     expect(Directory(missing).existsSync(), isFalse);
-    final target = ExportTarget();
+    final target = ExportTarget(backend: DesktopExportBackend());
     final root = await target.createDirectory(missing, '主线篇章/14-11 行动后');
     expect(
       root,
@@ -590,5 +593,180 @@ void main() {
     // 只清理半成品根目录；自动创建的父级目录保留，不连带删除。
     expect(Directory(root).existsSync(), isFalse);
     expect(Directory(missing).existsSync(), isTrue);
+  });
+
+  test('ExportTarget 按平台分发：Android 选 zip 后端，桌面选目录后端', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      expect(ExportTarget().supportsDirectorySelection, isFalse);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      expect(ExportTarget().supportsDirectorySelection, isTrue);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  test('Android 后端提供 zip 分享文案，桌面后端提供目录文案', () {
+    final android = AndroidExportBackend();
+    expect(android.supportsDirectorySelection, isFalse);
+    expect(
+      android.destinationSummary('', '主线篇章/14-11 行动后'),
+      '打包为 主线篇章_14-11 行动后.zip，完成后通过系统分享保存',
+    );
+    expect(
+      android.describeCompletion('主线篇章_14-11 行动后.zip'),
+      '素材已打包为 主线篇章_14-11 行动后.zip',
+    );
+    expect(android.openActionLabel, '分享');
+
+    final desktop = DesktopExportBackend();
+    expect(desktop.supportsDirectorySelection, isTrue);
+    expect(
+      desktop.destinationSummary(r'C:\Exports', '主线篇章/14-11 行动后'),
+      r'保存到 C:\Exports/主线篇章/14-11 行动后',
+    );
+    expect(desktop.describeCompletion('目录'), '素材已导出到 目录');
+    expect(desktop.openActionLabel, '打开文件夹');
+  });
+
+  test('Android 导出把素材逐文件写入 zip，manifest 也在包内；分享手动拉起', () async {
+    final cache = MemoryCache();
+    final good = Uri.parse('https://example.test/good.png');
+    final script = Uri.parse('https://example.test/story.txt');
+    await cache.write(good, Uint8List.fromList([1, 2, 3]), story: 'story');
+    await cache.write(
+      script,
+      Uint8List.fromList(utf8.encode('剧情脚本')),
+      story: 'story',
+    );
+    final store = AssetStore(
+      cache: cache,
+      client: MockClient((request) async => fail('已缓存条目不应联网')),
+    );
+    addTearDown(store.close);
+    final package = AssetPackage.fromRefs(
+      storyTitle: '14-11 行动后',
+      storyPath: 'story',
+      groupName: '主线篇章',
+      entryType: 'MAINLINE',
+      refs: [
+        AssetRef(AssetKind.background, 'good', [
+          AssetFile(good, 'images/background/good.png'),
+        ]),
+      ],
+      script: [AssetFile(script, 'script/14-11 行动后.txt')],
+      unresolved: [],
+    );
+    final base = await Directory.systemTemp.createTemp('export-zip-');
+    addTearDown(() async {
+      if (await base.exists()) await base.delete(recursive: true);
+    });
+    final shared = <(String, String)>[];
+    final target = ExportTarget(
+      backend: AndroidExportBackend(
+        cacheDirectory: () async => base,
+        share: (path, displayName) async => shared.add((path, displayName)),
+      ),
+    );
+    final result = await StoryExporter(store).export(
+      target: target,
+      package: package,
+      items: package.items,
+      // 移动端没有目录概念，parentPath 一律忽略。
+      parentPath: '/storage/emulated/0/ignored',
+      appVersion: '1.2.0',
+    );
+    expect(result.completed, isTrue);
+    // 展示位置是压缩包文件名，不是应用内部路径。
+    expect(result.rootPath, '主线篇章_14-11 行动后.zip');
+    final zipPath =
+        '${base.path}${Platform.pathSeparator}方舟档案室导出'
+        '${Platform.pathSeparator}主线篇章_14-11 行动后.zip';
+    final archive = ZipDecoder().decodeBytes(await File(zipPath).readAsBytes());
+    expect(
+      [for (final entry in archive.files) entry.name],
+      containsAll([
+        'images/background/good.png',
+        'script/14-11 行动后.txt',
+        'manifest.json',
+      ]),
+    );
+    expect(archive.findFile('images/background/good.png')!.content, [1, 2, 3]);
+    final manifest = jsonDecode(
+      utf8.decode(archive.findFile('manifest.json')!.content as Uint8List),
+    ) as Map<String, dynamic>;
+    expect(manifest['version'], '1.2.0');
+    expect(manifest['story']['title'], '14-11 行动后');
+    // 完成不自动拉起分享面板，由用户在结果页或提示条手动分享。
+    expect(shared, isEmpty);
+    await target.openResult();
+    expect(shared.single, (zipPath, '主线篇章_14-11 行动后.zip'));
+  });
+
+  test('Android 同名 zip 追加序号不覆盖；取消删除半成品', () async {
+    final base = await Directory.systemTemp.createTemp('export-zip-unique-');
+    addTearDown(() async {
+      if (await base.exists()) await base.delete(recursive: true);
+    });
+    String zipOf(String name) =>
+        '${base.path}${Platform.pathSeparator}方舟档案室导出'
+        '${Platform.pathSeparator}$name';
+    final target = ExportTarget(
+      backend: AndroidExportBackend(cacheDirectory: () async => base),
+    );
+    expect(
+      await target.createDirectory('', '主线篇章/14-11 行动后'),
+      '主线篇章_14-11 行动后.zip',
+    );
+    final secondTarget = ExportTarget(
+      backend: AndroidExportBackend(cacheDirectory: () async => base),
+    );
+    expect(
+      await secondTarget.createDirectory('', '主线篇章/14-11 行动后'),
+      '主线篇章_14-11 行动后 (2).zip',
+    );
+    await target.writeFile('images/bg/a.png', [1]);
+    await target.commit();
+    expect(File(zipOf('主线篇章_14-11 行动后.zip')).existsSync(), isTrue);
+    // 未提交的第二个包取消后删除，不影响已提交的第一个包。
+    await secondTarget.deleteDirectory();
+    expect(secondTarget.rootPath, isNull);
+    expect(File(zipOf('主线篇章_14-11 行动后 (2).zip')).existsSync(), isFalse);
+    expect(File(zipOf('主线篇章_14-11 行动后.zip')).existsSync(), isTrue);
+  });
+  test('Android 并发同名导出独占不同 zip，两个包均可解压', () async {
+    final base = await Directory.systemTemp.createTemp('export-zip-race-');
+    addTearDown(() async {
+      if (await base.exists()) await base.delete(recursive: true);
+    });
+    final first = ExportTarget(
+      backend: AndroidExportBackend(cacheDirectory: () async => base),
+    );
+    final second = ExportTarget(
+      backend: AndroidExportBackend(cacheDirectory: () async => base),
+    );
+    final names = await Future.wait([
+      first.createDirectory('', '章节/同名'),
+      second.createDirectory('', '章节/同名'),
+    ]);
+    expect(names.toSet(), {'章节_同名.zip', '章节_同名 (2).zip'});
+    await Future.wait([
+      first.writeFile('payload.txt', [1]),
+      second.writeFile('payload.txt', [2]),
+    ]);
+    await Future.wait([first.commit(), second.commit()]);
+    final folder = Directory('${base.path}${Platform.pathSeparator}方舟档案室导出');
+    // Future.wait 保留输入顺序，但先占到原始文件名的任务不固定。
+    for (final (index, name) in names.indexed) {
+      final archive = ZipDecoder().decodeBytes(
+        await File('${folder.path}${Platform.pathSeparator}$name')
+            .readAsBytes(),
+      );
+      expect(archive.findFile('payload.txt')!.content, [index + 1]);
+    }
   });
 }
