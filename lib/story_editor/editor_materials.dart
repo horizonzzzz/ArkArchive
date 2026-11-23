@@ -10,6 +10,9 @@ import '../story_player/data/media_catalog.dart';
 import 'editor_platform.dart';
 import 'editor_preview.dart';
 import 'editor_project.dart';
+import '../story_player/fx/fx_loader.dart';
+import '../story_player/fx/fx_painter.dart';
+import '../story_player/fx/fx_simulation.dart';
 
 class EditorMaterialPicker extends StatefulWidget {
   const EditorMaterialPicker({
@@ -30,8 +33,114 @@ class EditorMaterialPicker extends StatefulWidget {
   State<EditorMaterialPicker> createState() => _EditorMaterialPickerState();
 }
 
+class _FxThumbnail extends StatefulWidget {
+  const _FxThumbnail({super.key, required this.name, required this.resources});
+  final String name;
+  final EditorPreviewResources resources;
+
+  @override
+  State<_FxThumbnail> createState() => _FxThumbnailState();
+}
+
+class _FxThumbnailState extends State<_FxThumbnail> {
+  ui.Image? _preview;
+  bool _failed = false;
+  static const _size = 256;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    ui.Image? image;
+    try {
+      final loader = FxLoader(
+        storyFxRoot,
+        widget.resources.store,
+        transient: true,
+      );
+      final asset = await loader.load(widget.name);
+      final textures = <Uri, ui.Image>{};
+      try {
+        for (final file in asset.textures) {
+          final uri = asset.textureUri(file);
+          final codec = await ui.instantiateImageCodec(await loader.bytes(uri));
+          try {
+            textures[uri] = (await codec.getNextFrame()).image;
+          } finally {
+            codec.dispose();
+          }
+        }
+        final simulation = FxSimulation(asset, loop: true);
+        for (var step = 0; step < 30; step++) {
+          simulation.advance(1 / 60);
+        }
+        const stage = Rect.fromLTWH(0, 0, 1280, 720);
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder);
+        final scale = math.min(_size / stage.width, _size / stage.height);
+        canvas.translate(_size / 2, _size / 2);
+        canvas.scale(scale);
+        canvas.translate(-stage.center.dx, -stage.center.dy);
+        canvas.clipRect(stage);
+        final effect = StageEffect(simulation, group: 'effect', layer: 0);
+        paintEffects(
+          canvas,
+          [effect],
+          textures,
+          'effect',
+          afterBlocker: asset.drawAfterBlocker,
+        );
+
+        final background = StageEffect(simulation, group: 'bgeffect', layer: 0);
+        paintEffects(canvas, [background], textures, 'bgeffect');
+        paintScreenOverlays(canvas, stage, [effect]);
+        final picture = recorder.endRecording();
+        try {
+          image = await picture.toImage(_size, _size);
+        } finally {
+          picture.dispose();
+        }
+      } finally {
+        for (final texture in textures.values) {
+          texture.dispose();
+        }
+      }
+    } catch (_) {
+      _failed = true;
+    }
+
+    if (!mounted) {
+      image?.dispose();
+      return;
+    }
+    setState(() => _preview = image);
+  }
+
+  @override
+  void dispose() {
+    _preview?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: _preview != null
+        ? RawImage(image: _preview, fit: BoxFit.contain)
+        : Icon(_failed ? Icons.broken_image_outlined : Icons.hourglass_empty),
+  );
+}
+
 class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
   String query = '';
+  int page = 0;
+  static const _pageSize = 24;
   MediaCatalog? catalog;
   List<String> effects = const [];
   bool loading = true;
@@ -44,6 +153,8 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
     FieldType.cg,
     FieldType.character,
   }.contains(widget.field.type);
+
+  bool get _usesThumbnailGrid => image || widget.field.type == FieldType.fx;
 
   @override
   void initState() {
@@ -177,45 +288,71 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
   }
 
   Widget _materialTile(String key, String label) {
-    final audio = !image && widget.field.type != FieldType.fx;
     final local = widget.assets[key];
-    final tile = ListTile(
+    if (_usesThumbnailGrid) {
+      final selected = key == widget.current;
+      return SizedBox(
+        width: 156,
+        height: 194,
+        child: Card(
+          color: selected
+              ? Theme.of(context).colorScheme.secondaryContainer
+              : null,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => Navigator.pop(context, (key, local)),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                children: [
+                  Expanded(child: _thumbnail(key, local)),
+                  const SizedBox(height: 6),
+                  Text(
+                    label,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (key.startsWith('local_'))
+                    Text(key, maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return ListTile(
       dense: true,
       selected: key == widget.current,
       leading: _thumbnail(key, local),
       title: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: key.startsWith('local_')
-          ? Text(key, maxLines: 1, overflow: TextOverflow.ellipsis)
-          : null,
-      trailing: audio
-          ? IconButton(
-              tooltip: playing == key ? '停止试听' : '试听',
-              onPressed: () => _play(key),
-              icon: Icon(playing == key ? Icons.stop : Icons.play_arrow),
-            )
-          : null,
+      trailing: IconButton(
+        tooltip: playing == key ? '停止试听' : '试听',
+        onPressed: () => _play(key),
+        icon: Icon(playing == key ? Icons.stop : Icons.play_arrow),
+      ),
       onTap: () => Navigator.pop(context, (key, local)),
     );
-    if (!image) {
-      return tile;
-    }
-    return SizedBox(width: 128, child: Card(child: tile));
   }
 
   Widget _thumbnail(String key, EditorAsset? local) {
     if (!image) {
-      return Icon(
-        widget.field.type == FieldType.fx
-            ? Icons.auto_awesome
-            : Icons.music_note,
-      );
+      if (widget.field.type == FieldType.fx) {
+        return _FxThumbnail(
+          key: ValueKey(key),
+          name: key,
+          resources: widget.resources,
+        );
+      }
+      return const Icon(Icons.music_note);
     }
     if (local != null) {
       return Image.memory(
         local.bytes,
-        width: 52,
-        height: 52,
-        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.contain,
       );
     }
     final uri = widget.field.type == FieldType.character
@@ -227,108 +364,130 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
       builder: (_, snapshot) => snapshot.hasData
           ? Image.memory(
               snapshot.data!,
-              width: 52,
-              height: 52,
-              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              fit: BoxFit.contain,
             )
           : const SizedBox(
-              width: 52,
-              height: 52,
+              width: 96,
+              height: 72,
               child: Icon(Icons.image_outlined),
             ),
     );
   }
 
   @override
-  Widget build(BuildContext context) => Dialog(
-    child: SizedBox(
-      width: math.min(560, MediaQuery.sizeOf(context).width - 32),
-      height: math.min(600, MediaQuery.sizeOf(context).height - 48),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.field.label,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                if (widget.field.type != FieldType.fx)
-                  IconButton(
-                    tooltip: '上传本地素材',
-                    onPressed: _upload,
-                    icon: const Icon(Icons.upload_file),
-                  ),
-
-                IconButton(
-                  tooltip: '关闭',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: '搜索素材名称或命令键',
-              ),
-              onChanged: (v) => setState(() => query = v),
-            ),
-          ),
-          if (loading)
-            const Expanded(child: Center(child: CircularProgressIndicator()))
-          else
-            Expanded(
-              child: ListView(
+  Widget build(BuildContext context) {
+    final results = matches;
+    final pageCount = (results.length / _pageSize).ceil();
+    final visible = results.skip(page * _pageSize).take(_pageSize);
+    return Dialog(
+      child: SizedBox(
+        width: math.min(560, MediaQuery.sizeOf(context).width - 32),
+        height: math.min(600, MediaQuery.sizeOf(context).height - 48),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
                 children: [
-                  if (error != null)
-                    ListTile(
-                      leading: const Icon(Icons.info_outline),
-                      title: const Text('PRTS 素材目录暂不可用'),
-                      subtitle: Text(
-                        '$error',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  Expanded(
+                    child: Text(
+                      widget.field.label,
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
-                  if (true)
-                    ListTile(
-                      selected: widget.current == '',
-                      leading: const Icon(Icons.block),
-                      title: const Text('无素材 / 清除'),
-                      onTap: () => Navigator.pop(context, ('', null)),
+                  ),
+                  if (widget.field.type != FieldType.fx)
+                    IconButton(
+                      tooltip: '上传本地素材',
+                      onPressed: _upload,
+                      icon: const Icon(Icons.upload_file),
                     ),
 
-                  if (image)
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final entry in matches.take(500))
-                          _materialTile(entry.$1, entry.$2),
-                      ],
-                    )
-                  else
-                    for (final entry in matches.take(500))
-                      _materialTile(entry.$1, entry.$2),
-                  if (matches.length > 500)
-                    const ListTile(
-                      leading: Icon(Icons.info_outline),
-                      title: Text('结果超过 500 项，请继续缩小搜索范围'),
-                    ),
-                  if (matches.isEmpty && error == null)
-                    const ListTile(title: Text('没有匹配素材')),
+                  IconButton(
+                    tooltip: '关闭',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
                 ],
               ),
             ),
-        ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: '搜索素材名称或命令键',
+                ),
+                onChanged: (v) => setState(() {
+                  query = v;
+                  page = 0;
+                }),
+              ),
+            ),
+            if (loading)
+              const Expanded(child: Center(child: CircularProgressIndicator()))
+            else
+              Expanded(
+                child: ListView(
+                  children: [
+                    if (error != null)
+                      ListTile(
+                        leading: const Icon(Icons.info_outline),
+                        title: const Text('PRTS 素材目录暂不可用'),
+                        subtitle: Text(
+                          '$error',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    if (true)
+                      ListTile(
+                        selected: widget.current == '',
+                        leading: const Icon(Icons.block),
+                        title: const Text('无素材 / 清除'),
+                        onTap: () => Navigator.pop(context, ('', null)),
+                      ),
+
+                    if (_usesThumbnailGrid)
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final entry in visible)
+                            _materialTile(entry.$1, entry.$2),
+                        ],
+                      )
+                    else
+                      for (final entry in visible)
+                        _materialTile(entry.$1, entry.$2),
+                    if (results.isEmpty && error == null)
+                      const ListTile(title: Text('没有匹配素材')),
+                  ],
+                ),
+              ),
+            if (!loading && pageCount > 1)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    tooltip: '上一页',
+                    onPressed: page > 0 ? () => setState(() => page--) : null,
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  Text('${page + 1} / $pageCount'),
+                  IconButton(
+                    tooltip: '下一页',
+                    onPressed: page + 1 < pageCount
+                        ? () => setState(() => page++)
+                        : null,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
+              ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
