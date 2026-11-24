@@ -136,7 +136,10 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
     for (final item in package.items) {
       for (final file in item.files) {
         if (_fileSizes.containsKey(file.uri)) continue;
-        final size = await _store.cachedSize(file.uri, story: package.storyPath);
+        final size = await _store.cachedSize(
+          file.uri,
+          story: package.storyPath,
+        );
         if (!mounted) return;
         setState(() => _fileSizes[file.uri] = size);
       }
@@ -190,7 +193,11 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
 
   List<AssetItem> _categoryItems(int category) => switch (category) {
     // 视频与音频同属「音频」分类页（试听类媒体）。
-    2 => _package!.itemsOfKinds({AssetKind.music, AssetKind.sfx, AssetKind.video}),
+    2 => _package!.itemsOfKinds({
+      AssetKind.music,
+      AssetKind.sfx,
+      AssetKind.video,
+    }),
     0 => _package!.itemsOfKinds(_imageKinds),
     1 => _package!.itemsOfKinds({AssetKind.character}),
     _ => _package!.itemsOfKinds({AssetKind.script}),
@@ -213,79 +220,125 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final job = _job;
-    return Dialog(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // 按对话框可用宽度选布局：窄屏（手机竖屏）单列，宽屏双栏。
-          // 固定 176 的侧栏会把右侧预览区挤成细条，不能沿用到手机。
-          final compact = constraints.maxWidth < 700;
-          return ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 880, maxHeight: 660),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _header(context),
-                Flexible(
-                  child: job == null
-                      ? _browseBody(context, compact)
-                      : _jobBody(context, job),
-                ),
-                _footer(context, compact),
-              ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 700;
+        final job = _job;
+        final content = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _header(context, compact),
+            Expanded(
+              child: job == null
+                  ? _browseBody(context, compact)
+                  : _jobBody(context, job),
             ),
-          );
-        },
-      ),
+            if (job == null && _package != null) _footer(context, compact),
+          ],
+        );
+        final colors = AppColors.of(context);
+        return compact
+            ? Dialog.fullscreen(
+                backgroundColor: colors.panel,
+                child: SafeArea(child: content),
+              )
+            : Dialog(
+                backgroundColor: colors.panel,
+                insetPadding: const EdgeInsets.symmetric(horizontal: 16),
+                shape: _tacticalShape,
+                clipBehavior: Clip.antiAlias,
+                child: SizedBox(
+                  width: 880,
+                  height: (constraints.maxHeight * .8).clamp(0.0, 760.0),
+                  child: content,
+                ),
+              );
+      },
     );
   }
 
-  Widget _header(BuildContext context) {
+  static const _tacticalShape = RoundedRectangleBorder(
+    borderRadius: BorderRadius.all(Radius.circular(2)),
+  );
+
+  Widget _header(BuildContext context, bool compact) {
     final package = _package;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 8, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '导出《${widget.entry.title}》素材',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.of(context).text,
+    final colors = AppColors.of(context);
+    final status = widget.cached ? '已离线' : '未缓存';
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.borderSubtle)),
+      ),
+      child: Padding(
+        padding: EdgeInsets.only(left: compact ? 12 : 16, right: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '导出《${widget.entry.title}》素材',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: compact ? 14 : 16,
+                      fontWeight: FontWeight.w700,
+                      color: colors.text,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  package == null
-                      ? '正在读取剧情脚本与素材清单…'
-                      : [
-                        if (widget.group?.name case final group?)
-                          group
-                          else
-                            '剧情素材',
-                        '${package.items.length} 项 / ${package.fileCount} 个文件',
-                        widget.cached ? '已离线缓存，无需联网' : '未缓存，预览与导出将从网络加载',
-                      ].join(' · '),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.of(context).subtext,
-                    height: 1.5,
-                  ),
-                ),
-              ],
+                  if (!compact && package != null)
+                    Text(
+                      '${widget.group?.name ?? '剧情素材'} · ${package.items.length} 项 / ${package.fileCount} 个文件 · '
+                      '${widget.cached ? '已离线缓存，无需联网' : '未缓存，预览与导出将从网络加载'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: colors.subtext),
+                    ),
+                ],
+              ),
             ),
-          ),
-          IconButton(
-            tooltip: '关闭',
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close, size: 20),
-          ),
-        ],
+            if (compact && package != null)
+              Text(
+                status,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: widget.cached ? colors.green : colors.subtext,
+                ),
+              ),
+            if (compact &&
+                _job == null &&
+                package != null &&
+                _target.supportsDirectorySelection)
+              IconButton(
+                tooltip: '更改保存目录：$_destination',
+                onPressed: _pickDirectory,
+                icon: const Icon(Icons.folder_outlined, size: 18),
+              ),
+            IconButton(
+              tooltip: '素材版权',
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('素材版权'),
+                  content: const Text('素材版权归鹰角网络所有，仅供个人收藏与学习使用，请勿用于商业用途。'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('知道了'),
+                    ),
+                  ],
+                ),
+              ),
+              icon: const Icon(Icons.info_outline, size: 18),
+            ),
+            IconButton(
+              tooltip: '关闭',
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close, size: 20),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -338,42 +391,27 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(width: 176, child: _navPanel(context)),
+        SizedBox(width: 180, child: _navPanel(context)),
         VerticalDivider(width: 1, color: AppColors.of(context).borderSubtle),
         Expanded(child: _itemsPanel(context, compact)),
       ],
     );
   }
 
-  /// 窄屏分类栏：与侧栏同一组分类，带计数，横向可滚动。
-  Widget _categoryBar(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
-      child: Row(
-        children: [
-          for (var i = 0; i < _imageCategories.length; i++) ...[
-            if (i > 0) const SizedBox(width: 8),
-            ChoiceChip(
-              label: Text('${_imageCategories[i].$2} ${_categoryItems(i).length}'),
-              selected: _category == i,
-              onSelected: (_) => setState(() {
-                _category = i;
-                _imageFilter = 0;
-                _audioFilter = 0;
-              }),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
+  Widget _categoryBar(BuildContext context) => SizedBox(
+    height: 36,
+    child: Row(
+      children: [
+        for (var i = 0; i < _imageCategories.length; i++)
+          Expanded(child: _categorySegment(context, i, sidebar: false)),
+      ],
+    ),
+  );
   Widget _navPanel(BuildContext context) {
     return Column(
       children: [
         for (var i = 0; i < _imageCategories.length; i++)
-          _navTile(context, i),
+          _categorySegment(context, i, sidebar: true),
         const Spacer(),
         Padding(
           padding: const EdgeInsets.all(8),
@@ -402,58 +440,124 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
     );
   }
 
-  Widget _navTile(BuildContext context, int index) {
+  Widget _categorySegment(
+    BuildContext context,
+    int index, {
+    required bool sidebar,
+  }) {
     final (icon, label) = _imageCategories[index];
-    final count = _categoryItems(index).length;
     final selected = _category == index;
-    return Material(
-      color: selected
-          ? AppColors.of(context).surface
-          : Colors.transparent,
-      child: ListTile(
-        dense: true,
-        visualDensity: VisualDensity.compact,
-        selected: selected,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-        leading: Icon(
-          icon,
-          size: 18,
-          color: selected
-              ? AppColors.of(context).indicator
-              : AppColors.of(context).subtext,
-        ),
-        title: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: selected
-                ? AppColors.of(context).text
-                : AppColors.of(context).secondary,
-          ),
-        ),
-        trailing: Text(
-          '$count',
-          style: TextStyle(
-            fontSize: 12,
-            color: AppColors.of(context).subtext,
-          ),
-        ),
-        onTap: () => setState(() {
+    final colors = AppColors.of(context);
+    return _segment(
+      context,
+      selected: selected,
+      sidebar: sidebar,
+      tab: !sidebar,
+      onTap: () {
+        if (selected) return;
+        setState(() {
           _category = index;
           _imageFilter = 0;
           _audioFilter = 0;
-        }),
+        });
+      },
+      child: Row(
+        mainAxisSize: sidebar ? MainAxisSize.max : MainAxisSize.min,
+        children: [
+          if (sidebar) ...[
+            Icon(
+              icon,
+              size: 16,
+              color: selected ? colors.indicator : colors.subtext,
+            ),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          if (sidebar) const Spacer() else const SizedBox(width: 4),
+          _count(context, _categoryItems(index).length, selected: selected),
+        ],
+      ),
+    );
+  }
+
+  Widget _segment(
+    BuildContext context, {
+    required bool selected,
+    required VoidCallback onTap,
+    required Widget child,
+    bool sidebar = false,
+    bool tab = false,
+  }) {
+    final colors = AppColors.of(context);
+    final line = selected ? colors.indicator : Colors.transparent;
+    final border = sidebar
+        ? Border(left: BorderSide(color: line, width: 3))
+        : tab
+        ? Border(bottom: BorderSide(color: line, width: 2))
+        : Border.all(color: selected ? line : colors.borderSubtle);
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected
+            ? colors.indicator.withValues(alpha: .12)
+            : Colors.transparent,
+        shape: _tacticalShape,
+        clipBehavior: Clip.antiAlias,
+        child: Ink(
+          decoration: BoxDecoration(border: border),
+          child: InkWell(
+            onTap: onTap,
+            child: Container(
+              height: sidebar
+                  ? 42
+                  : tab
+                  ? 36
+                  : 28,
+              alignment: Alignment.center,
+              padding: EdgeInsets.symmetric(
+                horizontal: sidebar
+                    ? 12
+                    : tab
+                    ? 2
+                    : 8,
+              ),
+              child: DefaultTextStyle.merge(
+                style: TextStyle(
+                  fontFamily: AppTypography.sans,
+                  fontSize: 12,
+                  color: selected ? colors.text : colors.secondary,
+                ),
+                child: child,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _count(BuildContext context, int count, {bool selected = false}) {
+    final colors = AppColors.of(context);
+    return Text(
+      '$count',
+      style: TextStyle(
+        fontFamily: AppTypography.bender,
+        fontSize: 12,
+        color: selected ? colors.indicator : colors.subtext,
       ),
     );
   }
 
   Widget _itemsPanel(BuildContext context, bool compact) {
     final items = _filteredItems();
-    final chips = _filterChips(context, items.length);
+    final categoryItems = _categoryItems(_category);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ?chips,
+        _filterBar(context, categoryItems, compact),
         Expanded(
           child: items.isEmpty
               ? Center(
@@ -475,50 +579,126 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
     );
   }
 
-  Widget? _filterChips(BuildContext context, int count) {
-    final List<(String, int)> chips;
-    if (_category == 0) {
-      chips = [
-        for (var i = 0; i <= _imageKinds.length; i++)
-          (
-            i == 0 ? '全部' : _kindLabel(_imageKinds.elementAt(i - 1)),
-            _categoryItems(0)
-                .where((item) =>
-                    i == 0 || item.kind == _imageKinds.elementAt(i - 1))
-                .length,
-          ),
-      ];
-    } else if (_category == 2) {
-      chips = [
-        ('全部', _categoryItems(2).length),
-        ('BGM', _categoryItems(2)
-            .where((item) => item.kind == AssetKind.music)
-            .length),
-        ('音效', _categoryItems(2)
-            .where((item) => item.kind == AssetKind.sfx)
-            .length),
-      ];
-    } else {
-      return null;
-    }
-    final active = _category == 0 ? _imageFilter : _audioFilter;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Wrap(
-        spacing: 8,
+  Widget _filterBar(BuildContext context, List<AssetItem> items, bool compact) {
+    final colors = AppColors.of(context);
+    final kinds = switch (_category) {
+      0 => _imageKinds,
+      2 => {AssetKind.music, AssetKind.sfx},
+      _ => <AssetKind>{},
+    };
+    final filters = [
+      ('全部', items.length),
+      for (final kind in kinds)
+        (
+          kind == AssetKind.music
+              ? 'BGM'
+              : kind == AssetKind.sfx
+              ? '音效'
+              : _kindLabel(kind),
+          items.where((item) => item.kind == kind).length,
+        ),
+    ];
+    final active = _category == 0
+        ? _imageFilter
+        : _category == 2
+        ? _audioFilter
+        : 0;
+    void select(int index) => setState(() {
+      if (_category == 0) {
+        _imageFilter = index;
+      } else {
+        _audioFilter = index;
+      }
+    });
+    Widget label(int index, {bool dropdown = false}) {
+      final (name, count) = filters[index];
+      return Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          for (var i = 0; i < chips.length; i++)
-            ChoiceChip(
-              label: Text('${chips[i].$1} ${chips[i].$2}'),
-              selected: active == i,
-              onSelected: (value) => setState(() {
-                if (_category == 0) {
-                  _imageFilter = i;
-                } else {
-                  _audioFilter = i;
-                }
-              }),
+          Text(dropdown ? '类型：$name' : name),
+          const SizedBox(width: 4),
+          _count(context, count, selected: index == active),
+          if (dropdown) const Icon(Icons.arrow_drop_down, size: 16),
+        ],
+      );
+    }
+
+    return Container(
+      height: compact ? 32 : 34,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.borderSubtle)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: kinds.isEmpty
+                ? const SizedBox.shrink()
+                : compact
+                ? Align(
+                    alignment: Alignment.centerLeft,
+                    child: PopupMenuButton<int>(
+                      tooltip: '筛选素材类型',
+                      initialValue: active,
+                      onSelected: select,
+                      shape: _tacticalShape,
+                      color: colors.raised,
+                      itemBuilder: (context) => [
+                        for (var i = 0; i < filters.length; i++)
+                          PopupMenuItem(value: i, child: label(i)),
+                      ],
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: ShapeDecoration(
+                          color: colors.surface,
+                          shape: _tacticalShape.copyWith(
+                            side: BorderSide(color: colors.borderSubtle),
+                          ),
+                        ),
+                        child: DefaultTextStyle.merge(
+                          style: TextStyle(
+                            fontFamily: AppTypography.sans,
+                            fontSize: 12,
+                            color: colors.text,
+                          ),
+                          child: label(active, dropdown: true),
+                        ),
+                      ),
+                    ),
+                  )
+                : SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < filters.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 4),
+                          _segment(
+                            context,
+                            selected: active == i,
+                            onTap: () => select(i),
+                            child: label(i),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 8),
+          Text.rich(
+            TextSpan(
+              children: [
+                const TextSpan(text: '分类已选 '),
+                TextSpan(
+                  text: '${items.where(_isSelected).length}/${items.length}',
+                  style: const TextStyle(fontFamily: AppTypography.bender),
+                ),
+              ],
             ),
+            style: TextStyle(fontSize: 12, color: colors.subtext),
+          ),
         ],
       ),
     );
@@ -594,14 +774,14 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
         shape: RoundedRectangleBorder(
           side: BorderSide(color: AppColors.of(context).borderSubtle),
         ),
-        leading: Icon(Icons.description_outlined, color: AppColors.of(context).subtext),
+        leading: Icon(
+          Icons.description_outlined,
+          color: AppColors.of(context).subtext,
+        ),
         title: Text(item.title),
         subtitle: Text(
           '原始剧情脚本${bytes == null ? '' : ' · ${_formatBytes(bytes)}'}',
-          style: TextStyle(
-            fontSize: 12,
-            color: AppColors.of(context).subtext,
-          ),
+          style: TextStyle(fontSize: 12, color: AppColors.of(context).subtext),
         ),
         trailing: Checkbox(
           value: _isSelected(item),
@@ -663,7 +843,10 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text('正在导出素材…', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          const Text(
+            '正在导出素材…',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 20),
           // 任务刚建立时 total 为 0，用有界值代替 indeterminate，避免无
           // 限转圈的持续动画干扰界面与测试。
@@ -674,7 +857,10 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
           const SizedBox(height: 12),
           Text(
             '${job.done} / ${job.total} 个文件 · ${_formatBytes(job.bytes)}',
-            style: TextStyle(fontSize: 12, color: AppColors.of(context).subtext),
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.of(context).subtext,
+            ),
           ),
           const SizedBox(height: 24),
           Row(
@@ -707,12 +893,20 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.check_circle_outline,
-                  size: 22, color: AppColors.of(context).green),
+              Icon(
+                Icons.check_circle_outline,
+                size: 22,
+                color: AppColors.of(context).green,
+              ),
               const SizedBox(width: 8),
               Text(
-                result.completed ? '素材已导出' : '导出完成，${result.failures.length} 个文件失败',
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                result.completed
+                    ? '素材已导出'
+                    : '导出完成，${result.failures.length} 个文件失败',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -795,7 +989,10 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text('导出失败', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          const Text(
+            '导出失败',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 12),
           Text(
             job.error ?? '未知错误',
@@ -822,11 +1019,17 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text('已取消导出', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          const Text(
+            '已取消导出',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 8),
           Text(
             '未完成的文件已清理。',
-            style: TextStyle(fontSize: 12, color: AppColors.of(context).subtext),
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.of(context).subtext,
+            ),
           ),
           const SizedBox(height: 24),
           TextButton(
@@ -861,150 +1064,144 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
 
   // ---------- 底栏 ----------
 
+  String get _destination => _target.destinationSummary(
+    _parentPath,
+    exportDirectoryName(
+      groupName: widget.group?.name ?? '',
+      title: widget.entry.title,
+    ),
+  );
+
   Widget _footer(BuildContext context, bool compact) {
-    final package = _package;
-    final job = _job;
-    final exporting = job != null;
-    final canPick = job == null && package != null;
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.of(context).borderSubtle)),
+    final colors = AppColors.of(context);
+    final canPickDirectory = _target.supportsDirectorySelection;
+    final total = _package!.items.length;
+    final allSelected = total > 0 && _selected.length == total;
+    final summary = _selectionSummary();
+    final button = FilledButton(
+      onPressed:
+          _selected.isNotEmpty && (!canPickDirectory || _parentPath.isNotEmpty)
+          ? _startExport
+          : null,
+      style: FilledButton.styleFrom(
+        shape: _tacticalShape,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        minimumSize: Size(0, compact && !canPickDirectory ? 34 : 40),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
-      padding: EdgeInsets.fromLTRB(compact ? 16 : 20, 14, compact ? 16 : 20, 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Text(_exportButtonLabel()),
+    );
+    void toggle() {
+      if (allSelected) {
+        setState(_selected.clear);
+      } else {
+        _selectAll();
+      }
+    }
+
+    return Container(
+      height: compact ? 56 : 52,
+      padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12),
+      decoration: BoxDecoration(
+        color: colors.panel,
+        border: Border(top: BorderSide(color: colors.borderSubtle)),
+      ),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(
-                _target.supportsDirectorySelection
-                    ? Icons.folder_outlined
-                    : Icons.folder_zip_outlined,
-                size: 16,
-                color: AppColors.of(context).subtext,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _target.destinationSummary(
-                    _parentPath,
-                    exportDirectoryName(
-                      groupName: widget.group?.name ?? '',
-                      title: widget.entry.title,
+          if (compact)
+            Row(
+              children: [
+                Checkbox(
+                  value: _selected.isEmpty
+                      ? false
+                      : allSelected
+                      ? true
+                      : null,
+                  tristate: true,
+                  onChanged: total == 0 ? null : (_) => toggle(),
+                  semanticLabel: allSelected ? '清空选择' : '全选素材',
+                ),
+                ExcludeSemantics(
+                  child: InkWell(
+                    onTap: total == 0 ? null : toggle,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Text('全选', style: TextStyle(fontSize: 12)),
                     ),
                   ),
+                ),
+              ],
+            )
+          else ...[
+            Icon(
+              canPickDirectory
+                  ? Icons.folder_outlined
+                  : Icons.folder_zip_outlined,
+              size: 16,
+              color: colors.subtext,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: Tooltip(
+                message: _destination,
+                child: Text(
+                  _destination,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: AppColors.of(context).secondary),
+                  style: TextStyle(fontSize: 12, color: colors.secondary),
                 ),
               ),
-              if (_target.supportsDirectorySelection)
-                TextButton(
-                  onPressed: exporting ? null : _pickDirectory,
-                  child: const Text('更改'),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '素材版权归鹰角网络所有，仅供个人收藏与学习使用，请勿用于商业用途。',
-            style: TextStyle(
-              fontSize: 11,
-              color: AppColors.of(context).muted,
-              height: 1.5,
             ),
-          ),
-          if (compact) ...[
-            // 窄屏：统计与全选/清空同一行，动作按钮单独一行，
-            // 避免四个按钮加统计在窄对话框里横向溢出。
-            if (canPick) ...[
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _selectionSummary(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.of(context).subtext,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _selected.length == package.items.length
-                        ? null
-                        : _selectAll,
-                    child: const Text('全选'),
-                  ),
-                  TextButton(
-                    onPressed: _selected.isEmpty
-                        ? null
-                        : () => setState(_selected.clear),
-                    child: const Text('清空'),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                const Spacer(),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: !exporting &&
-                          package != null &&
-                          _selected.isNotEmpty &&
-                          (!_target.supportsDirectorySelection ||
-                              _parentPath.isNotEmpty)
-                      ? _startExport
-                      : null,
-                  child: Text(_exportButtonLabel()),
-                ),
-              ],
-            ),
-          ] else ...[
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: package == null
-                      ? const SizedBox.shrink()
-                      : Text(
-                          _selectionSummary(),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.of(context).subtext,
-                          ),
-                        ),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
-                ),
-                const SizedBox(width: 12),
-                FilledButton(
-                  onPressed: !exporting &&
-                          package != null &&
-                          _selected.isNotEmpty &&
-                          (!_target.supportsDirectorySelection ||
-                              _parentPath.isNotEmpty)
-                      ? _startExport
-                      : null,
-                  child: Text(_exportButtonLabel()),
-                ),
-              ],
-            ),
+            if (canPickDirectory)
+              TextButton(onPressed: _pickDirectory, child: const Text('更改')),
           ],
+          const SizedBox(width: 8),
+          Expanded(
+            child: Tooltip(
+              message: summary,
+              child: Text(
+                compact ? _compactSelectionSummary() : summary,
+                maxLines: compact ? 2 : 1,
+                textAlign: compact ? TextAlign.start : TextAlign.end,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: AppTypography.bender,
+                  fontFamilyFallback: const [AppTypography.sans],
+                  fontSize: 12,
+                  color: colors.subtext,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (compact && !canPickDirectory)
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                button,
+                Tooltip(
+                  message: _destination,
+                  child: Text(
+                    '打包 zip 后系统分享',
+                    style: TextStyle(fontSize: 10, color: colors.muted),
+                  ),
+                ),
+              ],
+            )
+          else
+            button,
         ],
       ),
     );
+  }
+
+  String _compactSelectionSummary() {
+    if (_selected.isEmpty) return '未选择素材';
+    final (bytes, unknown) = _selectedBytes;
+    final count = '已选 ${_selected.length} 项';
+    if (unknown && bytes == 0) return count;
+    return '$count\n${unknown ? '已统计 ' : ''}${_formatBytes(bytes)}';
   }
 
   String _selectionSummary() {
@@ -1012,23 +1209,21 @@ class _StoryExportDialogState extends State<StoryExportDialog> {
     final files = _selectedFileCount;
     if (_selected.isEmpty) return '未选择素材';
     final known = unknown
-        ? bytes > 0 ? '已选 ${_selected.length} 项 · 已统计 ${_formatBytes(bytes)}' : '已选 ${_selected.length} 项'
+        ? bytes > 0
+              ? '已选 ${_selected.length} 项 · 已统计 ${_formatBytes(bytes)}'
+              : '已选 ${_selected.length} 项'
         : '已选 ${_selected.length} 项 · ${_formatBytes(bytes)}';
     return '$known / $files 个文件';
   }
 
-  String _exportButtonLabel() {
-    if (_job != null) return '正在导出…';
-    if (_selected.isEmpty) return '导出';
-    return '导出 ${_selected.length} 项';
-  }
+  String _exportButtonLabel() => '导出素材 (${_selected.length})';
 
   Future<void> _pickDirectory() async {
     final path = await getDirectoryPath(
       confirmButtonText: '选择此目录',
       initialDirectory: _parentPath.isEmpty ? null : _parentPath,
     );
-    if (path != null) setState(() => _parentPath = path);
+    if (mounted && path != null) setState(() => _parentPath = path);
   }
 
   void _startExport() {
@@ -1090,20 +1285,23 @@ class _AssetTileState extends State<_AssetTile> {
   void _load() {
     if (_loading) return;
     _loading = true;
-    widget.previews.load(widget.item.preview).then((bytes) {
-      if (!mounted) return;
-      setState(() {
-        _bytes = bytes;
-        _error = null;
-        _loading = false;
-      });
-    }).catchError((Object error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error;
-        _loading = false;
-      });
-    });
+    widget.previews
+        .load(widget.item.preview)
+        .then((bytes) {
+          if (!mounted) return;
+          setState(() {
+            _bytes = bytes;
+            _error = null;
+            _loading = false;
+          });
+        })
+        .catchError((Object error) {
+          if (!mounted) return;
+          setState(() {
+            _error = error;
+            _loading = false;
+          });
+        });
   }
 
   @override
@@ -1146,10 +1344,7 @@ class _AssetTileState extends State<_AssetTile> {
                         color: colors.canvas.withValues(alpha: .78),
                         child: Text(
                           '差分 ${item.files.length - 1}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: colors.subtext,
-                          ),
+                          style: TextStyle(fontSize: 10, color: colors.subtext),
                         ),
                       ),
                     ),
@@ -1177,7 +1372,7 @@ class _AssetTileState extends State<_AssetTile> {
                     height: 28,
                     child: Checkbox(
                       value: widget.selected,
- onChanged: (_) => widget.onToggle(),
+                      onChanged: (_) => widget.onToggle(),
                     ),
                   ),
                 ],
@@ -1270,10 +1465,15 @@ class _AudioTile extends StatelessWidget {
         return ListTile(
           dense: true,
           visualDensity: VisualDensity.compact,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 2,
+          ),
           leading: IconButton(
             tooltip: isVideo ? '视频素材不支持试听' : (playing ? '停止试听' : '试听 30 秒'),
-            onPressed: isVideo ? null : () => audio.toggle(item.id, item.preview),
+            onPressed: isVideo
+                ? null
+                : () => audio.toggle(item.id, item.preview),
             icon: Icon(
               isVideo
                   ? Icons.movie_outlined
@@ -1295,9 +1495,10 @@ class _AudioTile extends StatelessWidget {
                   children: [
                     Expanded(
                       child: LinearProgressIndicator(
-                        value: (audio.position.inMilliseconds /
-                                AudioPreviewController.limit.inMilliseconds)
-                            .clamp(0.0, 1.0),
+                        value:
+                            (audio.position.inMilliseconds /
+                                    AudioPreviewController.limit.inMilliseconds)
+                                .clamp(0.0, 1.0),
                         minHeight: 2,
                       ),
                     ),
@@ -1308,14 +1509,15 @@ class _AudioTile extends StatelessWidget {
                     ),
                   ],
                 )
-                  : Text(
+              : Text(
                   ended
                       ? '试听结束，点击重新播放'
                       : error != null
                       ? '无法试听'
                       : [
                           _kindLabel(item.kind),
-                          if (item.files.length > 1) '含 ${item.files.length} 个文件',
+                          if (item.files.length > 1)
+                            '含 ${item.files.length} 个文件',
                           if (bytes != null) _formatBytes(bytes!),
                         ].join(' · '),
                   style: TextStyle(fontSize: 11, color: colors.subtext),
@@ -1415,7 +1617,11 @@ class _AssetImageViewerState extends State<_AssetImageViewer> {
                     child: IconButton(
                       tooltip: '上一项',
                       onPressed: () => _move(-1),
-                      icon: const Icon(Icons.chevron_left, size: 30, color: Colors.white70),
+                      icon: const Icon(
+                        Icons.chevron_left,
+                        size: 30,
+                        color: Colors.white70,
+                      ),
                     ),
                   ),
                 ),
@@ -1427,7 +1633,11 @@ class _AssetImageViewerState extends State<_AssetImageViewer> {
                     child: IconButton(
                       tooltip: '下一项',
                       onPressed: () => _move(1),
-                      icon: const Icon(Icons.chevron_right, size: 30, color: Colors.white70),
+                      icon: const Icon(
+                        Icons.chevron_right,
+                        size: 30,
+                        color: Colors.white70,
+                      ),
                     ),
                   ),
                 ),
@@ -1447,7 +1657,10 @@ class _AssetImageViewerState extends State<_AssetImageViewer> {
                 bottom: 0,
                 child: Container(
                   color: const Color(0xcc101014),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
@@ -1483,7 +1696,10 @@ class _AssetImageViewerState extends State<_AssetImageViewer> {
                         children: [
                           Text(
                             '包含在导出中',
-                            style: TextStyle(color: colors.onActive, fontSize: 12),
+                            style: TextStyle(
+                              color: colors.onActive,
+                              fontSize: 12,
+                            ),
                           ),
                           Checkbox(
                             value: widget.isSelected(item),
@@ -1596,16 +1812,16 @@ class _ViewerImageState extends State<_ViewerImage> {
 // ---------- 公共 ----------
 
 String _kindLabel(AssetKind kind) => switch (kind) {
-      AssetKind.background => '背景',
-      AssetKind.cg => 'CG',
-      AssetKind.cutin => '切入图',
-      AssetKind.other => '道具图',
-      AssetKind.character => '立绘',
-      AssetKind.music => 'BGM',
-      AssetKind.sfx => '音效',
-      AssetKind.script => '脚本',
-      AssetKind.video => '视频',
-    };
+  AssetKind.background => '背景',
+  AssetKind.cg => 'CG',
+  AssetKind.cutin => '切入图',
+  AssetKind.other => '道具图',
+  AssetKind.character => '立绘',
+  AssetKind.music => 'BGM',
+  AssetKind.sfx => '音效',
+  AssetKind.script => '脚本',
+  AssetKind.video => '视频',
+};
 
 String _formatBytes(int bytes) {
   if (bytes < 1024) return '$bytes B';

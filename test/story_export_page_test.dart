@@ -94,7 +94,13 @@ class _FakeBackend implements AudioPreviewBackend {
   }
 }
 
-const _entry = StoryEntry('14-1 余火 行动前', 'main/14-1', code: '14-1', name: '余火', tag: '行动前');
+const _entry = StoryEntry(
+  '14-1 余火 行动前',
+  'main/14-1',
+  code: '14-1',
+  name: '余火',
+  tag: '行动前',
+);
 const _group = StoryGroup('慈悲灯塔', [_entry], entryType: 'MAINLINE');
 
 const _script = r'''
@@ -108,9 +114,7 @@ Future<StoryRepository> _seededRepository() async {
   final cache = _MemoryCache();
   final store = AssetStore(
     cache: cache,
-    client: MockClient(
-      (request) async => http.Response('not an image', 200),
-    ),
+    client: MockClient((request) async => http.Response('not an image', 200)),
   );
   final repository = StoryRepository(store);
   await cache.write(
@@ -207,8 +211,10 @@ class _PackageRepository extends _UiRepository {
   final AssetPackage package;
 
   @override
-  Future<AssetPackage> packageEntry(StoryEntry entry, {StoryGroup? group}) async =>
-      package;
+  Future<AssetPackage> packageEntry(
+    StoryEntry entry, {
+    StoryGroup? group,
+  }) async => package;
 }
 
 /// 记录完成动作的假后端：真实后端（目录写盘、zip 打包）的行为由
@@ -234,20 +240,20 @@ class _RecordingExportBackend implements ExportTargetBackend {
   bool get supportsDirectorySelection => directorySelection;
 
   @override
-  String destinationSummary(String parentPath, String rootName) => directorySelection
+  String destinationSummary(String parentPath, String rootName) =>
+      directorySelection
       ? '保存到 $parentPath/$rootName'
       : '打包为 ${rootName.replaceAll('/', '_')}.zip';
 
   @override
-  String describeCompletion(String rootPath) => directorySelection
-      ? '素材已导出到 $rootPath'
-      : '素材已打包为 $rootPath';
+  String describeCompletion(String rootPath) =>
+      directorySelection ? '素材已导出到 $rootPath' : '素材已打包为 $rootPath';
 
   @override
   Future<String> createDirectory(String parentPath, String name) async =>
       _rootName = directorySelection
-          ? '$parentPath/$name'
-          : '${name.replaceAll('/', '_')}.zip';
+      ? '$parentPath/$name'
+      : '${name.replaceAll('/', '_')}.zip';
 
   @override
   Future<void> writeFile(String relativePath, List<int> bytes) async {}
@@ -268,7 +274,10 @@ class _RecordingExportBackend implements ExportTargetBackend {
   }
 }
 
-Future<void> _mountLauncher(WidgetTester tester, StoryRepository repository) async {
+Future<void> _mountLauncher(
+  WidgetTester tester,
+  StoryRepository repository,
+) async {
   await repository.store.loadSettings();
   await tester.binding.setSurfaceSize(const Size(1280, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -352,10 +361,7 @@ void main() {
     await _mountDialog(tester, repository);
 
     expect(find.text('导出《14-1 余火 行动前》素材'), findsOneWidget);
-    expect(
-      find.textContaining('4 项 / 5 个文件 · 已离线缓存，无需联网'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('4 项 / 5 个文件 · 已离线缓存，无需联网'), findsOneWidget);
     expect(find.text('图片'), findsOneWidget);
     expect(find.text('立绘'), findsOneWidget);
     expect(find.text('音频'), findsOneWidget);
@@ -379,9 +385,9 @@ void main() {
     await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
     expect(find.textContaining('已选 3 项'), findsOneWidget);
-    expect(find.text('导出 3 项'), findsOneWidget);
+    expect(find.text('导出素材 (3)'), findsOneWidget);
 
-    await tester.tap(find.text('导出 3 项'));
+    await tester.tap(find.text('导出素材 (3)'));
     await tester.pumpAndSettle();
     expect(started, hasLength(1));
     expect(started.single.$2, hasLength(3));
@@ -471,7 +477,10 @@ void main() {
       entryType: 'MAINLINE',
       refs: [
         AssetRef(AssetKind.background, 'bg', [
-          AssetFile(Uri.parse('https://x.test/bg.png'), 'images/background/bg.png'),
+          AssetFile(
+            Uri.parse('https://x.test/bg.png'),
+            'images/background/bg.png',
+          ),
         ]),
       ],
       script: [],
@@ -490,10 +499,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('导出《14-1 余火 行动前》素材'), findsOneWidget);
     // 底栏提示 zip 打包，不提供目录选择。
-    expect(
-      find.textContaining('打包为 慈悲灯塔_14-1 余火 行动前.zip'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('打包为 慈悲灯塔_14-1 余火 行动前.zip'), findsOneWidget);
     expect(find.text('更改'), findsNothing);
   });
 
@@ -503,10 +509,7 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     try {
       await _mountDialog(tester, repository);
-      expect(
-        find.text(r'保存到 C:\Exports/慈悲灯塔/14-1 余火 行动前'),
-        findsOneWidget,
-      );
+      expect(find.text(r'保存到 C:\Exports/慈悲灯塔/14-1 余火 行动前'), findsOneWidget);
       expect(find.text('更改'), findsOneWidget);
     } finally {
       debugDefaultTargetPlatformOverride = null;
@@ -517,11 +520,8 @@ void main() {
     final repository = await _seededRepository();
     addTearDown(repository.store.close);
     // 默认 android 平台。
-    await _mountDialog(tester, repository);
-    expect(
-      find.textContaining('打包为 慈悲灯塔_14-1 余火 行动前.zip，完成后通过系统分享保存'),
-      findsOneWidget,
-    );
+    await _mountDialog(tester, repository, size: const Size(390, 844));
+    expect(find.text('打包 zip 后系统分享'), findsOneWidget);
     expect(find.text('更改'), findsNothing);
     expect(find.textContaining('保存到'), findsNothing);
   });
@@ -531,29 +531,42 @@ void main() {
     addTearDown(repository.store.close);
     // 手机竖屏：分类改为顶部横向标签，条目网格独占整宽。
     await _mountDialog(tester, repository, size: const Size(390, 844));
-    expect(find.text('图片 1'), findsOneWidget);
-    expect(find.text('立绘 1'), findsOneWidget);
-    expect(find.text('音频 1'), findsOneWidget);
-    expect(find.text('脚本 1'), findsOneWidget);
-    // 旧的双栏侧栏不再出现（其标题是独立的「图片」等文本）。
-    expect(find.text('图片'), findsNothing);
+    for (final label in ['图片', '立绘', '音频', '脚本']) {
+      expect(find.text(label), findsOneWidget);
+    }
     final grid = tester.getSize(find.byType(GridView));
-    expect(grid.width, greaterThan(250));
+    expect(grid.width, 390);
+    expect(grid.height, greaterThan(450));
+    expect(find.text('类型：全部'), findsOneWidget);
+    await tester.tap(find.byTooltip('筛选素材类型'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('CG'));
+    await tester.pumpAndSettle();
+    expect(find.text('类型：CG'), findsOneWidget);
+    expect(find.text('该剧情没有此类素材'), findsOneWidget);
+    expect(find.text('导出素材 (4)'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('窄屏底栏提供全选与清空，统计在同一位置', (tester) async {
+  testWidgets('窄屏底栏用三态复选框全选与清空', (tester) async {
     final repository = await _seededRepository();
     addTearDown(repository.store.close);
     await _mountDialog(tester, repository, size: const Size(390, 844));
-    expect(find.text('全选'), findsOneWidget);
-    expect(find.textContaining('已选 4 项'), findsOneWidget);
-    await tester.tap(find.text('清空'));
+    final all = find.widgetWithText(InkWell, '全选');
+    Checkbox dockCheckbox() => tester.widget(
+      find.byWidgetPredicate((widget) => widget is Checkbox && widget.tristate),
+    );
+    expect(dockCheckbox().value, isTrue);
+    await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
+    expect(dockCheckbox().value, isNull);
+    await tester.tap(all);
+    await tester.pumpAndSettle();
+    expect(dockCheckbox().value, isTrue);
+    await tester.tap(all);
+    await tester.pumpAndSettle();
+    expect(dockCheckbox().value, isFalse);
     expect(find.text('未选择素材'), findsOneWidget);
-    await tester.tap(find.text('全选'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('已选 4 项'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -561,10 +574,12 @@ void main() {
     final repository = await _seededRepository();
     addTearDown(repository.store.close);
     await _mountDialog(tester, repository);
-    // 侧栏标题与底部操作仍在；紧凑标签不出现。
     expect(find.text('图片'), findsOneWidget);
-    expect(find.text('图片 1'), findsNothing);
     expect(find.text('全选'), findsOneWidget);
+    expect(find.byTooltip('筛选素材类型'), findsNothing);
+    await tester.tap(find.text('CG'));
+    await tester.pumpAndSettle();
+    expect(find.text('该剧情没有此类素材'), findsOneWidget);
   });
 
   testWidgets('Android 完成视图提供分享并调用系统分享', (tester) async {
@@ -577,29 +592,27 @@ void main() {
     );
     final target = ExportTarget(backend: backend);
     await target.createDirectory('', '慈悲灯塔/14-1 余火 行动前');
-    final job = ExportJob(
-      package: package,
-      items: package.items,
-      parentPath: '',
-      target: target,
-    )..apply(
-        status: ExportJobStatus.completed,
-        result: ExportResult(
-          rootPath: '慈悲灯塔_14-1 余火 行动前.zip',
-          fileCount: 5,
-          totalBytes: 2048,
-          failures: const [],
-          manifest: const {},
-        ),
-      );
+    final job =
+        ExportJob(
+          package: package,
+          items: package.items,
+          parentPath: '',
+          target: target,
+        )..apply(
+          status: ExportJobStatus.completed,
+          result: ExportResult(
+            rootPath: '慈悲灯塔_14-1 余火 行动前.zip',
+            fileCount: 5,
+            totalBytes: 2048,
+            failures: const [],
+            manifest: const {},
+          ),
+        );
     await _mountDialog(tester, repository, existingJob: job);
 
     expect(find.text('素材已导出'), findsOneWidget);
     // zip 名出现在结果位置行与底栏目的地提示两处。
-    expect(
-      find.textContaining('慈悲灯塔_14-1 余火 行动前.zip'),
-      findsNWidgets(2),
-    );
+    expect(find.textContaining('慈悲灯塔_14-1 余火 行动前.zip'), findsOneWidget);
     await tester.tap(find.text('分享'));
     await tester.pumpAndSettle();
     expect(backend.opened, ['慈悲灯塔_14-1 余火 行动前.zip']);
@@ -615,21 +628,22 @@ void main() {
     );
     final target = ExportTarget(backend: backend);
     await target.createDirectory(r'C:\Exports', '慈悲灯塔/14-1 余火 行动前');
-    final job = ExportJob(
-      package: package,
-      items: package.items,
-      parentPath: r'C:\Exports',
-      target: target,
-    )..apply(
-        status: ExportJobStatus.completed,
-        result: ExportResult(
-          rootPath: r'C:\Exports/慈悲灯塔/14-1 余火 行动前',
-          fileCount: 5,
-          totalBytes: 2048,
-          failures: const [],
-          manifest: const {},
-        ),
-      );
+    final job =
+        ExportJob(
+          package: package,
+          items: package.items,
+          parentPath: r'C:\Exports',
+          target: target,
+        )..apply(
+          status: ExportJobStatus.completed,
+          result: ExportResult(
+            rootPath: r'C:\Exports/慈悲灯塔/14-1 余火 行动前',
+            fileCount: 5,
+            totalBytes: 2048,
+            failures: const [],
+            manifest: const {},
+          ),
+        );
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     try {
       await _mountDialog(tester, repository, existingJob: job);
