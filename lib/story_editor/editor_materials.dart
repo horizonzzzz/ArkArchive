@@ -366,19 +366,20 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
         : catalog?.image(key, cg: widget.field.type == FieldType.cg);
     if (uri == null) return const Icon(Icons.image_outlined);
     return FutureBuilder<Uint8List>(
+      key: ValueKey(uri),
       future: widget.resources.loadBytes(uri),
-      builder: (_, snapshot) => snapshot.hasData
-          ? Image.memory(
-              snapshot.data!,
-              width: double.infinity,
-              height: double.infinity,
-              fit: BoxFit.contain,
-            )
-          : const SizedBox(
-              width: 96,
-              height: 72,
-              child: Icon(Icons.image_outlined),
-            ),
+      builder: (_, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData) return const Icon(Icons.broken_image_outlined);
+        return Image.memory(
+          snapshot.data!,
+          width: double.infinity,
+          height: double.infinity,
+          fit: BoxFit.contain,
+        );
+      },
     );
   }
 
@@ -489,7 +490,24 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
                     onPressed: page > 0 ? () => setState(() => page--) : null,
                     icon: const Icon(Icons.chevron_left),
                   ),
-                  Text('${page + 1} / $pageCount'),
+                  Tooltip(
+                    message: '选择页数',
+                    child: DropdownButton<int>(
+                      value: page,
+                      isDense: true,
+                      items: List.generate(
+                        pageCount,
+                        (index) => DropdownMenuItem(
+                          value: index,
+                          child: Text('${index + 1}'),
+                        ),
+                      ),
+                      onChanged: (value) {
+                        if (value != null) setState(() => page = value);
+                      },
+                    ),
+                  ),
+                  Text(' / $pageCount'),
                   IconButton(
                     tooltip: '下一页',
                     onPressed: page + 1 < pageCount
