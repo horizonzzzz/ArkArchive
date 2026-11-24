@@ -143,6 +143,7 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
   static const _pageSize = 24;
   MediaCatalog? catalog;
   List<String> effects = const [];
+  List<String> cgImages = const [];
   bool loading = true;
   Object? error;
   final _player = AudioPlayer();
@@ -168,6 +169,9 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
         effects = await widget.resources.effects();
       } else {
         catalog = await widget.resources.prts();
+        if (widget.field.type == FieldType.cg) {
+          cgImages = await widget.resources.cgImages();
+        }
       }
     } catch (_) {
       error = '素材目录读取失败，请检查资源目录或稍后重试';
@@ -179,6 +183,8 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
     final items = <(String, String)>[];
     if (widget.field.type == FieldType.fx) {
       items.addAll(effects.map((value) => (value, value)));
+    } else if (widget.field.type == FieldType.cg) {
+      items.addAll(cgImages.map((key) => (key, key)));
     } else if (catalog != null) {
       final c = catalog!;
       if (image && widget.field.type == FieldType.character) {

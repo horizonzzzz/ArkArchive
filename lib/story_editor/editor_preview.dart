@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
@@ -86,6 +87,7 @@ class EditorPreviewResources {
   final _assets = <String, Future<FxAsset>>{};
   Future<MediaCatalog>? _catalog;
   Future<List<String>>? _effects;
+  Future<List<String>>? _cgImages;
   bool _closed = false;
 
   Future<MediaCatalog> prts() async {
@@ -99,6 +101,62 @@ class EditorPreviewResources {
   }
 
   Future<Uint8List> loadBytes(Uri uri) => store.loadTransient(uri);
+
+  Future<List<String>> cgImages() async {
+    final pending = _cgImages ??= _loadCgImages();
+    try {
+      return await pending;
+    } catch (_) {
+      if (identical(_cgImages, pending)) _cgImages = null;
+      rethrow;
+    }
+  }
+
+  Future<List<String>> _loadCgImages() async {
+    final endpoint = Uri.https(
+      'torappu.prts.wiki',
+      '/api/v1/story-resources/explore',
+    );
+    const pageSize = 500;
+    Future<Map<String, dynamic>> loadPage(int page) async {
+      final uri = endpoint.replace(
+        queryParameters: {
+          'type': 'image',
+          'page': '$page',
+          'pageSize': '$pageSize',
+        },
+      );
+      return jsonDecode(utf8.decode(await store.loadTransient(uri)))
+          as Map<String, dynamic>;
+    }
+
+    final first = await loadPage(1);
+    final pageCount = first['pageCount'];
+    if (pageCount is! int || pageCount < 1 || pageCount > 100) {
+      throw const FormatException('PRTS CG 索引页数无效');
+    }
+    final keys = <String>{};
+    void addKeys(Map<String, dynamic> data) {
+      final entries = data['entries'];
+      if (entries is! List) throw const FormatException('PRTS CG 索引格式无效');
+      for (final entry in entries) {
+        if (entry is! Map || entry['resource'] is! Map) continue;
+        final resource = entry['resource'] as Map;
+        final key = resource['id'];
+        if (resource['type'] == 'image' &&
+            key is String &&
+            RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(key)) {
+          keys.add(key.toLowerCase());
+        }
+      }
+    }
+
+    addKeys(first);
+    for (var page = 2; page <= pageCount; page++) {
+      addKeys(await loadPage(page));
+    }
+    return keys.toList()..sort();
+  }
 
   Future<List<String>> effects() => _effects ??= () async {
     final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);

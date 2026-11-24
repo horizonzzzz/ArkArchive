@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:arknights_story_player/story_editor/editor_preview.dart';
 import 'package:arknights_story_player/story_editor/editor_project.dart';
 import 'package:arknights_story_player/story_player/data/asset_store.dart';
@@ -121,5 +123,45 @@ void main() {
     expect(cache.stories, isEmpty);
     expect(store.playbackProgresses, isEmpty);
     expect(store.completedStories, isEmpty);
+  });
+  test('PRTS CG 索引分页加载、校验并复用结果', () async {
+    final requests = <Uri>[];
+    final store = AssetStore(
+      cache: MemoryCache(),
+      client: MockClient((request) async {
+        requests.add(request.url);
+        final page = request.url.queryParameters['page'];
+        final entries = page == '1'
+            ? [
+                {
+                  'resource': {'type': 'image', 'id': 'cg_B'},
+                },
+                {
+                  'resource': {'type': 'background', 'id': 'skip'},
+                },
+              ]
+            : [
+                {
+                  'resource': {'type': 'image', 'id': 'CG_A'},
+                },
+                {
+                  'resource': {'type': 'image', 'id': '../invalid'},
+                },
+              ];
+        return http.Response(
+          jsonEncode({'pageCount': 2, 'entries': entries}),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+    addTearDown(store.close);
+    final resources = EditorPreviewResources(store);
+    addTearDown(resources.dispose);
+
+    expect(await resources.cgImages(), ['cg_a', 'cg_b']);
+    expect(await resources.cgImages(), ['cg_a', 'cg_b']);
+    expect(requests, hasLength(2));
+    expect(requests.map((uri) => uri.queryParameters['page']), ['1', '2']);
   });
 }
