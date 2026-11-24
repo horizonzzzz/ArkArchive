@@ -243,6 +243,46 @@ void main() {
       engine.dispose();
     }
   });
+
+  testWidgets('charslot 的 isblock 等待位移动画结束', (tester) async {
+    final start = tester.binding.clock.now();
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[charslot(slot="m", name="char_a")]
+[charslot(slot="m", posto="100,0", duration=.2, isblock=true)]
+[name="甲"]到达
+'''),
+      typingInterval: Duration.zero,
+      elapsed: () => tester.binding.clock.now().difference(start),
+    );
+    addTearDown(engine.dispose);
+
+    final playback = engine.start();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(engine.state.text, isEmpty);
+    expect(engine.state.characters.single.actionX, lessThan(100));
+
+    await tester.pump(const Duration(milliseconds: 150));
+    await playback;
+    expect(engine.state.characters.single.actionX, 100);
+    expect(engine.state.text, '到达');
+  });
+
+  test('charslot char_empty 只清除指定槽位', () async {
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[charslot(slot="l", name="char_l")]
+[charslot(slot="m", name="char_m")]
+[charslot(slot="m", name="char_empty")]
+[name="甲"]继续
+'''),
+      typingInterval: Duration.zero,
+    );
+    addTearDown(engine.dispose);
+
+    await engine.start();
+    expect(engine.state.characters.map((character) => character.slot), ['l']);
+  });
   test('停顿点可索引，并在 seek 时重建默认分支状态', () async {
     final engine = StoryEngine(
       StoryScript.parse('''

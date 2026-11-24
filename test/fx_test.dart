@@ -389,6 +389,22 @@ void main() {
       engine.dispose();
     }
   });
+  testWidgets('bgeffect 空图层参数清除全部持续特效', (tester) async {
+    final engine = StoryEngine(
+      StoryScript.parse('''
+[bgeffect(name="test_fx", layer=1)]
+[bgeffect(name="test_fx", layer=2)]
+[bgeffect(layer="")]
+[name="甲"]完成
+'''),
+      effectAssets: {'test_fx': FxAsset.parse(fixture())},
+    );
+    addTearDown(engine.dispose);
+
+    await engine.start();
+    expect(engine.state.effects, isEmpty);
+    expect(engine.state.text, '完成');
+  });
   testWidgets('特效 delay 错开粒子启动并允许清除待启动实例', (tester) async {
     final start = tester.binding.clock.now();
     final engine = StoryEngine(

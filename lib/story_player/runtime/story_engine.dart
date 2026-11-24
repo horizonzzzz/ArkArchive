@@ -908,7 +908,7 @@ class StoryEngine extends ChangeNotifier {
           .where(
             (e) =>
                 e.group == group &&
-                (!c.args.containsKey('layer') || e.layer == layer),
+                (c.value('layer').trim().isEmpty || e.layer == layer),
           )
           .toList();
       Future<void> clear(StageEffect effect) async {
@@ -2346,6 +2346,15 @@ class StoryEngine extends ChangeNotifier {
     final end = c.value('end').trim().toLowerCase() != 'false';
     final block = c.flag('isblock') && end;
     _applyFocus(_focusSlots(c.value('focus', 'all')));
+    final blockingAnimations = <Future<void>>[];
+    void runAnimation(Future<void> animation) {
+      if (block) {
+        blockingAnimations.add(animation);
+      } else {
+        unawaited(animation);
+      }
+    }
+
     final name = c.value('name');
     var nodes = state.characters.where((n) => n.slot == slot).toList();
     var node = nodes.isEmpty ? null : nodes.last;
@@ -2420,7 +2429,7 @@ class StoryEngine extends ChangeNotifier {
       final toAngle =
           (c.flag('inverse') ? -1 : 1) *
           (c.number('angle') + 360 * c.number('circles').truncate());
-      unawaited(
+      runAnimation(
         animate('characterRotate:$slot', seconds, (t) {
           target.rotationDeg = _lerp(fromAngle, toAngle, t);
         }),
@@ -2436,7 +2445,7 @@ class StoryEngine extends ChangeNotifier {
       if (action == 'jump' && seconds > 0) {
         from = Offset(target.actionX, target.actionY);
         // jump 的 posto 为相对位移。
-        unawaited(
+        runAnimation(
           animate('characterMotion:$slot', seconds, (t) {
             target.actionX = _lerp(from.dx, from.dx + to.dx, _easeOutCubic(t));
             target.actionY = _lerp(from.dy, from.dy + to.dy, _easeOutCubic(t));
@@ -2447,7 +2456,7 @@ class StoryEngine extends ChangeNotifier {
             ? _point(c.value('posfrom'))
             : Offset(target.actionX, target.actionY);
         final duration = action == 'setpos' ? 0.0 : seconds;
-        unawaited(
+        runAnimation(
           animate('characterMotion:$slot', duration, (t) {
             target.actionX = _lerp(from.dx, to.dx, t);
             target.actionY = _lerp(from.dy, to.dy, t);
@@ -2475,7 +2484,7 @@ class StoryEngine extends ChangeNotifier {
           (.5 - pivot.dx) * sx * artWidth - (sx - 1) * artWidth / 2;
       final toShiftY =
           (.5 - pivot.dy) * sy * artHeight + (sy - 1) * artHeight / 2;
-      unawaited(
+      runAnimation(
         animate('characterZoom:$slot', seconds, (t) {
           target.scaleX = _lerp(fromScaleX, sx, t);
           target.scaleY = _lerp(fromScaleY, sy, t);
@@ -2483,6 +2492,9 @@ class StoryEngine extends ChangeNotifier {
           target.zoomShiftY = _lerp(fromShiftY, toShiftY, t);
         }),
       );
+    }
+    if (block && blockingAnimations.isNotEmpty) {
+      await Future.wait(blockingAnimations);
     }
   }
 

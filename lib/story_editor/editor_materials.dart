@@ -443,10 +443,18 @@ class _EditorMaterialPickerState extends State<EditorMaterialPicker> {
                       ),
                     if (true)
                       ListTile(
-                        selected: widget.current == '',
+                        selected:
+                            widget.current == '' ||
+                            (widget.field.type == FieldType.character &&
+                                widget.current == 'char_empty'),
                         leading: const Icon(Icons.block),
                         title: const Text('无素材 / 清除'),
-                        onTap: () => Navigator.pop(context, ('', null)),
+                        onTap: () => Navigator.pop(context, (
+                          widget.field.type == FieldType.character
+                              ? 'char_empty'
+                              : '',
+                          null,
+                        )),
                       ),
 
                     if (_usesThumbnailGrid)

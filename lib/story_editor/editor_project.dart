@@ -441,7 +441,7 @@ const _slot = EditorField('slot', '站位', FieldType.choice, 'm', {
 });
 const _fx = [
   EditorField('name', '特效（留空清除）', FieldType.fx),
-  EditorField('layer', '图层', FieldType.number, '0'),
+  EditorField('layer', '图层（清除时留空=全部）', FieldType.number, '0'),
   _x,
   _y,
   EditorField('roz', '平面旋转（度）', FieldType.number, '0'),

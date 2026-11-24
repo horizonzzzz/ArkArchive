@@ -92,4 +92,13 @@ void main() {
     expect(restored.derivedFrom, 'story/main.txt');
     expect(restored.updatedAt, project.updatedAt);
   });
+
+  test('立绘清除命令保留引擎识别的 char_empty 标记', () {
+    const clear = EditCommand('charslot', {'slot': 'm', 'name': 'char_empty'});
+    final command = StoryScript.parse(clear.source).commands.single;
+
+    expect(command.tag, 'charslot');
+    expect(command.value('slot'), 'm');
+    expect(command.value('name'), 'char_empty');
+  });
 }
