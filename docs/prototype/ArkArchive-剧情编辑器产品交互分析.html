@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ArkArchive 剧情编辑器 · 产品形态与交互分析</title>
+<style>
+  :root{
+    --ink:#0f172a; --ink2:#334155; --muted:#64748b; --line:#e2e8f0;
+    --bg:#f3f4f7; --card:#ffffff; --accent:#2563eb; --accent2:#0891b2;
+    --warn:#b45309; --warnbg:#fffbeb; --danger:#b91c1c; --ok:#047857;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","Noto Sans SC",sans-serif;
+    line-height:1.78; font-size:15px; -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent); text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{
+    font-family:"Cascadia Code",Consolas,"SFMono-Regular",monospace;
+    font-size:.88em; background:#f1f5f9; border:1px solid #e2e8f0;
+    border-radius:5px; padding:1px 5px; color:#0f172a;
+  }
+  .hero{
+    background:
+      radial-gradient(900px 380px at 82% -10%, rgba(37,99,235,.45), transparent 60%),
+      radial-gradient(700px 300px at 8% 110%, rgba(8,145,178,.30), transparent 60%),
+      #0b1220;
+    color:#e2e8f0; padding:64px 28px 52px; position:relative; overflow:hidden;
+  }
+  .hero::after{
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background-image:linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size:44px 44px;
+  }
+  .hero-inner{max-width:1180px; margin:0 auto; position:relative; z-index:1}
+  .eyebrow{font-size:12px; letter-spacing:.2em; text-transform:uppercase; color:#7dd3fc; font-weight:600}
+  .hero h1{font-size:40px; line-height:1.28; margin:14px 0 12px; font-weight:750; letter-spacing:-.01em; color:#fff}
+  .hero p.lede{max-width:760px; font-size:16px; color:#cbd5e1; margin:0 0 26px}
+  .hero .meta{display:flex; flex-wrap:wrap; gap:10px}
+  .chip{
+    display:inline-flex; align-items:center; gap:6px; padding:5px 11px; border-radius:999px;
+    border:1px solid rgba(148,163,184,.35); color:#cbd5e1; font-size:12.5px;
+  }
+  .hero-stats{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:34px}
+  .hero-stat{border:1px solid rgba(148,163,184,.22); background:rgba(255,255,255,.035); border-radius:12px; padding:14px 16px}
+  .hero-stat b{display:block; font-size:26px; color:#fff; line-height:1.2; font-weight:700}
+  .hero-stat span{font-size:12px; color:#94a3b8}
+
+  .shell{max-width:1320px; margin:0 auto; padding:36px 28px 72px; display:grid; grid-template-columns:224px minmax(0,1fr); gap:42px}
+  nav.toc{position:sticky; top:26px; align-self:start; font-size:13px}
+  nav.toc .toc-title{font-size:11px; letter-spacing:.16em; color:#94a3b8; font-weight:700; margin-bottom:12px}
+  nav.toc a{display:block; color:#475569; padding:6px 10px; border-left:2px solid transparent; border-radius:0 6px 6px 0}
+  nav.toc a:hover{background:#e9edf3; text-decoration:none; color:var(--ink)}
+  nav.toc a .n{display:inline-block; width:24px; color:#94a3b8; font-variant-numeric:tabular-nums}
+  nav.toc .toc-sub{font-size:12px; color:#94a3b8; padding:4px 10px 4px 34px}
+
+  article{background:var(--card); border:1px solid #e6e9ef; border-radius:18px; padding:52px 56px 60px; box-shadow:0 18px 50px rgba(15,23,42,.05); min-width:0}
+  section{scroll-margin-top:24px}
+  section + section{margin-top:56px; padding-top:8px}
+  h2{font-size:26px; line-height:1.35; margin:0 0 8px; letter-spacing:-.01em; font-weight:740; display:flex; align-items:baseline; gap:12px}
+  h2 .h2n{font-size:13px; color:#94a3b8; font-weight:700; letter-spacing:.12em; min-width:34px}
+  h2 + .subtitle{color:var(--muted); margin:0 0 22px 46px; font-size:14px}
+  h3{font-size:17.5px; margin:30px 0 8px; font-weight:700; letter-spacing:-.005em}
+  h4{font-size:14.5px; margin:20px 0 6px; font-weight:700; color:var(--ink2)}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:5px 0}
+  li::marker{color:#94a3b8}
+  .lead{font-size:16px; color:var(--ink2)}
+  .callout{border-left:3px solid var(--accent); background:#f8fafc; padding:14px 18px; border-radius:0 10px 10px 0; margin:18px 0}
+  .callout.warn{border-left-color:#f59e0b; background:var(--warnbg)}
+  .callout.danger{border-left-color:#ef4444; background:#fef2f2}
+  .callout b{color:var(--ink)}
+  .callout p{margin:4px 0}
+  .small{font-size:12.8px; color:var(--muted)}
+  .kicker{font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:#94a3b8; font-weight:700}
+
+  .cards{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin:18px 0}
+  .card{border:1px solid var(--line); border-radius:12px; padding:16px 18px; background:#fcfdff}
+  .card .tag{font-size:11px; letter-spacing:.1em; color:var(--accent); font-weight:700}
+  .card h4{margin:6px 0 4px; font-size:15px}
+  .card p{margin:4px 0 0; font-size:13.5px; color:var(--ink2)}
+
+  .table-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:12px; margin:16px 0}
+  table{border-collapse:collapse; width:100%; font-size:13.4px; background:#fff}
+  th,td{padding:9px 12px; border-bottom:1px solid #eef2f7; text-align:left; vertical-align:top}
+  th{background:#f8fafc; color:#475569; font-weight:700; font-size:12.4px; letter-spacing:.03em; white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#fbfcfe}
+  td.center,th.center{text-align:center}
+  .b{display:inline-block; padding:1px 7px; border-radius:6px; font-size:11.5px; font-weight:700; white-space:nowrap}
+  .b.no{background:#fef2f2; color:#b91c1c; border:1px solid #fecaca}
+  .b.part{background:#fffbeb; color:#b45309; border:1px solid #fde68a}
+  .b.yes{background:#ecfdf5; color:#047857; border:1px solid #a7f3d0}
+  .b.info{background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe}
+  .b.gray{background:#f1f5f9; color:#475569; border:1px solid #e2e8f0}
+
+  .grid2{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px}
+  .grid3{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px}
+  .panel{border:1px solid var(--line); border-radius:12px; padding:16px 18px; background:#fff}
+  .panel h4{margin:0 0 6px}
+  .panel p{margin:4px 0; font-size:13.5px}
+  .kv{display:grid; grid-template-columns:86px minmax(0,1fr); gap:6px 12px; font-size:13.4px}
+  .kv dt{color:var(--muted)}
+  .kv dd{margin:0}
+
+  .wire{background:#0b1220; border-radius:12px; padding:14px; color:#cbd5e1; font-size:11.5px; line-height:1.5; margin:16px 0; border:1px solid #1e293b}
+  .wire .bar{display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid #1e293b; margin-bottom:10px; color:#94a3b8}
+  .wire .dot{width:8px;height:8px;border-radius:50%;background:#334155}
+  .wire .layout{display:grid; grid-template-columns:150px minmax(0,1fr) 170px; gap:8px; min-height:240px}
+  .wire .col{display:flex; flex-direction:column; gap:8px}
+  .wire .pane{border:1px dashed #334155; border-radius:7px; padding:8px; background:rgba(255,255,255,.02)}
+  .wire .pane b{display:block; color:#e2e8f0; font-size:11px; font-weight:600; margin-bottom:5px}
+  .wire .stage{aspect-ratio:16/9; background:#05080f; border-radius:6px; border:1px solid #1e293b; display:flex; align-items:center; justify-content:center; color:#475569}
+  .wire .transport{display:flex; gap:8px; align-items:center; color:#94a3b8; padding:6px 4px 0; font-size:10.5px}
+  .wire .mini{height:22px; border-radius:4px; background:#111c31; border:1px solid #1e293b}
+  .wire .mini.hot{background:#172554; border-color:#1d4ed8}
+  .wire .row{display:flex; gap:6px; align-items:center}
+  .wire .grow{flex:1}
+  .wire .card-mini{height:46px; border-radius:6px; background:#111827; border:1px solid #1f2937; padding:5px 6px; font-size:10px; color:#94a3b8}
+  .wire .tag{display:inline-block; padding:0 5px; border-radius:4px; background:#1e293b; color:#cbd5e1; font-size:9.5px}
+
+  .lanes{background:#0b1220; border-radius:12px; padding:16px; margin:16px 0; border:1px solid #1e293b; overflow:hidden}
+  .lane{display:grid; grid-template-columns:64px minmax(0,1fr); align-items:center; gap:10px; margin:7px 0}
+  .lane .name{font-size:10.5px; color:#94a3b8; text-align:right}
+  .lane .track{position:relative; height:20px; background:#0f172a; border-radius:4px; border:1px solid #1e293b; overflow:hidden}
+  .clip{position:absolute; top:2px; height:14px; border-radius:3px; opacity:.9}
+  .clip.bg{background:#3b82f6}
+  .clip.ch{background:#22c55e}
+  .clip.cg{background:#a855f7}
+  .clip.tx{background:#f59e0b}
+  .clip.au{background:#06b6d4}
+  .clip.fx{background:#ef4444}
+  .playhead{position:absolute; top:0; bottom:0; width:2px; background:#f8fafc; box-shadow:0 0 6px rgba(255,255,255,.6)}
+  .lane-caption{display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-top:8px; padding-left:74px}
+  .legend{display:flex; flex-wrap:wrap; gap:12px; font-size:10.5px; color:#94a3b8; margin-top:8px; padding-left:74px}
+  .legend i{display:inline-block; width:9px;height:9px;border-radius:2px; margin-right:4px}
+
+  .compare{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:14px 0}
+  .thumb{border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#0b1220}
+  .thumb .img{aspect-ratio:16/9; background:linear-gradient(180deg,#111a2e,#070b14); display:flex; align-items:center; justify-content:center; color:#475569; font-size:11px}
+  .thumb .cap{padding:7px 9px; font-size:11.5px; color:var(--ink2); background:#fff; border-top:1px solid var(--line)}
+  .thumb .cap b{display:block; color:var(--ink); font-size:12px}
+
+  .steps{counter-reset:step; margin:14px 0; padding:0; list-style:none}
+  .steps li{counter-increment:step; position:relative; padding:0 0 14px 40px; border-left:1px solid var(--line); margin-left:12px}
+  .steps li:last-child{border-left-color:transparent; padding-bottom:0}
+  .steps li::before{content:counter(step); position:absolute; left:-13px; top:0; width:24px;height:24px;border-radius:50%; background:#eff6ff;color:#1d4ed8;font-size:11.5px;font-weight:700; display:flex;align-items:center;justify-content:center; border:1px solid #bfdbfe}
+  .steps b{display:block}
+  .steps span{font-size:13.4px; color:var(--ink2)}
+
+  .tagline{display:flex; flex-wrap:wrap; gap:8px; margin:14px 0}
+  .pill{border:1px solid var(--line); background:#f8fafc; color:#475569; border-radius:999px; padding:4px 11px; font-size:12.5px}
+
+  .quote{border-left:3px solid #cbd5e1; padding:4px 0 4px 16px; color:var(--ink2); font-size:14.5px; margin:18px 0}
+
+  .prio{border-left:3px solid #e2e8f0; padding:2px 0 2px 16px; margin:18px 0}
+  .prio.p0{border-left-color:#dc2626}
+  .prio.p1{border-left-color:#d97706}
+  .prio.p2{border-left-color:#0891b2}
+  .prio h4{margin:2px 0 4px; font-size:14.5px}
+  .prio .num{font-size:11px; letter-spacing:.12em; color:#94a3b8; font-weight:700}
+  .prio p{font-size:13.5px; margin:3px 0}
+
+  footer{margin-top:52px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:12.8px}
+  footer p{margin:4px 0}
+
+  @media (max-width:1080px){
+    .shell{grid-template-columns:1fr; padding:24px 18px 48px}
+    nav.toc{display:none}
+    article{padding:34px 26px 44px}
+    .hero{padding:48px 22px 40px}
+    .hero h1{font-size:30px}
+    .hero-stats{grid-template-columns:repeat(2,1fr)}
+    .cards,.grid2,.grid3,.compare{grid-template-columns:1fr}
+    h2 + .subtitle{margin-left:0}
+    .table-wrap table{min-width:760px}
+    .wire .layout{grid-template-columns:1fr; min-height:0}
+    .wire .col{min-width:0}
+    .wire .pane{min-height:auto}
+  }
+  @media print{
+    body{background:#fff}
+    .hero{padding:28px 0; background:#0b1220 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+    .shell{display:block; padding:0; max-width:100%}
+    nav.toc{display:none}
+    article{border:none; box-shadow:none; padding:0; margin-top:24px}
+    section + section{page-break-inside:avoid}
+    .wire,.lanes{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">ArkArchive · Story Editor Review</div>
+    <h1>从「指令表单」到「演出工作台」</h1>
+    <p class="lede">以主流剪辑软件的交互为目标，重新审视剧情编辑器的产品形态与操作链路。结论不是把视觉小说做成 NLE，而是把「监视器—序列—检查器」的三角关系、选择集操作与交付管线，移植到「状态累积 + 停顿点」的叙事模型上。</p>
+    <div class="meta">
+      <span class="chip">分析对象 feat/story-editer @ 43944e7</span>
+      <span class="chip">范围 代码现状 + v0.2 设计文档 + 引擎能力</span>
+      <span class="chip">2026-11-26（已对齐代码边界与分期微调）</span>
+      <span class="chip">产品 / 交互 / 功能路线</span>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat"><b>4 级</b><span>作品 → 幕 → 分镜 → 指令</span></div>
+      <div class="hero-stat"><b>14 种</b><span>可视指令 + 原始脚本兜底</span></div>
+      <div class="hero-stat"><b>0 个</b><span>时间轴 / 多选 / 分支视图</span></div>
+      <div class="hero-stat"><b>1 个</b><span>模态试播承担全部预览</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc">
+    <div class="toc-title">目录</div>
+    <a href="#summary"><span class="n">00</span>一页结论</a>
+    <a href="#baseline"><span class="n">01</span>现状与代码基线</a>
+    <a href="#matrix"><span class="n">02</span>对标剪辑软件能力矩阵</a>
+    <a href="#judgement"><span class="n">03</span>核心判断：借什么，不借什么</a>
+    <a href="#form"><span class="n">04</span>产品形态：四工作区</a>
+    <a href="#ui"><span class="n">05</span>UI 交互优化方向</a>
+    <a class="toc-sub" href="#d1">D1 工作台与面板</a>
+    <a class="toc-sub" href="#d2">D2 播放头与传输控制</a>
+    <a class="toc-sub" href="#d3">D3 选择集与批量</a>
+    <a class="toc-sub" href="#d4">D4 舞台直接操作</a>
+    <a class="toc-sub" href="#d5">D5 结构与导航</a>
+    <a class="toc-sub" href="#d6">D6 检查器控件</a>
+    <a class="toc-sub" href="#d7">D7 反馈与信任</a>
+    <a href="#features"><span class="n">06</span>功能点优化方向</a>
+    <a href="#roadmap"><span class="n">07</span>优先级与路线图</a>
+    <a href="#metrics"><span class="n">08</span>验收与度量</a>
+    <a href="#risk"><span class="n">09</span>风险与不做清单</a>
+    <a href="#appendix"><span class="n">10</span>附录：落点与参考</a>
+  </nav>
+
+  <article>
+
+    <section id="summary">
+      <h2><span class="h2n">00</span>一页结论</h2>
+      <p class="subtitle">先给判断，再给证据与路径。</p>
+
+      <p class="lead">这个编辑器已经完成了「能编」的闭环：四级结构、双来源素材、舞台直编、自动保存、导入导出、官方剧情派生。下一阶段的瓶颈不在指令数量，而在<strong>编辑回路的长度</strong>和<strong>结构的不可见</strong>。以剪辑软件为目标，真正值得借的不是轨道，而是四件事：常驻监视器、可定位的播放头、选择集驱动的批量操作、以及交付管线。</p>
+
+      <div class="callout"><p><b>配套交互原型：</b><a href="ArkArchive-交互原型-分阶段.html">ArkArchive 双端交互原型（分阶段）</a>——桌面与手机两种形态，P0/P1/P2 可在界面中直接切换与定位。原型已按现有应用外壳对齐：桌面左侧为「剧情馆 / 人物档案 / 创作 / 系统设置」，编辑器是「创作」下的一个页面（路由 <code>/editor/:projectId?view=stage|board|script|deliver</code>）；四个「台」是编辑器内部工作区，不与应用导航同级。外部页面仅做位置占位。</p></div>
+
+      <div class="cards">
+        <div class="card">
+          <div class="tag">形态</div>
+          <h4>从单页三栏，走向四工作区</h4>
+          <p>编排（故事板）/ 演出（舞台+轨道）/ 剧本（对白表格）/ 交付（检查+导出）。上下文跨工作区保持，像 DaVinci 的页面切换，而不是把所有控件塞进一屏。</p>
+        </div>
+        <div class="card">
+          <div class="tag">时间</div>
+          <h4>不做逐帧时间轴，做两级时间</h4>
+          <p>分镜级「叙事序列」可拖动、可缩放；分镜内以「指令 / 停顿点」为刻度的播放头可 scrub。对白没有固定时长，逐帧只会制造假精度。</p>
+        </div>
+        <div class="card">
+          <div class="tag">效率</div>
+          <h4>选择集比按钮更重要</h4>
+          <p>多选、框选、剪贴板、右键菜单、命令面板。剪辑软件的高效来自「选中一批 → 一次改完」，而不是工具栏更长。</p>
+        </div>
+        <div class="card">
+          <div class="tag">能力</div>
+          <h4>结构可视化优先于新指令</h4>
+          <p>故事板、状态泳道、分支图。引擎已支持 decision / warp / label / predicate，缺口在「看不见」，不是「做不到」。</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <p><b>一句话定位：</b>把编辑器从「逐条填指令的表单」升级为「以舞台为中心的演出工作台」——选中即所见，拖动即调整，结构可俯瞰，成品可交付。</p>
+      </div>
+
+      <p>本报告不重复 <code>docs/prototype/剧情编辑器优化说明-v0.2.md</code> 已列的 18 项修复（其中大部分已在本分支落地），而是在其「一套数据模型、多种视图」的方向上再往前推一步：给出工作区划分、时间语义、交互范式与功能路线，并标注可直接落代码的位置。</p>
+    </section>
+
+    <section id="baseline">
+      <h2><span class="h2n">01</span>现状与代码基线</h2>
+      <p class="subtitle">只描述代码里能验证的事实，不靠印象。</p>
+
+      <h3>1.1 当前产品结构</h3>
+      <div class="grid2">
+        <div class="panel">
+          <h4>数据与编辑模型</h4>
+          <dl class="kv">
+            <dt>层级</dt><dd>作品 → 幕（Scene）→ 分镜（Beat）→ 指令（Command）</dd>
+            <dt>指令语义</dt><dd>命令式、状态累积：一条背景指令会一直生效，直到被下一条覆盖</dd>
+            <dt>编译</dt><dd>每条指令编译为一行脚本，按顺序拼接；未知指令以源码保真保留</dd>
+            <dt>素材</dt><dd>PRTS 目录 key + 本地素材（内容 SHA-256 去重，base64 内嵌）</dd>
+            <dt>上限</dt><dd>单素材 32 MB；作品文件 96 MB</dd>
+          </dl>
+        </div>
+        <div class="panel">
+          <h4>工作台结构</h4>
+          <dl class="kv">
+            <dt>宽屏 ≥1100</dt><dd>三栏：分镜大纲 215 / 舞台 + 指令列表 / 检查器 290</dd>
+            <dt>横屏窄高</dt><dd>舞台左、分镜+指令右，检查器内联</dd>
+            <dt>其余（手机）</dt><dd>单列长列表：幕选择 → 舞台 → 分镜横条 → 指令列表</dd>
+            <dt>预览</dt><dd>模态 Dialog（≤960 宽）+ 自动 250 ms 推进</dd>
+            <dt>保存</dt><dd>450 ms 防抖，全量 JSON 写临时文件后 rename</dd>
+          </dl>
+        </div>
+      </div>
+
+      <h3>1.2 已经做对的事（应保留）</h3>
+      <ul>
+        <li><b>状态累积模型与引擎一致。</b>分镜不是「时间片段」，而是「一段意图」；这让它天然适配视觉小说的点击推进与分支。</li>
+        <li><b>舞台直编 + 方向键微调。</b>背景 / 插图 / 立绘 / 舞台文字都能拖，坐标与检查器双向同步，这是「以画面为中心」的正确起点。</li>
+        <li><b>素材双来源与临时加载。</b>PRTS 素材按需读取、不污染剧情缓存；本地素材内容寻址、可校验。</li>
+        <li><b>原始指令保真。</b>不认识的指令不丢，能编辑源码；这为分支、演出等高级能力留了后门。</li>
+        <li><b>官方剧情派生。</b>改编这一主流创作场景已经打通，冷启动成本远低于从零新建。</li>
+      </ul>
+
+      <h3>1.3 影响交互的关键事实</h3>
+      <p>下面这些不是「感觉」，而是从当前分支代码里读出来的行为。它们决定了哪些优化是低垂果实，哪些需要先改架构。</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:27%">现象</th><th style="width:43%">代码位置与机制</th><th>对用户的真实影响</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>舞台永远显示分镜末态</b></td>
+              <td><code>editor_stage.dart</code> 的 <code>_rebuild</code>：<code>end = ranges[(scene, beat)].$2</code>，即重放到该分镜全部指令之后</td>
+              <td>选中第 1 条指令，看到的是第 9 条之后的画面；调位置、调淡入时只能靠猜。这是与剪辑软件「播放头决定画面」最大的落差</td>
+            </tr>
+            <tr>
+              <td><b>试播是模态且自动连播</b></td>
+              <td><code>story_editor_page.dart</code> 的 <code>_preview</code>：Dialog + 每 250 ms <code>advance</code>；只有播放/暂停/重播/下一步</td>
+              <td>不能边看边改；没有上一句、没有句级 scrub、没有倍速；与正式播放器的句级进度条和历史跳转完全脱节</td>
+            </tr>
+            <tr>
+              <td><b>每次编辑全量重建舞台</b></td>
+              <td><code>EditorStage.didUpdateWidget</code> 比较整个 <code>project</code> 引用；任何指令变化都会触发 100 ms 防抖后的 <code>rebuildBefore</code></td>
+              <td>打字时舞台反复闪烁/卡顿；改动越靠前，重建成本越高</td>
+            </tr>
+            <tr>
+              <td><b>保存是整包重写</b></td>
+              <td><code>editor_platform_io.dart</code>：<code>save()</code> 直接 <code>project.export()</code>（含全部 base64 素材）</td>
+              <td>素材重的作品每停顿一次就写几十 MB；素材越多，编辑越不跟手</td>
+            </tr>
+            <tr>
+              <td><b>窄屏的拖动把手是「装饰」</b></td>
+              <td><code>_commandRows</code> 的 <code>inlineInspector</code> 分支用静态 <code>Icon(Icons.drag_handle)</code>，没有接 <code>ReorderableDragStartListener</code></td>
+              <td>手机端指令不能拖，只能走菜单「向前/向后移动」；与桌面手感不一致</td>
+            </tr>
+            <tr>
+              <td><b>作品列表旧在前</b></td>
+              <td><code>_projects</code> 使用 <code>_drafts.values.toList().reversed</code>，而存储层已按修改时间倒序</td>
+              <td>最新的作品排在最下面，用户每次都要往下找</td>
+            </tr>
+            <tr>
+              <td><b>导入入口重复</b></td>
+              <td>工具栏「作品操作」菜单与「我的作品」对话框各有一个导入</td>
+              <td>入口不一致，违背 v0.2 已定的「统一入口」</td>
+            </tr>
+            <tr>
+              <td><b>校验不可定位</b></td>
+              <td><code>_issues</code> 只渲染文本列表</td>
+              <td>能看到「第 3 幕 / 分镜 2 / 指令 5：素材缺失」，但没有「前往」；长作品里等于找不到</td>
+            </tr>
+            <tr>
+              <td><b>没有多选与剪贴板</b></td>
+              <td><code>_command</code> 是单个 <code>int</code>；复制只支持单条「复制指令」</td>
+              <td>批量改台词、整段搬运、跨分镜复用都要重复点选，长作品成本极高</td>
+            </tr>
+            <tr>
+              <td><b>素材选择是模态</b></td>
+              <td><code>_pick</code> 打开 <code>EditorMaterialPicker</code> Dialog，选中即关闭</td>
+              <td>不能常驻比对、不能拖拽入舞台、不能连续替换多个对象</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <p><b>综合判断：</b>当前瓶颈是「编辑—预览」回路太长（改参数 → 静态末态 → 开模态试播 → 关闭 → 再改），以及「结构—状态」不可见（看不到幕/分镜全貌，也看不到某个背景从哪条指令生效到哪条）。这两个问题都不是加指令能解决的。</p>
+      </div>
+    </section>
+
+    <section id="matrix">
+      <h2><span class="h2n">02</span>对标剪辑软件的能力矩阵</h2>
+      <p class="subtitle">用 16 项成熟交互逐条对照，明确「有 / 半 / 无」。</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:22%">剪辑软件范式</th><th style="width:9%" class="center">现状</th><th>ArkArchive 当前形态</th><th style="width:32%">差距的本质</th></tr></thead>
+          <tbody>
+            <tr><td>素材箱 / 项目面板</td><td class="center"><span class="b part">半</span></td><td>素材选择器：搜索、分页、缩略图、试听，但是模态</td><td>没有常驻素材空间，无法「先看素材再决定用在哪」</td></tr>
+            <tr><td>源监视器 / 节目监视器</td><td class="center"><span class="b part">半</span></td><td>舞台 = 节目监视器，但只显示分镜末态</td><td>缺播放头与传输控制；源/节目不分</td></tr>
+            <tr><td>序列时间轴 + 播放头</td><td class="center"><span class="b no">无</span></td><td>分镜列表 + 指令列表，两级都是纵向列表</td><td>没有「空间化的时间」，无法一眼看到节奏与长度</td></tr>
+            <tr><td>轨道与轨道头</td><td class="center"><span class="b no">无</span></td><td>只有指令的线性顺序，没有图层/轨道视图</td><td>状态累积不可见：不知道谁在生效、何时被覆盖</td></tr>
+            <tr><td>片段选择 / 多选 / 框选</td><td class="center"><span class="b no">无</span></td><td>单条指令单选；舞台单对象单选</td><td>没有选择集，就没有批量操作</td></tr>
+            <tr><td>拖拽移动 / 波纹删除</td><td class="center"><span class="b part">半</span></td><td>宽屏指令可拖；幕/分镜只能菜单上下移；窄屏把手不可拖</td><td>重排是高频动作，却没有统一的手势</td></tr>
+            <tr><td>入点 / 出点 / 三点编辑</td><td class="center"><span class="b no">无</span></td><td>试播只能「当前分镜 / 从此开始 / 从头」</td><td>无法「只反复看我关心的这一段」</td></tr>
+            <tr><td>吸附 / 对齐 / 参考线</td><td class="center"><span class="b no">无</span></td><td>拖动时只有坐标数字，无九宫格/中线/边缘吸附</td><td>排版靠手感，重复劳动多</td></tr>
+            <tr><td>变换控件</td><td class="center"><span class="b part">半</span></td><td>44 px 圆形把手 + 方向键微调；同屏显示整个分镜的所有把手</td><td>缺变换框、缺吸附、缺「只显示选中对象」</td></tr>
+            <tr><td>属性检查器</td><td class="center"><span class="b part">半</span></td><td>字段表单；文本/数字/开关/下拉；媒体走模态</td><td>无数值 scrub、无滑杆、无分组、无多选混合值</td></tr>
+            <tr><td>撤销 / 重做 + 历史面板</td><td class="center"><span class="b part">半</span></td><td>60 步全量快照；工具栏两个图标</td><td>看不到「改了什么」，无法跳回某一步</td></tr>
+            <tr><td>标记 / 评论</td><td class="center"><span class="b no">无</span></td><td>没有标记、待办、备注</td><td>长作品无法标记「这里要换图/待配音」</td></tr>
+            <tr><td>快捷键 / 命令面板</td><td class="center"><span class="b no">无</span></td><td>只有舞台方向键微调</td><td>所有操作都要鼠标，熟练用户效率上不去</td></tr>
+            <tr><td>代理媒体 / 渲染缓存</td><td class="center"><span class="b no">无</span></td><td>缩略图临时加载有缓存；舞台每次全量重建</td><td>大素材/长分镜的编辑手感会随规模下降</td></tr>
+            <tr><td>版本 / 快照 / 对比</td><td class="center"><span class="b part">半</span></td><td>自动保存覆盖同一文件；无自动快照</td><td>改坏了无法回退到「昨天那版」</td></tr>
+            <tr><td>导出 / 交付</td><td class="center"><span class="b part">半</span></td><td>导出作品 JSON（含素材）与纯脚本 TXT</td><td>没有成片、没有可分享的交互包、没有检查清单</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="small">判定口径：能完成该范式 80% 以上的核心动作记为「有」；有入口但缺少关键闭环（如能看不能停靠、能排不能多选）记为「半」；无入口或无对应概念记为「无」。</p>
+    </section>
+
+    <section id="judgement">
+      <h2><span class="h2n">03</span>核心判断：借什么，不借什么</h2>
+      <p class="subtitle">视觉小说不是 NLE。照搬时间轴会制造假精度，也会背叛引擎语义。</p>
+
+      <h3>3.1 三种「时间」不是一回事</h3>
+      <div class="grid3">
+        <div class="panel">
+          <h4>剪辑软件的时间</h4>
+          <p>墙钟时间、帧级精度、轨道彼此独立、任意位置可随机访问。观众被动观看。</p>
+        </div>
+        <div class="panel">
+          <h4>本引擎的时间</h4>
+          <p>命令序列 + 停顿点（对白 / 等待 / 选项）+ 动画插值（duration）。观众点击推进，状态在指令之间累积。</p>
+        </div>
+        <div class="panel">
+          <h4>结论</h4>
+          <p>可以借「空间化」与「随机访问」，不能借「逐帧对齐」与「轨道独立」。时间轴必须换一种刻度。</p>
+        </div>
+      </div>
+
+      <p>引擎已经具备两个关键能力，恰好支撑这种改造：</p>
+      <ul>
+        <li><code>StoryEngine.stopPoints</code>：把每条对白/选项/等待变成带说话人、文本、背景、立绘快照的「停顿点」，正式播放器的句级进度条就建立在其上。</li>
+        <li><code>StoryEngine.seekToCommand(index)</code> / <code>rebuildBefore(index)</code>：可以重放到任意指令位置，这是播放头 scrub 的技术基础。</li>
+      </ul>
+      <p>换句话说，<b>「分镜内的播放头」不是新引擎能力，而是把已有能力接到编辑器的 UI 上</b>。这也是本报告把「选中即预览」列为 P0 第一项的原因。</p>
+
+      <h3>3.2 可迁移 / 不可迁移清单</h3>
+      <div class="grid2">
+        <div class="panel">
+          <h4>应当借</h4>
+          <ul>
+            <li><b>常驻监视器：</b>编辑时画面一直在，参数变化即时反馈</li>
+            <li><b>播放头：</b>以停顿点/指令为刻度，选中哪里看哪里</li>
+            <li><b>传输控制：</b>上一句 / 播放 / 下一句 / 循环本段 / 倍速</li>
+            <li><b>选择集：</b>Shift 连选、Ctrl 点选、框选、区间选择</li>
+            <li><b>直接操作：</b>拖动、吸附、参考线、数值气泡</li>
+            <li><b>素材箱：</b>常驻、可搜、可拖入、可替换引用</li>
+            <li><b>页面式工作区：</b>粗剪 / 精修 / 文本 / 交付各司其职</li>
+            <li><b>交付管线：</b>检查清单 → 预览 → 导出 → 版本</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h4>不应照搬</h4>
+          <ul>
+            <li><b>逐帧时间轴：</b>对白没有固定时长，帧级只是假精度</li>
+            <li><b>多轨自由关键帧：</b>引擎是命令式，无法表达任意曲线</li>
+            <li><b>轨道独立混合：</b>状态会被后续指令覆盖，不是并行叠加</li>
+            <li><b>波形对位：</b>BGM 是全局状态，不是可裁剪片段</li>
+            <li><b>无限层叠：</b>绘制顺序由引擎固定，编辑器不应承诺任意调层</li>
+            <li><b>完整 NLE：</b>视频剪辑、调色、绿幕不是本产品目标</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout">
+        <p><b>设计原则：</b>用「状态泳道」表达并行与覆盖，用「停顿点序列」表达节奏，用「播放头」表达当前位置。三者合起来，才是视觉小说版的「时间轴」。</p>
+      </div>
+    </section>
+
+    <section id="form">
+      <h2><span class="h2n">04</span>产品形态：四工作区</h2>
+      <p class="subtitle">功能继续长，单页三栏一定会拥挤；解法是「同一模型、多工作区」，而不是更多弹窗。</p>
+
+      <p>当前所有能力都挤在一个页面：结构、舞台、指令、检查器、试播、素材、校验。结果是每个区域都不够深，且互相打断（开素材要关舞台，开试播要关编辑）。参考 DaVinci 的页面式工作流，建议把桌面端编辑器拆成四个工作区，顶部切换，<b>当前幕/分镜/选中对象/播放头位置跨区保持</b>。</p>
+
+      <div class="callout warn">
+        <p><b>入口与资产治理边界：</b>现网已有的<b>「我的作品」</b>（新建、导入、复制、重命名、调用正式播放器直放）属于进入编辑前的作品管理入口，<b>「作品素材管理」</b>（引用计数、体积预算、清理未引用素材）属于本地上传资产治理弹窗。两者均保留在作品/工具栏层，不与「交付台（单篇出口）」混淆；在第一期未上线常驻素材箱前，不可移除原有素材清理入口。</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:15%">工作区</th><th style="width:26%">主任务</th><th style="width:34%">主界面</th><th>关键交互</th></tr></thead>
+          <tbody>
+            <tr><td><b>编排台</b><br><span class="small">Board</span></td><td>粗剪：看全貌、排顺序、删冗余、标待办</td><td>左侧结构树 + 故事板卡片墙（按幕分组、可缩放）</td><td>拖拽重排、框选批量、卡片缩略图、标记与过滤、双击进入演出台</td></tr>
+            <tr><td><b>演出台</b><br><span class="small">Stage</span></td><td>精修：调画面、调位置、调节奏、看状态</td><td>监视器 + 传输条 + 指令序列 + 检查器 + 状态泳道</td><td>播放头 scrub、选中即预览、舞台直编与吸附、指令拖拽、批量检查器</td></tr>
+            <tr><td><b>剧本台</b><br><span class="small">Script</span></td><td>批量文本：改台词、换说话人、查替换、导入导出</td><td>对白表格（幕/分镜/说话人/台词/表情/状态）</td><td>行内编辑、筛选、批量替换、CSV/台本导出、双击跳回演出台</td></tr>
+            <tr><td><b>交付台</b><br><span class="small">Deliver</span></td><td>收尾：检查、预览全片、导出、留版本</td><td>检查清单 + 全片预览 + 导出选项 + 版本快照</td><td>问题定位跳转、导出视频/交互包/脚本、封面与元数据、导出前自动快照</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>4.1 桌面工作台线框</h3>
+      <div class="wire">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="margin-left:8px">ArkArchive · 演出台</span><span class="grow"></span><span>已保存 12:03</span><span class="tag">⌘K</span></div>
+        <div class="layout">
+          <div class="col">
+            <div class="pane"><b>结构树</b>
+              <div class="mini" style="margin:4px 0"></div>
+              <div class="mini hot" style="margin:4px 0"></div>
+              <div class="mini" style="margin:4px 0"></div>
+              <div class="mini" style="margin:4px 0"></div>
+              <div class="mini" style="margin:4px 0"></div>
+            </div>
+            <div class="pane" style="flex:1"><b>素材 / 预设</b>
+              <div class="row" style="flex-wrap:wrap; gap:4px">
+                <span class="mini" style="width:36px;height:30px"></span><span class="mini" style="width:36px;height:30px"></span><span class="mini" style="width:36px;height:30px"></span>
+                <span class="mini" style="width:36px;height:30px"></span><span class="mini" style="width:36px;height:30px"></span><span class="mini" style="width:36px;height:30px"></span>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="pane" style="flex:1">
+              <b>监视器 · 当前分镜</b>
+              <div class="stage">1280 × 720 · 选中指令后的舞台状态</div>
+              <div class="transport"><span>⏮</span><span>▶</span><span>⏭</span><span>12 / 28 句</span><span class="grow"></span><span>循环</span><span>1.0×</span><span>全屏</span></div>
+            </div>
+            <div class="pane">
+              <b>节拍序列 · 第 2 幕</b>
+              <div class="row" style="gap:5px; margin-top:6px">
+                <div class="card-mini" style="flex:1"></div>
+                <div class="card-mini" style="flex:1; border-color:#1d4ed8; background:#0f1b33"></div>
+                <div class="card-mini" style="flex:1"></div>
+                <div class="card-mini" style="flex:1"></div>
+                <div class="card-mini" style="flex:1"></div>
+              </div>
+            </div>
+            <div class="pane">
+              <b>分镜内指令 · 状态泳道</b>
+              <div class="mini" style="margin-top:5px"></div>
+              <div class="mini" style="margin-top:5px"></div>
+              <div class="mini" style="margin-top:5px"></div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="pane"><b>检查器</b>
+              <div class="mini" style="margin:4px 0"></div>
+              <div class="mini" style="margin:4px 0"></div>
+              <div class="mini" style="margin:4px 0"></div>
+              <div class="mini" style="margin:4px 0"></div>
+              <div class="mini" style="margin:4px 0"></div>
+            </div>
+            <div class="pane" style="flex:1"><b>问题 / 标记</b>
+              <div class="mini" style="margin:4px 0"></div>
+              <div class="mini" style="margin:4px 0"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="small">关键变化：监视器常驻且带传输条；分镜序列横向可缩放；泳道与指令同屏；素材从模态变为常驻；检查器与问题常驻右侧。</p>
+
+      <h3>4.2 移动端形态（做减法，不强求双端四区对等）</h3>
+      <p>手机端不应把桌面三栏压成长列表，也不应把桌面「四工作区切换条」直接叠在「底部应用主导航 + 16:9 监视器」之间（390px 竖屏上固定区会占去过半高度，挤压指令列表）。建议移动端做能力收口，聚焦「监视器 + 传输条 + 指令列表 + 底部属性抽屉」：</p>
+      <div class="grid2">
+        <div class="panel">
+          <h4>单手持机（竖屏 · 主工作态）</h4>
+          <ul>
+            <li><b>主视图即演出台：</b>上方 16:9 监视器，下方固定传输条（上一句 / 播放 / 下一句）与指令列表</li>
+            <li><b>轻量副视图：</b>仅保留「分镜切换（卡片横滑）」与「检查与轻导出」两个轻量视图，不强推桌面式多列剧本表格与复杂框选批量</li>
+            <li><b>属性与操作：</b>检查器收为底部抽屉（peek / half / full），长按指令进入单手批量选择；舞台支持专注模式与双指缩放</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h4>横屏 / 平板</h4>
+          <ul>
+            <li>接近桌面双栏：左监视器 + 分镜切换，右结构/指令</li>
+            <li>检查器作为可滑出的侧抽屉，不永久占宽</li>
+            <li>保留播放头与传输条；外接键鼠时可启用桌面快捷键与多工作区</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout">
+        <p><b>形态判断：</b>如果短期内不做四工作区，至少先做「演出台」的完整化——常驻监视器 + 传输条 + 可折叠素材抽屉 + 可折叠检查器。这是投入产出比最高的一步，也为后续工作区留好插槽。</p>
+      </div>
+    </section>
+
+<section id="ui">
+      <h2><span class="h2n">05</span>UI 交互优化方向</h2>
+      <p class="subtitle">七个方向，按「是否缩短编辑回路」排序；D2 是核心，其余围绕它服务。</p>
+
+      <h3 id="d1">D1 工作台与面板：让该常驻的常驻</h3>
+      <p><b>现状：</b>三栏固定宽度（215 / 弹性 / 290），舞台与指令上下分；素材、作品、试播、校验都是模态对话框。用户每换一次任务，就要关闭一个窗口、打开另一个窗口，上下文反复丢失。</p>
+      <p><b>目标：</b>面板可折叠、可拖拽分隔、宽度记忆；素材与预设常驻左栏；检查器与问题常驻右栏；模态只保留「必须阻断」的确认。</p>
+
+      <div class="grid2">
+        <div class="panel">
+          <h4>具体交互</h4>
+          <ul>
+            <li><b>可拖拽分隔条：</b>左右面板与舞台之间可调宽，双击恢复默认；宽度写入本地偏好。</li>
+            <li><b>面板停靠：</b>素材选择器支持「固定到左栏」，选中素材后不关闭，可连续替换多个字段。</li>
+            <li><b>专注模式：</b>Tab 隐藏左右栏，只留监视器与传输条；再按恢复。</li>
+            <li><b>布局预设：</b>「编排 / 演出 / 剧本 / 交付」四个工作区各自记住面板状态，而不是一套布局硬塞。</li>
+            <li><b>移动端：</b>检查器改为底部抽屉（三档高度：peek / half / full），不再内联撑高列表。</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h4>为什么先做</h4>
+          <p>它不改数据模型、不改引擎，只改容器与状态管理，却是后续「故事板 / 泳道 / 素材箱」能否塞进来的前提。没有可停靠的容器，新视图只能继续做成弹窗，交互债会越滚越大。</p>
+          <p class="small">落点：<code>story_editor_page.dart</code> 的 <code>build</code> 布局与 <code>_pick</code> / <code>_preview</code>；新增面板状态持久化（宽度、折叠、页签）。</p>
+        </div>
+      </div>
+
+      <h3 id="d2">D2 播放头与传输控制：把「试播」变成「监视器」</h3>
+      <p><b>现状：</b>舞台显示的是分镜末态，不是选中指令的位置；试播是模态 Dialog，250 ms 自动推进，只有播放/暂停/重播/下一步。改一句台词、挪一个立绘，都要「关掉试播 → 改 → 再开」。</p>
+      <p><b>目标：</b>把「播放头」引入分镜内部。选中哪条指令，舞台就显示执行到那条指令之后的状态；试播从模态变成常驻监视器，带句级传输控制。</p>
+
+      <div class="compare">
+        <div class="thumb">
+          <div class="img">指令 3 后</div>
+          <div class="cap"><b>选中「背景 A」</b>显示背景 A、立绘未入场</div>
+        </div>
+        <div class="thumb">
+          <div class="img">指令 7 后</div>
+          <div class="cap"><b>选中「立绘登场」</b>显示 A + 立绘 + 对白</div>
+        </div>
+        <div class="thumb">
+          <div class="img">分镜末态</div>
+          <div class="cap"><b>分镜末态（当前行为）</b>所有指令执行完</div>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <p><b>这是当前最值得做的一项：</b>改动量小（把 <code>end</code> 从「分镜结束」改为「选中指令 + 1」），收益直接——用户终于能「看哪打哪」，而不是改完再开试播猜。</p>
+      </div>
+
+      <h4>交互规范</h4>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:23%">动作</th><th style="width:30%">行为</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>点击指令行</td><td>播放头落到该指令，舞台显示执行后状态</td><td>默认行为；不再需要打开试播</td></tr>
+            <tr><td>拖动播放头</td><td>沿指令/停顿点连续 scrub，画面跟随</td><td>节流重建；松手后定位；拖动时隐藏把手避免误触</td></tr>
+            <tr><td>空格</td><td>播放 / 暂停当前分镜</td><td>播放到分镜末停止；再按从头</td></tr>
+            <tr><td>← / →</td><td>上一句 / 下一句（停顿点）</td><td>复用 <code>stopPoints</code>；与正式播放器一致</td></tr>
+            <tr><td>Shift + ← / →</td><td>上一条 / 下一条指令</td><td>精确到指令，用于调参</td></tr>
+            <tr><td>Home / End</td><td>分镜开头 / 分镜末态</td><td>End 即当前行为，保留「看结果」的入口</td></tr>
+            <tr><td>L（连按）</td><td>1× / 2× / 4× / 8× 倍速</td><td>复用正式播放器 <code>PlaySpeed</code> 档位</td></tr>
+            <tr><td>循环按钮</td><td>只循环当前分镜</td><td>做「一句台词反复微调」时最实用</td></tr>
+            <tr><td>全屏</td><td>监视器全屏，Esc 退出</td><td>复用正式播放器路由；退出不丢选中</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>试播的三种形态</h4>
+      <ol>
+        <li><b>就地监视器（默认）：</b>停靠在舞台位置，播放时右侧检查器仍可改参数，改完立刻看到。</li>
+        <li><b>全屏预览（观看）：</b>隐藏编辑 UI，按真实交互播放（对白等待点击、选项可点），用于验收成片观感。</li>
+        <li><b>提取片段（对比）：</b>只播放当前分镜或选区，用于 A/B 对比修改前后。</li>
+      </ol>
+
+      <div class="grid2">
+        <div class="panel">
+          <h4>播放头刻度</h4>
+          <p>刻度不是秒，而是「停顿点 + 指令」。对白按字数估算宽度，<code>delay</code> 按秒数，动画按 duration；顶部可切换「等宽 / 估时」两种显示。这样既保留节奏感，又不撒谎。</p>
+        </div>
+        <div class="panel">
+          <h4>技术落点</h4>
+          <p><code>editor_stage.dart</code> 的 <code>_rebuild</code> 改为接收 <code>playhead</code>，<code>end = beatStart + playhead + 1</code>；页面把 <code>_command</code> 传下去，分镜切换时重置。播放用 <code>advance</code>，跳转用 <code>seekToCommand</code>，句级导航用 <code>stopPoints</code>。</p>
+        </div>
+      </div>
+
+      <h3 id="d3">D3 选择集与批量：让「一次改一批」成为可能</h3>
+      <p><b>现状：</b><code>_command</code> 是单值，复制只支持单条，移动只能逐条菜单；没有剪贴板、没有框选、没有混合值检查器。</p>
+      <p><b>目标：</b>把「选择」升级为一等公民。剪辑软件的高效不来自功能多，而来自选择集上的批量动作。</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:26%">选择手势</th><th style="width:34%">结果</th><th>随后可做</th></tr></thead>
+          <tbody>
+            <tr><td>单击</td><td>单选，播放头跳转</td><td>改属性、拖拽</td></tr>
+            <tr><td>Shift + 单击</td><td>从锚点到目标的连续区间</td><td>批量删除 / 移动 / 复制</td></tr>
+            <tr><td>Ctrl / ⌘ + 单击</td><td>增减单条</td><td>跨段组合，批量改字段</td></tr>
+            <tr><td>行内拖拽框选</td><td>矩形覆盖的指令</td><td>批量操作</td></tr>
+            <tr><td>全选 / 反选</td><td>当前分镜或当前幕</td><td>批量检查</td></tr>
+            <tr><td>舞台框选</td><td>当前舞台上的多个对象</td><td>相对移动、对齐、批量改坐标</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid3">
+        <div class="panel">
+          <h4>批量动作</h4>
+          <p>删除、复制、移动、禁用、改字段、替换素材、加标记。检查器对多选显示混合值（如「说话人：多个值」），修改后统一写入。</p>
+        </div>
+        <div class="panel">
+          <h4>剪贴板</h4>
+          <p>Ctrl+C / X / V，跨分镜、跨幕、跨作品；内部剪贴板保留指令序列，粘贴到播放头之后。复制时给出「已复制 7 条指令」的轻提示。</p>
+        </div>
+        <div class="panel">
+          <h4>右键与命令面板</h4>
+          <p>指令行、分镜卡、舞台对象都提供上下文菜单；Ctrl+K 打开命令面板，搜索「添加立绘 / 替换背景 / 导出视频」等动作，键盘可完成全流程。</p>
+        </div>
+      </div>
+
+      <h3 id="d4">D4 舞台直接操作：从「圆点」到「变换框」</h3>
+      <p><b>现状：</b>每个可拖对象是一个 44 px 圆点，且同屏显示整个分镜的所有把手；没有吸附、没有参考线、没有视图缩放；选中某对象时，其它对象的把手仍在，容易误拖。</p>
+      <p><b>目标：</b>「选中什么，就编辑什么」；舞台本身可缩放平移；对齐有辅助，结果可预期。</p>
+
+      <div class="grid2">
+        <div class="panel">
+          <h4>选择与手柄</h4>
+          <ul>
+            <li>默认只显示<b>选中对象</b>的手柄；其它对象显示极淡的可点击轮廓，hover 才显形。</li>
+            <li><b>变换框边界：</b>仅具备 <code>width</code> / <code>size</code> 字段的<b>舞台文字（subtitle）</b>提供四角调字号、四边调宽度；立绘、背景、CG 在当前字段模型中无缩放参数，仅提供<b>位置移动框 + 中心线/对齐吸附</b>，不在 UI 上承诺不存在的自由拉伸。</li>
+            <li><b>跨分镜继承对象的直编策略：</b>在当前分镜拖动继承自前序分镜的立绘/背景时，不静默失败也不悄悄篡改前序分镜，而是弹出轻量二选一：<b>「跳转到来源指令」</b>或<b>「在当前分镜插入覆盖指令」</b>（并提示影响范围）。</li>
+            <li>拖动时显示<b>数值气泡</b>（X / Y 或宽 / 字号），松手可点击气泡直接输入；按住 Shift 锁定单轴。</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h4>对齐与视图</h4>
+          <ul>
+            <li><b>吸附：</b>舞台中心线、三分线、安全框、其它对象边缘；吸附阈值 6 px，Alt 临时关闭。</li>
+            <li><b>对齐按钮：</b>检查器提供左/中/右、上/中/下、水平/垂直居中，一次到位。</li>
+            <li><b>视图：</b>50%–200% 缩放，空格 + 拖拽平移，双击适配；缩放只影响视图，不改坐标。</li>
+            <li><b>对象列表：</b>舞台左上角浮层列出当前生效的背景、CG、立绘、文字、BGM，点击选中来源指令，一眼看清「现在台上有什么」。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout">
+        <p><b>注意边界：</b>引擎不支持任意图层排序、立绘/背景自由缩放与自由旋转（立绘只有 <code>posfrom</code>/<code>posto</code> 与站位，背景仅支持坐标与 <code>screenadapt</code>）。编辑器应显示「层级说明」，但不要提供无法编译成脚本的控件——所有 UI 操作都必须能落成一条合法指令。</p>
+      </div>
+
+      <h3 id="d5">D5 结构与导航：让长作品可去、可回、可找</h3>
+      <p><b>现状：</b>幕用下拉框切换，分镜用横条/列表，指令列表只显示当前分镜；没有面包屑、没有搜索、没有「上次编辑位置」；作品中段之后导航成本明显上升。</p>
+
+      <div class="grid2">
+        <div class="panel">
+          <h4>结构树（左栏常驻）</h4>
+          <ul>
+            <li>作品 → 幕 → 分镜三级可折叠；当前项高亮，滚动自动跟随。</li>
+            <li>幕/分镜支持拖拽重排、右键菜单（新建、复制、重命名、删除、标记）。</li>
+            <li>每行显示状态徽标：指令数、警告数、标记颜色、估算时长。</li>
+            <li>顶部搜索框：按标题、台词、角色、素材 key 过滤；结果直接跳转。</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h4>导航与定位</h4>
+          <ul>
+            <li><b>面包屑：</b>作品 / 第 2 幕 / 分镜 7 / 指令 3，每一级可点。</li>
+            <li><b>前进后退：</b>Alt+←/→ 在最近编辑位置间跳转，像 IDE 一样。</li>
+            <li><b>恢复现场：</b>重新打开作品回到上次的幕/分镜/指令与滚动位置。</li>
+            <li><b>标记：</b>颜色 + 备注（待换图 / 待配音 / 审核意见），故事板与结构树都能过滤。</li>
+            <li><b>问题定位：</b>校验结果的每一条都可「前往」，并高亮对应指令。</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3 id="d6">D6 检查器控件：从「表单」到「调参器」</h3>
+      <p><b>现状：</b>字段是普通文本框/数字框/开关/下拉；音量、淡入淡出、透明度都要手打 0–1 的小数；没有分组、没有重置、没有单位提示；多选时无法编辑。</p>
+      <p><b>目标：</b>高频参数用「可拖拽数值 + 滑杆」，低频参数折叠到「高级」，让检查器像剪辑软件的属性面板一样顺手。</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:22%">字段类型</th><th style="width:34%">建议控件</th><th>交互细节</th></tr></thead>
+          <tbody>
+            <tr><td>坐标 X / Y</td><td>数值 + 横向拖拽 scrub</td><td>拖动改值，Shift 精调 1 px，双击输入；旁附「居中 / 重置 / 复制坐标」</td></tr>
+            <tr><td>时长、淡入淡出、延迟</td><td>数值 + 滑杆 + 单位</td><td>范围 0–5 s 常用段放大；显示「秒」，不显示裸数字</td></tr>
+            <tr><td>音量</td><td>0–1 滑杆 + dB 显示 + 试听</td><td>双击复位 1.0；静音按钮；试听不打断舞台</td></tr>
+            <tr><td>透明度 / 颜色</td><td>取色器 + 预设色板 + Alpha</td><td>遮罩 R/G/B/A 不再四个数字框；提供黑场/白场/半透明预设</td></tr>
+            <tr><td>枚举（适配、对齐、站位）</td><td>分段按钮 / 图标组</td><td>比下拉更快，一眼看到所有选项</td></tr>
+            <tr><td>媒体字段</td><td>缩略图 + 名称 + 「更换 / 定位 / 清除」</td><td>显示素材来源徽标（PRTS / 本地）与尺寸；点击缩略图全屏预览</td></tr>
+            <tr><td>多选混合值</td><td>「多个值」占位 + 统一设置</td><td>修改即批量写入；未修改字段保持原值</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>另外三点：<b>分组与折叠</b>（内容 / 布局 / 时间 / 高级，默认收起高级）、<b>字段说明</b>（每个字段一句「它影响什么」+ 一个示例值）、<b>重置</b>（单项重置 / 整条指令重置）。这三项直接降低新用户的试错成本。</p>
+
+      <h3 id="d7">D7 反馈与信任：让用户敢改</h3>
+      <p>剪辑软件让人敢大规模修改，是因为「随时可退」。当前只有 60 步撤销和覆盖式自动保存，缺三样东西：看得见的历史、可回退的版本、改动影响的预警。</p>
+
+      <div class="grid2">
+        <div class="panel">
+          <h4>保存与版本</h4>
+          <ul>
+            <li>工具栏常驻「已保存 12:03 / 保存中 / 失败·重试」，失败时红色警示点不消失。</li>
+            <li>每 5 分钟或每次导出前自动快照，保留最近 10 个；「恢复到此版本」带预览。</li>
+            <li>导出前强制快照，命名含时间与作品版本号。</li>
+            <li>打开作品时若检测到上次异常退出，提示「恢复到最近快照」。</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h4>历史与影响</h4>
+          <ul>
+            <li><b>撤销历史面板：</b>按时间列出「修改对白 / 移动立绘 / 插入背景」，点击跳转；当前步高亮。</li>
+            <li><b>影响预警：</b>修改靠前的背景/立绘时，提示「将影响后续 6 个分镜的画面」，可预览受影响的缩略图。</li>
+            <li><b>差异对比：</b>按住 Alt 查看修改前画面，松开回到当前；分镜卡显示「有未确认改动」。</li>
+            <li><b>检查清单：</b>错误 / 警告 / 建议三级，逐条「前往」；导出前必须处理错误项。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout">
+        <p><b>一句总结：</b>D1 解决「东西放哪」，D2 解决「看哪改哪」，D3–D4 解决「怎么快」，D5 解决「怎么找」，D6 解决「怎么调」，D7 解决「敢不敢改」。七项里 D2 的投入产出比最高，应第一个做。</p>
+      </div>
+    </section>
+
+    <section id="features">
+      <h2><span class="h2n">06</span>功能点优化方向</h2>
+      <p class="subtitle">缺口不在指令数量，而在「结构可视化」与「交付」。以下七条按产品价值排序。</p>
+
+      <h3>F1 故事板：把「分镜列表」升级为「可粗剪的卡片墙」</h3>
+      <p>这是最接近剪辑软件「素材箱 + 序列缩略图」的视图，也是当前最缺的「全貌感」。</p>
+      <div class="grid2">
+        <div class="panel">
+          <h4>卡片内容</h4>
+          <ul>
+            <li>缩略图：该分镜末态（或首句停顿点）渲染，按分镜签名缓存，避免重复重建。</li>
+            <li>标题、首句台词、指令数、估算时长、警告数、标记颜色。</li>
+            <li>角标显示「含分支 / 含音频 / 含特效」，一眼识别重演出段。</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h4>操作</h4>
+          <ul>
+            <li>拖拽重排、跨幕拖拽、框选批量删除/复制/移动。</li>
+            <li>缩放（小卡/中卡/大卡），按幕分组，按「有警告 / 有标记 / 未完成」过滤。</li>
+            <li>双击进入演出台并定位到该分镜；右键「在此后插入分镜 / 从此派生副本」。</li>
+            <li>底部显示全作品估算时长与分镜数，服务「做多长的片子」这个创作决策。</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>F2 状态泳道：把「状态累积」画出来</h3>
+      <p>这是本产品区别于普通剪辑软件、也最容易被用户误解的机制：<b>一条背景指令会一直生效，直到被覆盖</b>。当前没有任何视图表达这件事，导致「我只改了第 2 幕的背景，为什么第 3 幕也变了」。</p>
+
+      <div class="lanes">
+        <div class="lane"><div class="name">背景</div><div class="track"><div class="clip bg" style="left:2%; width:38%"></div><div class="clip bg" style="left:40%; width:26%"></div><div class="clip bg" style="left:68%; width:30%"></div><div class="playhead" style="left:56%"></div></div></div>
+        <div class="lane"><div class="name">立绘 L</div><div class="track"><div class="clip ch" style="left:22%; width:30%"></div><div class="clip ch" style="left:54%; width:44%"></div><div class="playhead" style="left:56%"></div></div></div>
+        <div class="lane"><div class="name">立绘 M</div><div class="track"><div class="clip ch" style="left:10%; width:18%"></div><div class="playhead" style="left:56%"></div></div></div>
+        <div class="lane"><div class="name">CG</div><div class="track"><div class="clip cg" style="left:64%; width:22%"></div><div class="playhead" style="left:56%"></div></div></div>
+        <div class="lane"><div class="name">文字</div><div class="track"><div class="clip tx" style="left:6%; width:12%"></div><div class="clip tx" style="left:58%; width:20%"></div><div class="playhead" style="left:56%"></div></div></div>
+        <div class="lane"><div class="name">BGM</div><div class="track"><div class="clip au" style="left:0%; width:60%"></div><div class="clip au" style="left:62%; width:38%"></div><div class="playhead" style="left:56%"></div></div></div>
+        <div class="lane"><div class="name">特效</div><div class="track"><div class="clip fx" style="left:30%; width:8%"></div><div class="clip fx" style="left:72%; width:16%"></div><div class="playhead" style="left:56%"></div></div></div>
+        <div class="lane-caption"><span>第 1 幕</span><span>第 2 幕</span><span>第 3 幕</span></div>
+        <div class="legend">
+          <span><i style="background:#3b82f6"></i>背景</span>
+          <span><i style="background:#22c55e"></i>立绘</span>
+          <span><i style="background:#a855f7"></i>CG</span>
+          <span><i style="background:#f59e0b"></i>文字</span>
+          <span><i style="background:#06b6d4"></i>音频</span>
+          <span><i style="background:#ef4444"></i>特效</span>
+          <span>白色竖线 = 当前播放头</span>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <h4>交互</h4>
+          <ul>
+            <li>横轴是分镜序列，不是秒；每个色块表示「从某条指令生效，到被覆盖」。</li>
+            <li>点击色块跳到来源指令；hover 显示素材名、参数、开始/结束位置。</li>
+            <li>过滤：只看背景、只看某角色、只看音频；支持「只看当前分镜」。</li>
+            <li>缺失素材/警告用斜纹或红色描边标出，点击直接修复。</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h4>配套能力：影响范围与固化</h4>
+          <p>选中一条指令，泳道高亮它影响到的后续区间，并提示「影响 6 个分镜」。提供<b>「在此固化状态」</b>：把当前舞台状态编译成一组显式指令插入，切断对前序的依赖——类似剪辑软件的嵌套序列/渲染并替换，是长作品防连锁修改的关键。</p>
+        </div>
+      </div>
+
+      <h3>F3 分支与路径状态：引擎已会，只差一张图</h3>
+      <p>引擎已注册 <code>decision</code>、<code>predicate</code>、<code>label</code>、<code>warp</code>、<code>skipnode</code>、<code>theater</code>；编辑器的可视指令表里却没有它们，只能改源码。需注意：当前 <code>StoryEngine</code> 仅支持 <code>decision</code> 产出选择值（<code>_selectedValue</code>）与 <code>predicate(references=...)</code> 过滤，<b>不存在通用脚本变量系统</b>。</p>
+      <div class="grid3">
+        <div class="panel">
+          <h4>阶段 1：只读图</h4>
+          <p>节点 = 分镜/标签，边 = 选项与跳转；点击节点跳转对应分镜；死链、不可达节点、空选项自动标红。</p>
+        </div>
+        <div class="panel">
+          <h4>阶段 2：可视化编辑</h4>
+          <p>新增选项、连线、分支条件；生成对应的 decision / predicate / warp / label 指令；与指令列表双向同步。</p>
+        </div>
+        <div class="panel">
+          <h4>阶段 3：路径调试</h4>
+          <p>试播时高亮当前路径；展示当前选项值（<code>selectedValue</code>）与各分支 <code>predicate</code> 命中状态；在选项处暂停，手动选分支。</p>
+        </div>
+      </div>
+      <p class="small">先做只读图 + 跳转，成本低、立刻解决「看不懂」；可视化编辑等分支使用率被验证后再投入，且不引入引擎不支持的通用变量赋值体系。</p>
+
+      <h3>F4 素材工作流：从「字段里找素材」到「素材上做作品」</h3>
+      <p>当前路径是「先选指令 → 打开字段 → 模态选素材」。剪辑软件的路径是「先浏览素材 → 拖到时间线」。后者更适合探索式创作，也更适合改编（先看官方素材，再决定怎么用）。</p>
+      <div class="grid2">
+        <div class="panel">
+          <h4>素材箱</h4>
+          <ul>
+            <li>常驻左栏，按 PRTS / 本地 / 最近 / 收藏 / 未使用分组。</li>
+            <li>网格/列表切换，虚拟滚动，缩略图懒加载并缓存。</li>
+            <li>搜索支持角色别名、差分、素材 key；显示尺寸、体积、引用次数。</li>
+            <li>拖拽：拖到舞台 = 新建背景/CG/立绘指令；拖到字段 = 替换；拖到轨道 = 插入。</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h4>引用管理</h4>
+          <ul>
+            <li><b>替换引用：</b>一次替换全作品中的某素材，保留位置/淡入淡出等参数。</li>
+            <li><b>定位引用：</b>从素材反查「哪些分镜用了它」，逐条跳转。</li>
+            <li><b>缺失修复：</b>列出缺失素材与影响范围，批量重选。</li>
+            <li><b>体积预算：</b>显示作品总体积与最大贡献者；导出前提示超限风险。</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>F5 预设与宏：把重复演出变成资产</h3>
+      <p>改编与连载创作里，大量演出是重复的：立绘淡入、黑场转场、BGM 切换、情绪特写。当前只能复制分镜再改，效率低且容易漏改。</p>
+      <ul>
+        <li><b>演出片段：</b>选中一段指令 → 存为预设，参数化（角色、表情、时长、背景）；从预设面板拖入任意分镜。</li>
+        <li><b>内置预设：</b>角色登场/退场、黑场转场、闪白、震屏、BGM 淡入淡出、情绪特写、双人对话模板。</li>
+        <li><b>作品模板：</b>新建时选择「对话戏 / 战斗演出 / 分支示例 / 空白」，生成骨架与示例指令。</li>
+        <li><b>宏的边界：</b>预设只生成标准指令，不引入新语法；这样导出脚本仍然可读、可移植。</li>
+      </ul>
+
+      <h3>F6 交付：优先轻量化可传播交付，视频编码后置</h3>
+      <p>当前导出只有「作品 JSON（含素材）」与「纯脚本 TXT」。结合项目跨 Windows / Linux / Android / Web 且无音视频编码依赖的现状，P1 应优先做零编码成本的轻交付，把跨平台视频录制/离屏成片后置到 P2 按需验证。</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:18%">交付物</th><th style="width:32%">形态</th><th style="width:26%">技术路径</th><th>优先级</th></tr></thead>
+          <tbody>
+            <tr><td><b>作品包 / 直放</b></td><td>作品 JSON，由本应用正式播放器直接观看</td><td>复用已有 <code>StoryPlayer</code> 与 <code>onPlayProject</code></td><td><span class="b yes">已有 / P0</span></td></tr>
+            <tr><td><b>台本 / 字幕</b></td><td>TXT / CSV / SRT，含说话人与时间估算</td><td>从 <code>stopPoints</code> 直接生成，零外部依赖</td><td><span class="b info">P1</span></td></tr>
+            <tr><td><b>Web 只读交互包</b></td><td>作品 JSON + 轻量化 Web 播放器页面，浏览器可打开</td><td>复用项目已有 Web 构建能力，比视频编码更轻量</td><td><span class="b info">P1 / P2</span></td></tr>
+            <tr><td><b>预览视频</b></td><td>MP4，按脚本自动推进，带 BGM/音效</td><td>实时播放 + 录屏（跨平台成本高，需先验证需求）</td><td><span class="b gray">P2</span></td></tr>
+            <tr><td><b>成片视频</b></td><td>离屏逐帧渲染 + 编码，稳定帧率、无 UI</td><td>引擎离屏渲染 + FFmpeg；需处理音频混音与随机粒子同步</td><td><span class="b gray">P2</span></td></tr>
+            <tr><td><b>审阅包</b></td><td>只读播放器 + 带句号的反馈导出</td><td>播放器加「反馈模式」，导出反馈 JSON/文本</td><td><span class="b gray">P2</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>交付台还应提供<b>作品元数据</b>：封面、简介、标签、版本号、署名与素材来源说明。这不是装饰——同人作品分发时，素材来源与授权说明是刚需，也能降低 PRTS 素材使用的版权风险。</p>
+
+      <h3>F7 智能辅助：加速冷启动，而不是替人创作</h3>
+      <p>可以做，但应放在最后，且坚持三条原则：<b>建议而非自动写入</b>、<b>结果可撤销</b>、<b>不破坏离线可用</b>。</p>
+      <ul>
+        <li><b>文本拆分镜：</b>粘贴纯文本剧本，按对白/旁白自动切成 beat，识别说话人；用户逐条确认。</li>
+        <li><b>素材检索：</b>用自然语言描述（「雨夜的城市远景」）在 PRTS 目录里找候选，仍由用户拍板。</li>
+        <li><b>台词检查：</b>标点、长度、说话人与立绘是否匹配、连续相同表情等轻量规则，不替代人工润色。</li>
+        <li><b>不做：</b>自动生成整段剧情、自动配乐、自动发布。这些会稀释「创作工具」的定位，也带来版权与质量问题。</li>
+      </ul>
+    </section>
+
+  <section id="roadmap">
+      <h2><span class="h2n">07</span>优先级与路线图</h2>
+      <p class="subtitle">先缩短回路，再让结构可见，最后做交付。顺序比清单重要。</p>
+
+      <p>排序原则有三条：<b>①</b> 不改数据模型、不改引擎的交互先做；<b>②</b> 能缩短「编辑—预览」回路的优先；<b>③</b> 涉及编码、跨作品状态、新渲染管线的后置。按此把上面的方向压成三批。</p>
+
+
+      <div class="callout warn">
+        <p><b>结合当前仓库代码的实施建议：</b>本仓库已存在 <code>lib/story_editor/</code> 剧情编辑器模块及相关测试，支持作品→幕→分镜→指令的编辑结构、舞台编辑、素材处理、作品包导入导出与试播；因此本路线应按现有实现迭代，不是从零重建。交互原型中的 P0/P1/P2 徽标表示产品规划与演示成熟度，不代表这些能力已全部在应用中实现，排期前应逐项对照当前分支验证。</p>
+      </div>
+      <h3>实施拆分建议：先闭合编辑—预览回路</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:17%">开发批次</th><th style="width:45%">建议范围</th><th>暂缓内容</th></tr></thead>
+          <tbody>
+            <tr><td><b>第一期：演出台体验闭环</b></td><td>选中指令即预览执行后的状态，并保留分镜末态入口；将试播从阻断编辑的模态改为编辑上下文内可用的预览，先提供播放/暂停、上一句/下一句等核心控制；<b>伴生前置：改对白/文本不触发舞台全量重建，拖动滑杆/舞台期间不写盘（防闪屏与卡顿）</b>；同时纳入校验问题定位、列表排序、窄屏拖动与保存状态反馈等低成本修复，并保留现网「我的作品」与「作品素材管理」弹窗。</td><td>不要求首发完成四工作区、复杂布局自定义、完整状态泳道或逐帧时间轴。</td></tr>
+            <tr><td><b>第二期：批量编辑与结构浏览</b></td><td>桌面端多选、复制粘贴与键盘操作；剧本台（对白表格，配合官方剧情派生改词场景）与编排台（故事板重排，含分镜缩略图缓存）；结构树、搜索与标记；检查器高频控件；移动端维持轻量化（仅同步演出台能力与分镜切换，不上桌面式剧本表格）。</td><td>各能力可拆成多个小版本，不必一次铺齐所有原型页面；常驻素材箱可按反馈渐进拆出。</td></tr>
+            <tr><td><b>第三期：状态透明、安全与轻交付</b></td><td>草稿结构/素材分层保存与版本快照/历史；状态泳道与影响范围（「在此固化状态」）；分支只读图（路径高亮与 Predicate 状态）；轻交付（台本/SRT、检查与署名清单，视 Web 使用量评估只读分享包）。</td><td>跨平台 MP4 录制/离屏成片、跨作品全局素材库与通用脚本变量系统不作为前置条件；先验证需求与平台成本。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><b>首期范围建议：</b>将 P0-1「播放头」与 P0-2「非模态试播」作为核心交付，并把「改台词不重建舞台 / 拖动期节流写盘」作为伴生性能优化一并纳入，防止实时联动闪烁卡顿；校验定位、保存反馈及窄屏拖动/列表排序修复作为配套落地；保留现网「我的作品」入口与「作品素材管理」弹窗。多选与剪贴板交互边界较多，放在首期后半或第二期迭代，不宜阻塞最小可用闭环。</p>
+      <p class="small"><b>实施前核对：</b>本 PRD 标注的基线为 <code>feat/story-editer @ 43944e7</code>；应先确认当前分支与提交，并复核文中所列现状问题是否仍存在，避免重复实现。建议首期用真实作品验证选中指令到画面更新、修改后复看等关键任务耗时；不把未经测量的推断值当成验收基线。</p>
+      <h3>P0 · 体验基建与性能止血（约 2–3 周，低风险）</h3>
+      <div class="prio p0">
+        <div class="num">P0-1</div>
+        <h4>播放头：选中指令即预览该指令后的状态（含文本轻量增量判断）</h4>
+        <p>舞台 <code>end</code> 改为「分镜起点 + 选中指令 + 1」，支持「分镜末态」切换；分镜切换重置播放头。<b>伴生前置：</b>改对白文本等不改变视觉结构的操作不触发舞台全量重建，拖动/连续输入期间不触发整包 JSON 写盘，确保实时联动不闪屏。落点：<code>editor_stage.dart</code> 的 <code>_rebuild</code>、<code>didUpdateWidget</code> 与页面传参。</p>
+        <p class="small">验收：选中第 1 条与第 9 条指令，画面明显不同；连续输入对白时舞台不闪烁；从点击到画面更新 &lt; 150 ms（本地素材）。</p>
+      </div>
+      <div class="prio p0">
+        <div class="num">P0-2</div>
+        <h4>试播去模态：常驻监视器 + 传输条</h4>
+        <p>Dialog 改为可停靠面板/全屏路由；控制条补齐上一句、下一句、循环本段、倍速、全屏；复用 <code>stopPoints</code> 与 <code>seekToCommand</code>；播放时右侧检查器仍可编辑。</p>
+        <p class="small">验收：不关闭预览即可改台词并看到变化；上一句/下一句可用；退出不丢选中。</p>
+      </div>
+      <div class="prio p0">
+        <div class="num">P0-3</div>
+        <h4>选择集：多选、剪贴板、右键、快捷键（桌面优先）</h4>
+        <p><code>_command</code> 升级为集合；Shift 连选、Ctrl 增减；Ctrl+C/X/V 跨分镜；Ctrl+Z/Y、Delete、Ctrl+D、空格、方向键；右键上下文菜单。移动端仅提供长按多选的轻量删除/复制。</p>
+        <p class="small">验收：一次改 5 条台词的说话人；把 7 条指令复制到另一分镜；全程可只用键盘完成一次「插入—编辑—复制—删除」。</p>
+      </div>
+      <div class="prio p0">
+        <div class="num">P0-4</div>
+        <h4>舞台操作升级：缩放、吸附、只显示选中手柄与继承处理</h4>
+        <p>视图 50%–200%、空格平移；中心线/三分线/边缘吸附；未选中对象只显示淡轮廓；拖动数值气泡；对齐按钮。变换框（边/角调尺寸）仅用于具备宽高字段的舞台文字，立绘/CG 保持移动框；拖动继承自前序分镜的对象时，提示「跳到来源指令」或「在当前分镜插入覆盖」。</p>
+        <p class="small">验收：把立绘放到中线只需一次拖动并自动吸附；窄屏可放大后精确拖动；拖动继承立绘不再只有死提示。</p>
+      </div>
+      <div class="prio p0">
+        <div class="num">P0-5</div>
+        <h4>检查器控件：数值 scrub + 滑杆 + 分组</h4>
+        <p>坐标/时长/音量改为可拖拽数值；音量、淡入淡出、透明度用滑杆；媒体字段带缩略图与来源；字段按「内容/布局/时间/高级」分组，字段严格映射真实指令参数。</p>
+        <p class="small">验收：调音量不再需要输入 0.35；高级字段默认收起，首屏只留常用项。</p>
+      </div>
+      <div class="prio p0">
+        <div class="num">P0-6</div>
+        <h4>存量问题修复与入口保留（低成本高感知）</h4>
+        <p>窄屏指令拖动接上 <code>ReorderableDragStartListener</code>；作品列表去掉 <code>.reversed</code>；导入入口统一到「我的作品」；校验结果结构化并支持「前往」；保存状态常驻；保留现网「我的作品」与「作品素材管理」弹窗。</p>
+        <p class="small">验收：手机端能拖指令；最新作品在列表首位；点校验项能跳到对应指令；仍可清理未引用素材。</p>
+      </div>
+
+      <h3>P1 · 结构能力与桌面高效视图（约 1–2 个月，中风险）</h3>
+      <div class="prio p1">
+        <div class="num">P1-1</div>
+        <h4>故事板视图（桌面卡片墙 + 手机轻量切换）</h4>
+        <p>桌面端卡片墙、缩略图按分镜签名缓存、拖拽重排、框选批量、按幕分组、标记过滤、估算时长；移动端仅保留轻量分镜横滑切换。落点：新增 <code>editor_board.dart</code>，复用引擎渲染。</p>
+        <p class="small">验收：40 个分镜的作品能在 2 秒内看到全貌；拖拽重排不丢状态；批量删除可一次撤销。</p>
+      </div>
+      <div class="prio p1">
+        <div class="num">P1-2</div>
+        <h4>状态泳道 + 影响范围 + 固化状态</h4>
+        <p>六类泳道、生效区间、点击跳转、影响高亮；「在此固化」把当前状态编译为显式指令。落点：新增 <code>editor_lanes.dart</code>，静态扫描 commands。</p>
+        <p class="small">验收：选中背景指令能看到它覆盖的分镜范围；固化后删除前序指令，后续画面不变。</p>
+      </div>
+      <div class="prio p1">
+        <div class="num">P1-3</div>
+        <h4>素材箱 + 拖拽 + 替换引用</h4>
+        <p>常驻左栏、最近/收藏/未使用、拖到舞台或字段、全作品替换、缺失修复、体积预算（承接并升级原「作品素材管理」弹窗）。落点：拆分 <code>EditorMaterialPicker</code>，新增 <code>editor_bin.dart</code>。</p>
+        <p class="small">验收：连续替换 5 个背景不需要重复打开对话框；替换后位置与淡入淡出保留。</p>
+      </div>
+      <div class="prio p1">
+        <div class="num">P1-4</div>
+        <h4>结构树 + 搜索 + 标记</h4>
+        <p>作品/幕/分镜三级树、拖拽排序、面包屑、Alt+←/→、全局搜索（台词/角色/素材/标记）、恢复上次位置。</p>
+        <p class="small">验收：在 100 个分镜里搜一句台词并跳转 ≤ 3 步；重新打开作品回到上次位置。</p>
+      </div>
+      <div class="prio p1">
+        <div class="num">P1-5</div>
+        <h4>分层保存 + 自动快照 + 撤销历史面板</h4>
+        <p>结构 JSON 与素材包分层落盘（消除重素材写盘阻塞）；每 5 分钟/导出前快照，保留 10 个；历史操作列表可跳转；异常退出恢复提示。落点：<code>editor_platform_io.dart</code> 增加分层存储、快照目录与轮转。</p>
+        <p class="small">验收：重素材作品自动保存不阻塞输入；误删分镜后能从快照恢复；历史面板能定位到「移动立绘」那一步。</p>
+      </div>
+      <div class="prio p1">
+        <div class="num">P1-6</div>
+        <h4>剧本台：对白表格 + 批量替换（桌面优先，适配官方派生）</h4>
+        <p>按幕/分镜列出说话人、台词、表情、状态；行内编辑、筛选、批量替换说话人、导出 TXT/CSV/SRT；双击跳回演出台。移动端不提供大表格，只保留搜索定位。</p>
+        <p class="small">验收：改编一篇 200 句官方剧情，改 20 句说话人不超过 1 分钟。</p>
+      </div>
+
+      <h3>P2 · 轻交付拓展与高级能力（季度级，按需评估）</h3>
+      <div class="prio p2">
+        <div class="num">P2-1</div>
+        <h4>分支图 + 路径状态调试</h4>
+        <p>先只读图（节点/边/死链），再可视化编辑，最后选项路径高亮与 <code>selectedValue</code> / <code>predicate</code> 命中状态调试（不引入通用脚本变量系统）。落点：新增 <code>editor_branch_graph.dart</code>，解析 decision/warp/label/predicate。</p>
+      </div>
+      <div class="prio p2">
+        <div class="num">P2-2</div>
+        <h4>交付深化：Web 交互包 / 预览视频 / 审阅包</h4>
+        <p>在 P1 台本/SRT 与正式播放器直放基础上，优先验证「Web 只读交互包」（复用项目 Web 构建）；实时录制预览 MP4 与离屏逐帧成片因跨平台编码成本高，作为远期探索项；导出前检查清单、素材署名清单与自动快照先行。</p>
+      </div>
+      <div class="prio p2">
+        <div class="num">P2-3</div>
+        <h4>深层渲染缓存：缩略图持久缓存与关键帧快照</h4>
+        <p>解决超长作品与复杂特效分镜的拖动预览流畅度，建立分镜关键帧状态缓存与缩略图磁盘代理缓存。</p>
+      </div>
+      <div class="prio p2">
+        <div class="num">P2-4</div>
+        <h4>跨作品素材库 + 智能辅助</h4>
+        <p>全局素材与预设库（去重、迁移、授权提示）；文本拆分镜、素材检索、台词检查，坚持建议式与可撤销。</p>
+      </div>
+
+      <div class="callout">
+        <p><b>如果只能做三件事：</b>P0-1 播放头、P0-2 试播停靠、P0-3 选择集。这三项合起来，把「改一句看一次」的回路从分钟级压到秒级，是用户能立刻感知的价值；其余方向都可以在此之后按数据排期。</p>
+      </div>
+    </section>
+
+    <section id="metrics">
+      <h2><span class="h2n">08</span>验收与度量</h2>
+      <p class="subtitle">用任务指标而非功能清单验收；先埋点，再谈「感觉更顺」。</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:30%">目标</th><th style="width:26%">指标</th><th style="width:18%">当前基线（推断）</th><th>目标值</th></tr></thead>
+          <tbody>
+            <tr><td>缩短编辑回路</td><td>选中指令 → 看到该状态所需操作</td><td>需开试播，≥3 步</td><td>0 步（即时）</td></tr>
+            <tr><td>常用任务效率</td><td>换背景 + 调立绘 + 试看 的步骤数</td><td>约 8 步（含两次模态）</td><td>≤3 步</td></tr>
+            <tr><td>批量能力</td><td>修改 10 条台词的说话人耗时</td><td>逐条，约 2–3 分钟</td><td>&lt;20 秒</td></tr>
+            <tr><td>长作品可用性</td><td>1000 条指令：切换分镜 / 输入延迟</td><td>全量重建，可能 &gt;300 ms</td><td>切换 &lt;200 ms；输入无可感卡顿</td></tr>
+            <tr><td>保存信任</td><td>自动保存阻塞输入 / 丢稿次数</td><td>整包重写，素材重时明显</td><td>0 阻塞；0 丢稿</td></tr>
+            <tr><td>新手闭环</td><td>派生 → 改一句 → 导出作品 的完成时间</td><td>无引导，依赖摸索</td><td>≤5 分钟，成功率 ≥80%</td></tr>
+            <tr><td>定位效率</td><td>从校验/搜索到目标指令</td><td>纯文本，需手动找</td><td>1 次点击</td></tr>
+            <tr><td>可逆性</td><td>可撤销的操作覆盖率</td><td>结构编辑基本覆盖</td><td>100%（含批量与素材替换）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="small">基线需在实现前用 3 个真实作品埋点测量（操作步数、耗时、重建耗时、保存耗时）。上表的「推断」值来自代码路径分析，不应直接当作验收数据。</p>
+
+      <h3>建议的验证方式</h3>
+      <ol class="steps">
+        <li><b>做可点原型，不写全量代码</b><span>用 3 个真实分镜做「选中即预览 + 传输条」的可交互原型，验证是否真的降低调参成本。</span></li>
+        <li><b>选三类任务做对照</b><span>改编改台词、从零搭 12 个分镜、给旧作品换背景。各找 3–5 名目标用户，记录步骤、时间、误操作。</span></li>
+        <li><b>看三个信号</b><span>任务时间是否下降 30% 以上；误操作是否下降；用户是否能在不看说明的情况下说出「我现在看到的是哪一步」。</span></li>
+        <li><b>再决定结构投入</b><span>若播放头验证通过，再投入故事板与泳道；否则先修性能与素材链路，避免做了大视图却不好用。</span></li>
+      </ol>
+    </section>
+
+    <section id="risk">
+      <h2><span class="h2n">09</span>风险与不做清单</h2>
+      <p class="subtitle">明确边界，比列功能更能保护产品。</p>
+
+      <h3>9.1 主要风险与缓解</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:22%">风险</th><th style="width:38%">触发条件</th><th>缓解</th></tr></thead>
+          <tbody>
+            <tr><td><b>重建性能</b></td><td>每次 seek 都从分镜开头重放；长分镜（50+ 指令）或大图多时，拖动播放头会卡</td><td>节流 + 关键帧缓存 + 增量 apply；播放头拖动时降级为低分辨率/跳帧预览，松手再精确重建</td></tr>
+            <tr><td><b>状态连锁</b></td><td>改前序背景/立绘导致后续分镜画面变化，用户以为「改坏了」</td><td>影响范围高亮 + 差异对比 + 「在此固化」；导出前检查「未显式设置的状态」</td></tr>
+            <tr><td><b>视频导出</b></td><td>跨平台（Win/Linux/Android/Web）无编码依赖，离屏渲染与音频混音时序复杂</td><td>P1 先交付台本/SRT、正式播放器直放与 Web 只读包探索；MP4 录制与离屏成片后置 P2 按需验证</td></tr>
+            <tr><td><b>素材版权</b></td><td>PRTS 素材用于同人分发的边界不清</td><td>导出时生成素材来源清单与署名模板；不做「一键去水印/绕过授权」类能力</td></tr>
+            <tr><td><b>功能膨胀</b></td><td>故事板、泳道、分支图、剧本台同时塞进单页或强铺到手机竖屏</td><td>桌面用四工作区隔离、新能力先只读再编辑；手机端仅保留演出台、轻量分镜切换与检查定位</td></tr>
+            <tr><td><b>移动端精度</b></td><td>手指遮挡、拖动误触、长列表性能</td><td>专注模式 + 手柄放大 + 步进微调 + 底部抽屉；编辑重活引导到桌面</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>9.2 明确不做</h3>
+      <div class="grid2">
+        <div class="panel">
+          <h4>产品边界</h4>
+          <ul>
+            <li>逐帧 NLE、多轨关键帧曲线、视频剪辑与调色</li>
+            <li>任意图层排序、立绘/背景自由缩放与自由变形（引擎不支持的，不提供控件）</li>
+            <li>通用脚本变量赋值系统（保留 <code>decision</code> + <code>predicate</code> 引擎模型）</li>
+            <li>移动端竖屏强铺桌面式四工作区与大型对白表格</li>
+            <li>云端协作、账号体系、在线素材市场</li>
+            <li>竖屏成片（舞台固定 16:9；竖屏只是编辑形态）</li>
+            <li>自动生成整段剧情、自动发布</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h4>为什么</h4>
+          <p>这些能力要么与引擎语义冲突（关键帧、图层混合），要么把单机创作工具变成平台（协作、市场），要么稀释「改编与演出」的核心价值。把它们留在边界外，才能把 P0/P1 做深。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="appendix">
+      <h2><span class="h2n">10</span>附录：落点与参考</h2>
+      <p class="subtitle">给开发看的对照表，给产品看的参考系。</p>
+
+      <h3>10.1 代码落点索引</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:24%">方向</th><th style="width:42%">文件 / 组件</th><th>改动性质</th></tr></thead>
+          <tbody>
+            <tr><td>播放头 / 选中即预览</td><td><code>lib/story_editor/editor_stage.dart</code>（<code>_rebuild</code>、<code>_handles</code>）；<code>story_editor_page.dart</code>（<code>_change</code>、<code>_selectBeat</code>）</td><td>计算 <code>end = 分镜起点 + 选中 + 1</code>；播放头状态上提</td></tr>
+            <tr><td>停靠监视器 / 传输条</td><td><code>story_editor_page.dart</code>（<code>_preview</code>）；<code>story_player/ui/story_player.dart</code>（<code>stopPoints</code>、<code>seekToCommand</code>、<code>PlaySpeed</code>）</td><td>Dialog 改为可停靠/全屏；复用句级导航</td></tr>
+            <tr><td>多选 / 批量</td><td><code>story_editor_page.dart</code>（<code>_command</code>、<code>_inspector</code>、<code>_commandRows</code>、<code>_commandAction</code>）</td><td>单值 → 集合；检查器混合值</td></tr>
+            <tr><td>剪贴板</td><td><code>EditCommand.source</code> 已可序列化；<code>StoryScript.parse</code> 可还原</td><td>系统剪贴板 + 内部序列 buffer</td></tr>
+            <tr><td>快捷键 / 命令面板</td><td><code>story_editor_page.dart</code> 的 <code>KeyboardListener</code>（已有 <code>_nudge</code>）</td><td>补 <code>Shortcuts/Actions</code> 与命令搜索</td></tr>
+            <tr><td>窄屏拖动</td><td><code>_commandRows</code> 的 <code>inlineInspector</code> 分支</td><td>包 <code>ReorderableListView</code> + <code>DragStartListener</code></td></tr>
+            <tr><td>作品排序 / 导入去重</td><td><code>_projects</code> 的 <code>.reversed</code>；工具栏 <code>PopupMenu</code> 的 <code>import</code></td><td>删 <code>reversed</code>；导入只留作品页</td></tr>
+            <tr><td>校验定位</td><td><code>EditorProject.validate()</code> 返回 <code>List&lt;String&gt;</code>；<code>_issues</code></td><td>改为带位置的结构化问题对象</td></tr>
+            <tr><td>素材箱 / 拖拽</td><td><code>editor_materials.dart</code>（<code>EditorMaterialPicker</code>）；新增 <code>editor_bin.dart</code></td><td>拆出可复用素材网格与拖拽源</td></tr>
+            <tr><td>故事板</td><td>新增 <code>editor_board.dart</code>；引擎 <code>rebuildBefore</code> 出缩略图</td><td>新视图 + 缩略图缓存</td></tr>
+            <tr><td>状态泳道</td><td>新增 <code>editor_lanes.dart</code>；静态扫描 <code>scenes/beats/commands</code></td><td>只读区间 → 点击跳转 → 固化</td></tr>
+            <tr><td>分支图</td><td>新增 <code>editor_branch_graph.dart</code>；解析 <code>decision/warp/label/predicate</code></td><td>只读图优先，可视化编辑后置</td></tr>
+            <tr><td>分层保存 / 快照</td><td><code>editor_platform_io.dart</code>（<code>save</code>、<code>_root</code>）</td><td>P0 拖动/输入期写盘节流；P1 结构/素材分离与快照轮转</td></tr>
+            <tr><td>轻量交付 / 视频探索</td><td><code>story_player.dart</code>（<code>stopPoints</code>、<code>onPlayProject</code>）；新增 <code>editor_render.dart</code>（P2）</td><td>P1 先出台本/SRT 与正式播放器直放；Web 只读包与 MP4 后置评估</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>10.2 参考产品与可借点</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:22%">产品</th><th style="width:38%">值得借</th><th>对本产品的映射</th></tr></thead>
+          <tbody>
+            <tr><td>DaVinci Resolve</td><td>页面式工作区、节点图、检查器、版本管理</td><td>四工作区；分支图；右侧检查器；自动快照</td></tr>
+            <tr><td>Premiere Pro</td><td>源/节目监视器、三点编辑、标记、JKL、波纹删除</td><td>监视器 + 传输条；入出点试播；标记；快捷键；删除后重排</td></tr>
+            <tr><td>Final Cut Pro</td><td>磁性时间轴、角色分轨、compound clip</td><td>分镜序列自动吸附；泳道按类型分轨；指令组折叠/预设</td></tr>
+            <tr><td>CapCut / 剪映</td><td>素材面板、模板、自动字幕、移动端布局</td><td>素材箱；作品模板；台本/字幕导出；手机端三页签</td></tr>
+            <tr><td>Blender VSE</td><td>通道、预览、快捷键驱动</td><td>状态泳道；命令面板；键盘全流程</td></tr>
+            <tr><td>Ren'Py</td><td>脚本与可视化双视图、lint 检查</td><td>剧本台；校验清单；源码兜底</td></tr>
+            <tr><td>Twine / Articy / Yarn Spinner</td><td>分支节点图、分支状态、预览路径</td><td>分支图；Predicate 路径状态；调试路径高亮</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>10.3 与 v0.2 设计文档的关系</h3>
+      <p>v0.2 解决的是「初版实现够不够用」：对话框溢出、摘要、保存警示、缩略图、拖动把手、作品查看地、官方派生、分层保存等 18 项，属于<b>可用性修复</b>。本报告假设这些修复大部分已落地（当前分支确实如此），讨论的是<b>产品形态与效率上限</b>：工作区、时间语义、选择集、结构可视化、交付。两者不冲突，前者是后者的地基。</p>
+
+      <div class="callout">
+        <p><b>建议的下一步：</b>先做 P0-1 与 P0-2 的可点原型（不改数据模型），用 3 个真实分镜验证「选中即预览」是否降低调参成本；同时埋点记录「选中→看到画面」「换背景→试看」的步数与耗时。数据通过后，再投入故事板与泳道——这两块是产品形态的分水岭，值得一次做对。</p>
+      </div>
+
+      <footer>
+        <p>分析基于 <code>feat/story-editer</code> 分支提交 <code>43944e7</code> 的代码与 <code>docs/story-editor.md</code>、<code>docs/prototype/剧情编辑器产品设计.html</code>、<code>docs/prototype/剧情编辑器优化说明-v0.2.md</code>。</p>
+        <p>文中「现状」均可在代码中定位；「推断」类指标已单独标注，需实现前埋点校准。未包含未提交改动与其它分支能力。</p>
+      </footer>
+    </section>
+
+  </article>
+</div>
+</body>
+</html>

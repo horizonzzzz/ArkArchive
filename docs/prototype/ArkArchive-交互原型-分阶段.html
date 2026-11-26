@@ -1,0 +1,2662 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ArkArchive 剧情编辑器 · 双端交互原型（分阶段）</title>
+<style>
+  :root{
+    --bg:#070b11; --panel:#0d141d; --panel2:#111a25; --panel3:#16202e;
+    --line:#1d2a3a; --line2:#26364a;
+    --text:#dbe4f0; --muted:#8497ac; --dim:#5c6d80;
+    --accent:#3b82f6; --accent2:#60a5fa; --accentbg:rgba(59,130,246,.14);
+    --p0:#22c55e; --p1:#f59e0b; --p2:#06b6d4;
+    --danger:#ef4444; --warn:#f59e0b;
+    --r:8px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","Noto Sans SC",sans-serif;
+    font-size:12px; line-height:1.5; overflow:hidden;
+  }
+  button,input,select,textarea{font:inherit;color:inherit}
+  button{cursor:pointer}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:#223145;border-radius:6px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  .desktop-app{height:100vh;display:flex;flex-direction:column;min-width:0}
+  .topbar{
+    height:52px; flex:0 0 52px; display:flex; align-items:center; gap:12px;
+    padding:0 14px; background:#0a1018; border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex;align-items:center;gap:9px;min-width:190px}
+  .brand .mark{
+    width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#2563eb,#0891b2);
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#fff;
+  }
+  .brand b{font-size:12px;letter-spacing:.14em;font-weight:700}
+  .brand span{display:block;font-size:10px;color:var(--dim);letter-spacing:.06em}
+  .proj{display:flex;flex-direction:column;min-width:0;max-width:260px}
+  .proj b{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .proj span{font-size:10px;color:var(--dim)}
+  .grow{flex:1}
+  .seg{display:flex;background:#0e1620;border:1px solid var(--line);border-radius:7px;padding:2px}
+  .seg button{border:0;background:transparent;color:var(--muted);padding:3px 9px;border-radius:5px;font-size:11px}
+  .seg button.on{background:#1c2b3e;color:#e2e8f0}
+  .btn{
+    border:1px solid var(--line2); background:#101a26; color:var(--text);
+    padding:5px 10px; border-radius:7px; font-size:11.5px; display:inline-flex; align-items:center; gap:6px;
+  }
+  .btn:hover{background:#162335;border-color:#31465f}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:#2f74e0}
+  .btn.ghost{background:transparent}
+  .btn.small{padding:3px 8px;font-size:10.5px;border-radius:6px}
+  .stage-chip{font-size:9.5px;padding:1px 5px;border-radius:4px;font-weight:700;letter-spacing:.03em}
+  .stage-chip.P0{background:rgba(34,197,94,.14);color:#4ade80;border:1px solid rgba(34,197,94,.3)}
+  .stage-chip.P1{background:rgba(245,158,11,.13);color:#fbbf24;border:1px solid rgba(245,158,11,.3)}
+  .stage-chip.P2{background:rgba(6,182,212,.13);color:#22d3ee;border:1px solid rgba(6,182,212,.3)}
+
+  .worktabs{
+    height:40px;flex:0 0 40px;display:flex;align-items:center;gap:2px;padding:0 12px;
+    background:#0a1018;border-bottom:1px solid var(--line);
+  }
+  .worktabs .tab{
+    border:0;background:transparent;color:var(--muted);padding:7px 12px;border-radius:6px;
+    display:flex;align-items:center;gap:6px;font-size:12px;position:relative;
+  }
+  .worktabs .tab:hover{background:#111b27;color:#cbd5e1}
+  .worktabs .tab.on{background:var(--accentbg);color:#bfdbfe}
+  .worktabs .tab.on::after{content:"";position:absolute;left:10px;right:10px;bottom:-9px;height:2px;background:var(--accent)}
+  .crumb{color:var(--dim);font-size:11px;margin-left:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .crumb b{color:#b6c4d6;font-weight:500}
+  .hint{font-size:10.5px;color:var(--dim)}
+  .hint b{color:var(--muted);font-weight:500}
+
+  .views{flex:1;min-height:0;position:relative}
+  .view{display:none;height:100%;min-height:0}
+  .view.active{display:block}
+
+  #view-stage.active{
+    display:grid;grid-template-columns:226px minmax(0,1fr) 300px;
+    grid-template-rows:minmax(0,1fr) 236px; min-height:0;
+  }
+  .tree{
+    grid-column:1;grid-row:1/3;border-right:1px solid var(--line);background:var(--panel);
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .pane-head{
+    height:30px;flex:0 0 30px;display:flex;align-items:center;gap:6px;padding:0 10px;
+    border-bottom:1px solid var(--line);color:var(--muted);font-size:10.5px;letter-spacing:.06em;
+  }
+  .pane-head b{color:#c3d0e0;font-weight:600;letter-spacing:0}
+  .pane-head .right{margin-left:auto;display:flex;gap:4px;align-items:center}
+  .iconbtn{
+    width:20px;height:20px;border:1px solid transparent;background:transparent;color:var(--muted);
+    border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;
+  }
+  .iconbtn:hover{background:#1a2738;color:#dbe4f0;border-color:var(--line2)}
+  .tree-scroll{flex:1;overflow:auto;padding:6px 0}
+  .scene-row{padding:7px 12px 4px;color:#8ea3ba;font-size:10.5px;display:flex;align-items:center;gap:6px;cursor:pointer}
+  .scene-row:hover{color:#dbe4f0}
+  .scene-row .caret{color:var(--dim);font-size:9px;width:9px}
+  .scene-row .n{margin-left:auto;color:var(--dim);font-size:9.5px}
+  .beat-row{
+    margin:1px 8px;padding:6px 8px 6px 22px;border-radius:6px;display:flex;align-items:center;gap:7px;
+    color:#a9b8ca;cursor:pointer;border:1px solid transparent;
+  }
+  .beat-row:hover{background:#131e2b}
+  .beat-row.on{background:#15253a;border-color:#24405f;color:#e2e8f0}
+  .beat-row .dot{width:5px;height:5px;border-radius:50%;background:#3b4e64}
+  .beat-row.on .dot{background:var(--accent2)}
+  .beat-row .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px}
+  .beat-row .warn{color:#f59e0b;font-size:9px}
+  .bin{flex:0 0 172px;border-top:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .bin-grid{flex:1;overflow:auto;padding:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .bin-item{border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#0b121b;cursor:pointer}
+  .bin-item:hover{border-color:#35506e}
+  .bin-thumb{height:44px;background:linear-gradient(160deg,#1e293b,#0f172a);position:relative}
+  .bin-thumb.rain{background:linear-gradient(180deg,#0b1220,#1e293b)}
+  .bin-thumb.warm{background:linear-gradient(180deg,#3b2a1d,#1c120c)}
+  .bin-thumb.roof{background:linear-gradient(180deg,#141b33,#2a1f4d)}
+  .bin-thumb.cg{background:linear-gradient(135deg,#7c3aed,#0891b2)}
+  .bin-item span{display:block;padding:4px 5px;font-size:9.5px;color:#93a6bb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bin-thumb i{position:absolute;left:4px;bottom:3px;font-style:normal;font-size:8px;color:#cbd5e1;background:rgba(0,0,0,.55);padding:0 3px;border-radius:3px}
+
+  .center{grid-column:2;grid-row:1;display:flex;flex-direction:column;min-height:0;min-width:0;background:#060a10}
+  .monitor-shell{flex:1;min-height:0;display:grid;place-items:center;overflow:hidden;background:#05080d;position:relative}
+  .monitor{
+    position:relative; background:#000; overflow:hidden; container-type:size;
+    box-shadow:0 0 0 1px #1c2a3a, 0 18px 50px rgba(0,0,0,.55);
+  }
+  .stage{
+    position:absolute;inset:0;overflow:hidden;container-type:size;
+    background:#05080d; user-select:none;
+  }
+  .stage::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(120% 90% at 50% 10%, transparent 55%, rgba(0,0,0,.45));
+  }
+  .stage .bg{position:absolute;inset:0;transition:background .45s ease}
+  .bg-rain{background:linear-gradient(180deg,#080f1e 0%,#12213a 55%,#1b2c46 100%)}
+  .bg-rain::before{
+    content:"";position:absolute;inset:-20%;
+    background-image:repeating-linear-gradient(102deg,rgba(150,190,255,.13) 0 1px,transparent 1px 22px);
+    animation:rain 1.1s linear infinite;
+  }
+  @keyframes rain{from{transform:translate3d(0,-18px,0)}to{transform:translate3d(-14px,18px,0)}}
+  .bg-eave{background:linear-gradient(180deg,#1a120c 0%,#332316 50%,#4a3421 100%)}
+  .bg-roof{background:linear-gradient(180deg,#0a1024 0%,#1c2350 48%,#33275e 100%)}
+  .bg-roofdawn{background:linear-gradient(180deg,#2b1b3d 0%,#7c3f5b 48%,#e08a5a 100%)}
+  .bg-room{background:linear-gradient(180deg,#101827 0%,#1d2a3d 58%,#2a3648 100%)}
+  .bg-corridor{background:linear-gradient(180deg,#0b1119 0%,#17202c 55%,#2b3442 100%)}
+  .bg-black{background:#000}
+  .bg-grid::after{
+    content:"";position:absolute;left:-10%;right:-10%;bottom:12%;height:1px;background:rgba(148,183,255,.16);
+    box-shadow:0 22px 0 rgba(148,183,255,.08),0 44px 0 rgba(148,183,255,.05);
+  }
+  .stage .cg{
+    position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);
+    width:46%;height:58%;border-radius:2px;overflow:hidden;
+    background:linear-gradient(135deg,#5b21b6,#0e7490 70%);border:1px solid rgba(255,255,255,.16);
+    box-shadow:0 12px 40px rgba(0,0,0,.5);
+    display:flex;align-items:flex-end;justify-content:flex-start;
+  }
+  .stage .cg span{font-size:clamp(8px,.85cqw,11px);color:rgba(255,255,255,.72);background:rgba(0,0,0,.35);padding:2px 6px;margin:6px}
+  .char{
+    position:absolute;width:17%;height:46%;transform:translate(-50%,-100%);
+    display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+    cursor:grab;touch-action:none;
+  }
+  .char:active{cursor:grabbing}
+  .char .ch-head{
+    width:30%;aspect-ratio:1;border-radius:50%;
+    background:radial-gradient(circle at 40% 35%,rgba(255,255,255,.5),var(--ch) 62%);
+    border:1px solid rgba(255,255,255,.25);box-shadow:0 4px 14px rgba(0,0,0,.35);z-index:1;
+  }
+  .char .ch-body{
+    width:74%;height:78%;margin-top:-4%;border-radius:38% 38% 14% 14%;
+    background:linear-gradient(180deg,var(--ch),rgba(8,12,20,.92));
+    border:1px solid rgba(255,255,255,.14);box-shadow:0 10px 30px rgba(0,0,0,.45);
+  }
+  .char .ch-name{
+    position:absolute;top:-16px;left:50%;transform:translateX(-50%);
+    font-size:clamp(7px,.7cqw,10px);color:#e2e8f0;background:rgba(3,7,12,.72);
+    border:1px solid rgba(255,255,255,.16);border-radius:3px;padding:0 4px;white-space:nowrap;opacity:0;transition:opacity .15s;
+  }
+  .char:hover .ch-name,.char.sel .ch-name{opacity:1}
+  .char.sel::after{
+    content:"";position:absolute;inset:-7% -10%;border:1px dashed rgba(96,165,250,.8);border-radius:8px;
+  }
+  .subtitle{
+    position:absolute;transform:translate(-50%,-50%);max-width:72%;text-align:center;
+    color:#f8fafc;text-shadow:0 2px 10px rgba(0,0,0,.85);cursor:move;touch-action:none;
+    font-size:clamp(11px,1.75cqw,24px);line-height:1.45;padding:2px 8px;border:1px solid transparent;
+  }
+  .subtitle.sel{border-color:rgba(96,165,250,.7);background:rgba(15,23,42,.4)}
+  .dialogue{
+    position:absolute;left:6%;right:6%;bottom:5%;min-height:17%;
+    background:linear-gradient(180deg,rgba(5,10,17,.86),rgba(4,8,14,.94));
+    border:1px solid rgba(96,165,250,.24);border-radius:5px;
+    padding:1.35cqw 2.2cqw 1.5cqw; box-shadow:0 12px 34px rgba(0,0,0,.55);
+  }
+  .dialogue .sp{color:#fbbf24;font-size:clamp(9px,1.08cqw,14px);letter-spacing:.06em;margin-bottom:.35cqw}
+  .dialogue .tx{color:#eef3f9;font-size:clamp(11px,1.42cqw,18px);line-height:1.55}
+  .dialogue .tip{position:absolute;right:1.4cqw;bottom:.7cqw;color:#64748b;font-size:clamp(7px,.62cqw,9px)}
+  .stage .music{
+    position:absolute;right:2%;top:2.5%;font-size:clamp(7px,.66cqw,10px);color:#a5f3fc;
+    background:rgba(8,51,68,.66);border:1px solid rgba(34,211,238,.35);border-radius:3px;padding:1px 5px;
+  }
+  .stage .hintline{
+    position:absolute;left:50%;bottom:26%;transform:translateX(-50%);
+    color:#64748b;font-size:clamp(9px,.8cqw,12px);letter-spacing:.05em;
+  }
+  .fx-flash{animation:flash .55s ease-out}
+  @keyframes flash{0%{filter:brightness(3)}100%{filter:brightness(1)}}
+  .fx-shake{animation:shake .5s}
+  @keyframes shake{0%,100%{transform:translate(0)}20%{transform:translate(-6px,2px)}40%{transform:translate(5px,-2px)}60%{transform:translate(-3px,1px)}80%{transform:translate(2px,-1px)}}
+  .snap-line{position:absolute;top:0;bottom:0;width:1px;background:rgba(96,165,250,.75);display:none;pointer-events:none}
+  .snap-line.h{left:0;right:0;top:50%;bottom:auto;height:1px;width:auto}
+  .stage.dragging .snap-line{display:block}
+
+  .transport{
+    flex:0 0 38px;display:flex;align-items:center;gap:4px;padding:0 10px;
+    border-top:1px solid var(--line);background:#0a1018;
+  }
+  .transport .tbtn{
+    width:26px;height:26px;border-radius:6px;border:1px solid transparent;background:transparent;color:#9fb1c6;
+    display:inline-flex;align-items:center;justify-content:center;font-size:12px;
+  }
+  .transport .tbtn:hover{background:#162335;color:#fff}
+  .transport .tbtn.on{background:var(--accent);color:#fff}
+  .transport .tlabel{font-size:10.5px;color:var(--dim);margin-left:6px;font-variant-numeric:tabular-nums}
+  .transport .sep{width:1px;height:16px;background:var(--line);margin:0 4px}
+  .transport .spacer{flex:1}
+  .transport .speed{font-size:10.5px;color:#a9b8ca;border:1px solid var(--line2);border-radius:5px;padding:2px 6px;background:#0e1620}
+  .transport .chipbtn{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:2px 6px;background:transparent}
+  .transport .chipbtn:hover{color:#e2e8f0;border-color:#35506e}
+
+  .strip{
+    flex:0 0 42px;display:flex;align-items:center;gap:3px;padding:5px 8px;background:#080d14;
+    border-top:1px solid var(--line);overflow-x:auto;overflow-y:hidden;
+  }
+  .strip-cmd{
+    height:28px;min-width:16px;border:1px solid #223247;border-radius:4px;background:#101a26;
+    color:#93a6bb;font-size:9.5px;display:flex;align-items:center;justify-content:center;position:relative;flex:0 0 auto;
+  }
+  .strip-cmd:hover{border-color:#3b5b80}
+  .strip-cmd.active{border-color:var(--accent2);background:#172b46;color:#fff;box-shadow:0 0 0 1px rgba(96,165,250,.35) inset}
+  .strip-cmd.active::before{content:"";position:absolute;left:-1px;top:-5px;bottom:-5px;width:2px;background:#f8fafc}
+  .strip-cmd .t{position:absolute;left:2px;top:1px;font-size:7px;color:#6f8197}
+  .strip-cmd.t-line{background:#12233a}
+  .strip-cmd.t-bg{background:#0d2a22}
+  .strip-cmd.t-char{background:#201a35}
+  .strip-cmd.t-text{background:#2b2110}
+  .strip-cmd.t-bgm{background:#0a2630}
+  .strip-cmd.t-fx{background:#2d1414}
+  .strip-cmd.t-wait{background:#151d27}
+
+  .inspector{
+    grid-column:3;grid-row:1/3;border-left:1px solid var(--line);background:var(--panel);
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .inspector .scroll{flex:1;overflow:auto;padding:10px 11px 16px}
+  .insp-head{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+  .insp-head b{font-size:13px;font-weight:650}
+  .insp-sub{color:var(--dim);font-size:10.5px;margin-bottom:10px}
+  .field{margin:9px 0}
+  .field label{display:flex;align-items:center;gap:6px;color:#8ea3ba;font-size:10.5px;margin-bottom:4px}
+  .field label .unit{margin-left:auto;color:#5c6d80;font-size:9.5px}
+  .input, .select, .textarea{
+    width:100%;background:#0a121c;border:1px solid #223247;border-radius:6px;color:#dbe4f0;
+    padding:5px 7px;font-size:11.5px;outline:none;
+  }
+  .input:focus,.select:focus,.textarea:focus{border-color:#3b6ea8;box-shadow:0 0 0 2px rgba(59,130,246,.14)}
+  .textarea{min-height:64px;resize:vertical;line-height:1.55}
+  .select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,#6b7d92 50%),linear-gradient(135deg,#6b7d92 50%,transparent 50%);background-position:calc(100% - 12px) 50%,calc(100% - 8px) 50%;background-size:4px 4px,4px 4px;background-repeat:no-repeat}
+  .range{width:100%;accent-color:var(--accent);height:16px}
+  .range-row{display:flex;align-items:center;gap:8px}
+  .range-row .val{width:40px;text-align:right;color:#9fb1c6;font-size:10.5px;font-variant-numeric:tabular-nums}
+  .inline-btns{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+  .btn.tiny{padding:2px 7px;font-size:10px;border-radius:5px;background:#0f1926;border-color:#223247}
+  .btn.tiny:hover{background:#16263a}
+  .divider{height:1px;background:var(--line);margin:12px 0}
+  .meta-box{border:1px solid var(--line);border-radius:7px;background:#0a121b;padding:8px 9px;margin-top:8px}
+  .meta-box .k{color:var(--dim);font-size:9.5px;letter-spacing:.05em;margin-bottom:3px}
+  .meta-box .v{color:#a9b8ca;font-size:10.5px;line-height:1.6}
+  .rm-link{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:#7dd3fc;cursor:pointer;border-bottom:1px dashed rgba(125,211,252,.4)}
+  .rm-link:hover{color:#bae6fd}
+
+  .bottom{grid-column:2;grid-row:2;display:grid;grid-template-columns:minmax(0,1fr) 350px;min-height:0;border-top:1px solid var(--line);background:var(--panel)}
+  .cmdlist-wrap{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line)}
+  .batchbar{
+    display:none;align-items:center;gap:6px;padding:5px 8px;background:#102033;border-bottom:1px solid #1d3a58;
+    font-size:10.5px;color:#bfdbfe;
+  }
+  .batchbar.show{display:flex}
+  .batchbar input{width:90px;background:#0a1624;border:1px solid #24466b;border-radius:5px;padding:2px 6px;font-size:10.5px}
+  .batchbar .spacer{flex:1}
+  .cmdlist{flex:1;overflow:auto;padding:2px 0}
+  .cmd-row{
+    display:grid;grid-template-columns:26px 12px 52px minmax(0,1fr) auto;align-items:center;gap:7px;
+    padding:4px 9px;border-left:2px solid transparent;cursor:pointer;color:#b7c5d6;
+  }
+  .cmd-row:hover{background:#111b27}
+  .cmd-row.sel{background:#142338;border-left-color:var(--accent2);color:#eef3f9}
+  .cmd-row.multi{background:#101f31}
+  .cmd-row .idx{color:#5c6d80;font-size:9.5px;text-align:right;font-variant-numeric:tabular-nums}
+  .cmd-row .dot{width:6px;height:6px;border-radius:50%;background:#64748b}
+  .cmd-row .nm{font-size:10.5px;color:#8ea3ba}
+  .cmd-row .sum{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cmd-row .right{display:flex;align-items:center;gap:4px}
+  .cmd-row .warn{color:#f59e0b;font-size:9px}
+  .cmd-row .stage-chip{transform:scale(.9);transform-origin:right}
+  .dot.t-line{background:#60a5fa}.dot.t-bg{background:#22c55e}.dot.t-char{background:#a78bfa}
+  .dot.t-text{background:#f59e0b}.dot.t-bgm{background:#06b6d4}.dot.t-fx{background:#ef4444}.dot.t-wait{background:#64748b}
+  .empty{padding:24px 12px;text-align:center;color:#5c6d80;font-size:11px}
+
+  .lanes-wrap{display:flex;flex-direction:column;min-height:0}
+  .lanes{flex:1;overflow:auto;padding:7px 9px}
+  .lane{display:grid;grid-template-columns:46px minmax(0,1fr);gap:6px;align-items:center;margin:4px 0}
+  .lane .ln{font-size:9px;color:#6f8197;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lane .tr{position:relative;height:20px;background:#0a121b;border:1px solid #172433;border-radius:4px;overflow:hidden}
+  .lane .blk{position:absolute;top:2px;bottom:2px;border-radius:3px;opacity:.85;cursor:pointer;border:1px solid rgba(255,255,255,.14);min-width:4px}
+  .lane .blk:hover{opacity:1;box-shadow:0 0 0 1px rgba(255,255,255,.35) inset}
+  .lane .blk.sel{outline:1px solid #fff;outline-offset:-1px;opacity:1}
+  .lane .blk.bg{background:#22c55e}.lane .blk.char{background:#8b5cf6}.lane .blk.text{background:#f59e0b}.lane .blk.bgm{background:#06b6d4}
+  .lane .ph{position:absolute;top:0;bottom:0;width:1px;background:#f8fafc;box-shadow:0 0 5px rgba(255,255,255,.7);pointer-events:none}
+  .lane-tick{display:grid;grid-template-columns:46px minmax(0,1fr);gap:6px;color:#4c5c6e;font-size:8.5px}
+  .lane-tick .ticks{display:flex;justify-content:space-between;border-top:1px dashed #1a2837;padding-top:2px}
+
+  /* board */
+  .view-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);background:#0a1018}
+  .view-head h2{font-size:14px;margin:0;font-weight:650}
+  .view-head p{margin:0;color:var(--dim);font-size:10.5px}
+  .view-body{height:calc(100% - 53px);overflow:auto;padding:16px}
+  .board-scene{margin-bottom:22px}
+  .board-scene h3{font-size:11px;color:#8ea3ba;font-weight:600;margin:0 0 8px;letter-spacing:.05em}
+  .board-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:10px}
+  .board-card{
+    border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0c131c;cursor:grab;position:relative;
+  }
+  .board-card:hover{border-color:#35506e;transform:translateY(-1px)}
+  .board-card.drag{border-color:var(--accent2);box-shadow:0 0 0 2px rgba(96,165,250,.25)}
+  .board-card .thumb{height:96px;position:relative;overflow:hidden;container-type:size}
+  .board-card .thumb .bg{position:absolute;inset:0}
+  .board-card .thumb .mini-char{position:absolute;bottom:4%;width:13%;height:44%;border-radius:40% 40% 20% 20%;transform:translateX(-50%);opacity:.95}
+  .board-card .thumb .mini-cg{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);width:44%;height:56%;border-radius:2px;background:linear-gradient(135deg,#7c3aed,#0891b2);opacity:.85}
+  .board-card .thumb .mini-line{position:absolute;left:5%;right:5%;bottom:5%;height:18%;background:rgba(0,0,0,.55);border:1px solid rgba(96,165,250,.2);border-radius:2px;color:#cbd5e1;font-size:6px;padding:2px 3px;overflow:hidden}
+  .board-card .meta{padding:6px 7px;display:flex;flex-direction:column;gap:1px}
+  .board-card .meta b{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .board-card .meta span{font-size:9px;color:var(--dim)}
+  .board-card .stage-chip{position:absolute;top:5px;right:5px;background:rgba(0,0,0,.6)}
+  .board-card .badge-warn{position:absolute;left:5px;top:5px;font-size:8px;color:#fbbf24;background:rgba(0,0,0,.62);border:1px solid rgba(245,158,11,.4);padding:0 3px;border-radius:3px}
+  .board-card.drop-target{border-color:#22c55e}
+  .board-empty{border:1px dashed #2a3a4d;border-radius:8px;min-height:120px;display:grid;place-items:center;color:#4c5c6e;font-size:10.5px}
+
+  /* script */
+  .script-tools{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);background:#0b121b}
+  .script-tools .input{width:180px;padding:3px 7px}
+  .script-table{width:100%;border-collapse:collapse;font-size:11px}
+  .script-table th{position:sticky;top:0;background:#0d151f;color:#7d90a6;font-weight:600;font-size:10px;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);z-index:1}
+  .script-table td{padding:4px 8px;border-bottom:1px solid #131f2c;vertical-align:middle}
+  .script-table tr:hover td{background:#0f1a26}
+  .script-table tr.on td{background:#122238}
+  .script-table input[type=text]{width:100%;background:transparent;border:1px solid transparent;border-radius:4px;padding:2px 4px;color:#cbd7e5;font-size:11px}
+  .script-table input[type=text]:focus{background:#0a121c;border-color:#2b4a6c;outline:none}
+  .script-table .sp{width:90px}
+  .script-table .tx{min-width:260px}
+  .script-table .meta{color:#5c6d80;font-size:9.5px;white-space:nowrap}
+  .script-table .stage-chip{transform:scale(.9)}
+  .check{accent-color:var(--accent);width:13px;height:13px}
+
+  /* deliver */
+  .deliver-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.9fr);gap:14px;max-width:1120px}
+  .deliver-card{border:1px solid var(--line);border-radius:9px;background:#0b131d;overflow:hidden}
+  .deliver-card .hd{padding:9px 11px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:7px}
+  .deliver-card .hd b{font-size:11.5px;font-weight:600}
+  .deliver-card .hd .stage-chip{margin-left:auto}
+  .deliver-card .bd{padding:6px 0}
+  .issue{display:flex;align-items:flex-start;gap:8px;padding:7px 11px;border-bottom:1px solid #121d2a}
+  .issue:last-child{border-bottom:0}
+  .issue .lv{width:6px;height:6px;border-radius:50%;margin-top:5px;flex:0 0 6px}
+  .issue .lv.err{background:var(--danger)}.issue .lv.warn{background:var(--warn)}.issue .lv.info{background:#38bdf8}
+  .issue .tx{flex:1;font-size:10.8px;color:#b7c5d6;line-height:1.5}
+  .issue .tx b{display:block;color:#e2e8f0;font-size:10.2px;font-weight:600;margin-bottom:1px}
+  .issue .go{border:1px solid #2a3d52;background:#0f1a26;color:#93c5fd;border-radius:4px;padding:1px 5px;font-size:9.5px}
+  .issue .go:hover{background:#16263a}
+  .export-row{display:flex;align-items:center;gap:9px;padding:8px 11px;border-bottom:1px solid #121d2a}
+  .export-row:last-child{border-bottom:0}
+  .export-row .ic{width:24px;height:24px;border-radius:6px;background:#121f2e;border:1px solid #223247;display:grid;place-items:center;color:#93c5fd;font-size:10px}
+  .export-row .tx{flex:1}
+  .export-row .tx b{display:block;font-size:10.8px;font-weight:600}
+  .export-row .tx span{font-size:9.5px;color:var(--dim)}
+  .version{display:flex;align-items:center;gap:8px;padding:7px 11px;border-bottom:1px solid #121d2a;font-size:10.5px}
+  .version:last-child{border-bottom:0}
+  .version .dot{width:6px;height:6px;border-radius:50%;background:#22c55e}
+  .version .t{flex:1;color:#a9b8ca}
+  .version .t span{display:block;color:#5c6d80;font-size:9px}
+  .version button{border:1px solid #2a3d52;background:#0f1a26;color:#93c5fd;border-radius:4px;padding:1px 6px;font-size:9.5px}
+
+  /* road map drawer */
+  .backdrop{position:fixed;inset:0;background:rgba(3,6,10,.62);opacity:0;pointer-events:none;transition:opacity .2s;z-index:40}
+  .backdrop.show{opacity:1;pointer-events:auto}
+  .back-desktop{display:none;position:fixed;top:12px;right:14px;z-index:35;background:#101a26;border-color:#2a3d52}
+  body.device-mobile .back-desktop{display:inline-flex}
+  .drawer{
+    position:fixed;top:0;right:0;bottom:0;width:440px;max-width:92vw;background:#0b121b;border-left:1px solid var(--line2);
+    transform:translateX(102%);transition:transform .24s cubic-bezier(.2,.8,.2,1);z-index:41;display:flex;flex-direction:column;
+    box-shadow:-20px 0 60px rgba(0,0,0,.5);
+  }
+  .drawer.show{transform:translateX(0)}
+  .drawer .dh{height:48px;flex:0 0 48px;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid var(--line)}
+  .drawer .dh b{font-size:13px}
+  .drawer .dh .x{margin-left:auto}
+  .drawer .dbody{flex:1;overflow:auto;padding:12px 14px 24px}
+  .rm-group{margin-bottom:16px}
+  .rm-group h3{font-size:10px;letter-spacing:.14em;color:#7d90a6;margin:0 0 7px;display:flex;align-items:center;gap:7px}
+  .rm-group h3 .stage-chip{letter-spacing:0}
+  .rm-item{border:1px solid var(--line);border-radius:7px;padding:8px 9px;margin:6px 0;background:#0c141e;cursor:pointer}
+  .rm-item:hover{border-color:#35506e}
+  .rm-item.hl{border-color:var(--accent2);box-shadow:0 0 0 1px rgba(96,165,250,.3)}
+  .rm-item .top{display:flex;align-items:center;gap:6px}
+  .rm-item .id{font-size:9px;color:#5c6d80;font-variant-numeric:tabular-nums}
+  .rm-item .tt{font-size:11px;font-weight:600;color:#dbe4f0}
+  .rm-item .st{margin-left:auto;font-size:8.5px;border-radius:3px;padding:1px 4px;background:#102033;color:#93c5fd;border:1px solid #1e3a5c}
+  .rm-item .st.part{color:#fbbf24;border-color:#5b4215;background:#231a08}
+  .rm-item .st.plan{color:#94a3b8;border-color:#2a3a4d;background:#111b26}
+  .rm-item p{margin:4px 0 0;font-size:10px;color:#7d90a6;line-height:1.5}
+  .rm-item .go-line{margin-top:5px;font-size:9.5px;color:#60a5fa;display:inline-block}
+  .proto-note{font-size:10px;color:#7d90a6;line-height:1.6;border:1px solid #1d2a3a;background:#0a121b;border-radius:7px;padding:8px 9px;margin-bottom:12px}
+  .proto-note b{color:#cbd7e5}
+
+  /* branch modal */
+  .modal{position:fixed;inset:0;display:none;place-items:center;z-index:50;background:rgba(3,6,10,.72)}
+  .modal.show{display:grid}
+  .modal .box{width:760px;max-width:94vw;max-height:88vh;overflow:auto;background:#0b121b;border:1px solid var(--line2);border-radius:12px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+  .modal .mh{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--line)}
+  .modal .mh b{font-size:12.5px}
+  .modal .mh .x{margin-left:auto}
+  .modal .mb{padding:14px}
+  .graph{position:relative;height:320px;border:1px solid #172433;border-radius:8px;background:#080e16;overflow:hidden}
+  .graph svg{position:absolute;inset:0;width:100%;height:100%}
+  .gnode{
+    position:absolute;min-width:86px;padding:6px 8px;border-radius:6px;background:#0f1a26;border:1px solid #2a3d52;
+    font-size:9.5px;color:#b7c5d6;text-align:center;
+  }
+  .gnode b{display:block;font-size:10px;color:#e2e8f0}
+  .gnode small{font-size:8px;color:#5c6d80}
+  .gnode.choice{border-color:#3b6ea8;background:#0e1e31}
+  .gnode.end{border-color:#2a5a44;background:#0b2019}
+  .graph .gcap{position:absolute;left:10px;bottom:8px;font-size:9px;color:#5c6d80}
+
+  /* toast */
+  .toast{
+    position:fixed;left:50%;bottom:26px;transform:translate(-50%,16px);opacity:0;pointer-events:none;
+    background:#0f1a26;border:1px solid #2a3d52;color:#dbe4f0;padding:7px 12px;border-radius:7px;font-size:11px;
+    box-shadow:0 10px 30px rgba(0,0,0,.45);z-index:80;transition:all .18s;max-width:86vw;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  .toast.interactive.show{pointer-events:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .toast b{color:#93c5fd;font-weight:600}
+
+  .flash{animation:flashhl 1.1s ease}
+  @keyframes flashhl{0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,0)}30%{box-shadow:0 0 0 4px rgba(59,130,246,.35)}}
+
+  /* planned */
+  .planned{opacity:.55;position:relative}
+  .planned::after{
+    content:"规划中";position:absolute;top:2px;right:2px;font-size:7px;color:#fbbf24;
+    background:rgba(0,0,0,.55);border:1px solid rgba(245,158,11,.35);border-radius:3px;padding:0 2px;pointer-events:none;z-index:5;
+  }
+
+  /* mobile */
+  .mobile-shell{display:none;height:100vh;align-items:center;justify-content:center;background:#05080d}
+  .mobile-shell.show{display:flex}
+  .m-frame{
+    width:390px;height:844px;max-height:calc(100vh - 24px);background:#0a1018;border:9px solid #1b2532;border-radius:38px;
+    overflow:hidden;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.6);display:flex;flex-direction:column;
+  }
+  .m-status{height:24px;flex:0 0 24px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:9px;color:#8497ac}
+  .m-app{flex:1;display:flex;flex-direction:column;min-height:0;position:relative}
+  .m-top{height:38px;flex:0 0 38px;display:flex;align-items:center;gap:7px;padding:0 10px;border-bottom:1px solid var(--line)}
+  .m-top b{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .m-top .grow{flex:1}
+  .m-screen{flex:1;min-height:0;overflow:auto;background:#070b11;position:relative}
+  .m-monitor{width:100%;aspect-ratio:16/9;position:relative;background:#000;container-type:size}
+  .m-transport{height:42px;display:flex;align-items:center;gap:5px;padding:0 8px;border-bottom:1px solid var(--line);background:#0a1018}
+  .m-transport .tbtn{width:30px;height:28px;border-radius:6px;border:1px solid transparent;background:transparent;color:#9fb1c6}
+  .m-transport .tbtn.on{background:var(--accent);color:#fff}
+  .m-transport .tlabel{font-size:9.5px;color:#7d90a6;margin-left:3px;font-variant-numeric:tabular-nums}
+  .m-list{padding:4px 6px}
+  .m-cmd{display:flex;align-items:center;gap:7px;padding:8px 7px;border-radius:6px;color:#b7c5d6;border-left:2px solid transparent}
+  .m-cmd.on{background:#142338;border-left-color:var(--accent2)}
+  .m-cmd .idx{font-size:9px;color:#5c6d80;width:14px;text-align:right}
+  .m-cmd .dot{width:6px;height:6px;border-radius:50%}
+  .m-cmd .nm{font-size:10px;color:#8ea3ba;width:44px;flex:0 0 44px}
+  .m-cmd .sum{flex:1;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .m-cmd .stage-chip{transform:scale(.82)}
+  .m-sheet{
+    position:absolute;left:0;right:0;bottom:52px;max-height:62%;background:#0b121b;border-top:1px solid var(--line2);
+    border-radius:14px 14px 0 0;transform:translateY(110%);visibility:hidden;transition:transform .22s, visibility .22s;z-index:8;display:flex;flex-direction:column;
+    box-shadow:0 -14px 40px rgba(0,0,0,.5);
+  }
+  .m-sheet.show{transform:translateY(0);visibility:visible}
+  .m-sheet .sh{height:34px;display:flex;align-items:center;gap:6px;padding:0 11px;border-bottom:1px solid var(--line);font-size:10.5px;color:#8ea3ba}
+  .m-sheet .sh b{color:#dbe4f0;font-size:11px}
+  .m-sheet .sh .x{margin-left:auto}
+  .m-sheet .sb{overflow:auto;padding:8px 11px 18px}
+  .m-board{display:flex;gap:8px;padding:10px;overflow-x:auto}
+  .m-card{flex:0 0 150px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0c131c}
+  .m-card .thumb{height:84px;position:relative;overflow:hidden}
+  .m-card .meta{padding:5px 6px;font-size:9.5px}
+  .m-card .meta b{display:block;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .m-card .meta span{color:#5c6d80}
+  .m-script{padding:8px}
+  .m-line{border-bottom:1px solid #131f2c;padding:6px 4px;display:flex;gap:6px}
+  .m-line .sp{width:52px;flex:0 0 52px;color:#fbbf24;font-size:9.5px}
+  .m-line .tx{flex:1;font-size:10.5px;color:#cbd7e5;line-height:1.5}
+  .m-deliver{padding:9px}
+  .m-issue{display:flex;gap:6px;padding:7px 4px;border-bottom:1px solid #131f2c;font-size:10px;color:#b7c5d6}
+  .m-issue .lv{width:5px;height:5px;border-radius:50%;margin-top:5px;flex:0 0 5px}
+  .m-empty{padding:30px 10px;text-align:center;color:#5c6d80;font-size:10.5px}
+  .help-list{margin:4px 0;padding-left:18px}
+  .help-list li{margin:7px 0;font-size:11px;color:#b7c5d6;line-height:1.6}
+  .help-list b{color:#e2e8f0;font-weight:600}
+  .help-kbd{display:inline-block;border:1px solid #2a3d52;background:#0f1a26;border-radius:3px;padding:0 4px;font-size:9.5px;color:#93c5fd}
+
+  @media (max-width:1200px){
+    #view-stage.active{grid-template-columns:200px minmax(0,1fr) 270px}
+    .bottom{grid-template-columns:minmax(0,1fr) 300px}
+  }
+  @media (max-width:900px){
+    .desktop-app{display:none}
+    .mobile-shell.show{display:flex;height:100vh;background:#05080d}
+    .m-frame{width:100%;height:100%;max-height:none;border:0;border-radius:0;box-shadow:none}
+    .back-desktop{display:none!important}
+  }
+  body.device-mobile .desktop-app{display:none}
+  body.device-mobile .mobile-shell.show{display:flex}
+  @media (max-width:900px){
+    body.device-desktop .desktop-app{display:none}
+    body.device-desktop .mobile-shell.show{display:flex}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+</style>
+<style>
+  /* ===== ArkArchive 应用外壳对齐 ===== */
+  :root{
+    --bg:#111518; --panel:#171c20; --panel2:#20272c; --panel3:#252d33;
+    --line:#283138; --line2:#354048;
+    --text:#e8edf0; --muted:#9ba9b3; --dim:#83939f;
+    --accent:#a5c7d5; --accent2:#c7dbe5; --accentbg:rgba(165,199,213,.12);
+    --p0:#a4c6a0; --p1:#dfc080; --p2:#a5c7d5; --danger:#f28d8d;
+    --r:2px;
+  }
+  body{background:var(--bg);font-size:12.5px}
+  .desktop-app{flex-direction:row;background:var(--bg)}
+  .app-sidebar{
+    width:216px;flex:0 0 216px;background:#171c20;border-right:1px solid #283138;
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .app-brand{height:88px;flex:0 0 88px;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid #283138}
+  .app-logo{
+    width:28px;height:28px;flex:0 0 28px;border:1px solid #576570;background:#20272c;
+    color:#dfc080;display:grid;place-items:center;font-size:13px;font-weight:700;letter-spacing:.02em;
+  }
+  .app-brand b{font-size:17px;font-weight:700;color:#e8edf0;letter-spacing:.01em;line-height:1.2}
+  .app-nav{padding:16px 12px;display:flex;flex-direction:column;gap:6px}
+  .app-nav-item{
+    height:48px;display:flex;align-items:center;gap:12px;padding:0 12px;border:0;border-radius:2px;
+    background:transparent;color:#9ba9b3;font-size:13px;font-weight:400;text-align:left;width:100%;
+  }
+  .app-nav-item svg{width:20px;height:20px;flex:0 0 20px;stroke-width:1.6}
+  .app-nav-item:hover{background:#20272c;color:#c2ccd3}
+  .app-nav-item.on{background:#20272c;color:#a5c7d5}
+  .app-sidebar-foot{margin-top:auto;padding:20px;border-top:1px solid #283138;color:#9ba9b3;font-size:12px;line-height:1.5}
+  .app-main{flex:1;min-width:0;height:100vh;display:flex;flex-direction:column;background:#111518}
+  .app-page{display:none;height:100%;min-height:0;flex-direction:column}
+  .app-page.active{display:flex}
+  .app-page-head{
+    height:78px;flex:0 0 78px;display:flex;align-items:center;gap:14px;padding:0 28px;
+    border-bottom:1px solid #283138;background:#111518;
+  }
+  .app-page-head h1{font-size:24px;line-height:1.2;font-weight:700;letter-spacing:.01em;margin:0;color:#e8edf0}
+  .app-page-head p{margin:4px 0 0;color:#9ba9b3;font-size:12px}
+  .app-page-head .tline{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .app-page-head .grow{flex:1}
+  .app-center{max-width:860px;margin:0 auto}
+  .app-note-chip{
+    font-size:9.5px;letter-spacing:.05em;color:#dfc080;border:1px solid rgba(223,192,128,.35);
+    background:rgba(223,192,128,.08);padding:2px 6px;border-radius:2px;white-space:nowrap;
+  }
+  .app-page-body{flex:1;min-height:0;overflow:auto;padding:20px 28px 34px}
+  .app-search{
+    height:48px;display:flex;align-items:center;gap:10px;padding:0 14px;
+    background:#20272c;border:1px solid #283138;border-radius:2px;color:#83939f;font-size:13px;
+  }
+  .app-search .ic{font-size:15px;color:#9ba9b3}
+  .app-tabs{display:flex;gap:28px;height:44px;align-items:flex-end;border-bottom:1px solid #283138;margin-top:14px;overflow-x:auto}
+  .app-tab{
+    border:0;background:transparent;color:#9ba9b3;font-size:13px;padding:0 0 11px;position:relative;white-space:nowrap;
+  }
+  .app-tab.on{color:#e8edf0}
+  .app-tab.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:#e8eff2}
+  .app-stats{margin:13px 0 11px;color:#9ba9b3;font-size:12px}
+  .app-list{display:flex;flex-direction:column;gap:8px}
+  .app-row{
+    height:88px;display:flex;align-items:center;gap:16px;padding:0 18px;
+    background:#20272c;border:1px solid #283138;border-radius:2px;
+  }
+  .app-row .txt{min-width:0;flex:1}
+  .app-row .tt{font-size:17px;font-weight:500;color:#e8edf0;line-height:1.35}
+  .app-row .ss{font-size:12px;color:#9ba9b3;margin-top:4px}
+  .app-row .thumb{width:190px;height:58px;flex:0 0 190px;background:linear-gradient(120deg,#313b43,#20272c 60%,#171c20);border:1px solid #354048}
+  .app-row .chev{color:#e8edf0;font-size:18px;flex:0 0 18px}
+  .app-footnote{margin:16px 0 0;color:#83939f;font-size:11.5px;line-height:1.6}
+  .app-settings-card + .app-footnote{max-width:860px;margin-left:auto;margin-right:auto}
+  .app-char-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+  .app-char-card{background:#20272c;border:1px solid #283138;border-radius:2px;overflow:hidden}
+  .app-char-card .portrait{height:176px;background:linear-gradient(180deg,#252d33,#171c20);display:grid;place-items:center;color:#83939f;font-size:11px;letter-spacing:.08em}
+  .app-char-card .meta{padding:9px 11px}
+  .app-char-card .meta b{display:block;font-size:13px;color:#e8edf0;font-weight:500}
+  .app-char-card .meta span{display:block;margin-top:2px;font-size:11px;color:#9ba9b3}
+  .app-settings-card{max-width:860px;background:#20272c;border:1px solid #283138;border-radius:2px;overflow:hidden;margin:0 auto}
+  .app-set-row{height:72px;display:flex;align-items:center;gap:14px;padding:0 18px;border-bottom:1px solid #283138;cursor:default}
+  .app-set-row:last-child{border-bottom:0}
+  .app-set-row .ic{width:22px;color:#9ba9b3;font-size:15px;text-align:center;display:grid;place-items:center}
+  .app-set-row .ic svg{width:19px;height:19px;stroke-width:1.6}
+  .app-set-row .txt{flex:1}
+  .app-set-row b{display:block;font-size:13px;font-weight:500;color:#e8edf0}
+  .app-set-row span{display:block;margin-top:2px;font-size:11px;color:#9ba9b3}
+  .app-set-row .chev{color:#9ba9b3;font-size:16px}
+
+  /* 编辑器：顶栏/工作区/面板 */
+  .topbar{background:#171c20;border-bottom:1px solid #283138;height:52px;flex-basis:52px}
+  .editor-context{display:flex;align-items:baseline;gap:8px;padding-right:12px;border-right:1px solid #283138;min-width:98px}
+  .editor-context span{font-size:9.5px;letter-spacing:.12em;color:#83939f}
+  .editor-context b{font-size:13px;font-weight:600;color:#e8edf0;white-space:nowrap}
+  .proj b{font-size:12.5px;color:#e8edf0}
+  .proj span{font-size:10px;color:#83939f}
+  .worktabs{background:#171c20;border-bottom:1px solid #283138}
+  .worktabs .tab{color:#9ba9b3;border-radius:2px}
+  .worktabs .tab:hover{background:#20272c;color:#c2ccd3}
+  .worktabs .tab.on{background:#20272c;color:#e8edf0}
+  .worktabs .tab.on::after{background:#e8eff2;height:2px;left:10px;right:10px;bottom:-9px}
+  .crumb{color:#83939f}
+  .crumb b{color:#c2ccd3}
+  .btn{border-radius:2px;background:#171c20;border-color:#354048;color:#c2ccd3}
+  .btn:hover{background:#20272c;border-color:#576570;color:#e8edf0}
+  .btn.primary{background:#e8eff2;border-color:#e8eff2;color:#152027}
+  .btn.primary:hover{background:#f3f6f8}
+  .btn.tiny{background:#20272c;border-color:#354048;color:#c2ccd3}
+  .btn.tiny:hover{background:#252d33;border-color:#576570}
+  .seg{background:#20272c;border-color:#283138;border-radius:2px}
+  .seg button{border-radius:2px;color:#9ba9b3}
+  .seg button.on{background:#354048;color:#e8eff2}
+  .iconbtn{border-radius:2px;color:#9ba9b3}
+  .iconbtn:hover{background:#20272c;color:#e8edf0;border-color:#354048}
+  .tree,.inspector,.bottom,.transport{background:#171c20}
+  .pane-head{border-bottom-color:#283138;color:#9ba9b3}
+  .pane-head b{color:#e8edf0}
+  .beat-row{color:#9ba9b3}
+  .beat-row:hover{background:#20272c}
+  .beat-row.on{background:#20272c;border-color:#354048;color:#e8edf0}
+  .beat-row .dot{background:#576570}
+  .beat-row.on .dot{background:#a5c7d5}
+  .scene-row{color:#9ba9b3}
+  .cmd-row{color:#c2ccd3}
+  .cmd-row:hover{background:#20272c}
+  .cmd-row.sel{background:#20272c;border-left-color:#a5c7d5;color:#e8edf0}
+  .cmd-row.multi{background:#252d33}
+  .cmd-row .nm{color:#9ba9b3}
+  .grade{color:#dfc080}
+  .batchbar{background:#20272c;border-bottom-color:#354048;color:#e8edf0}
+  .batchbar input{background:#111518;border-color:#354048;border-radius:2px}
+  .strip{background:#111518;border-top-color:#283138}
+  .strip-cmd{background:#20272c;border-color:#354048;border-radius:2px;color:#9ba9b3}
+  .strip-cmd:hover{border-color:#576570}
+  .strip-cmd.active{border-color:#a5c7d5;background:#252d33;color:#fff;box-shadow:none}
+  .strip-cmd.active::before{background:#e8eff2}
+  .strip-cmd.t-line{background:#1d262b}.strip-cmd.t-bg{background:#1d2624}.strip-cmd.t-char{background:#242029}
+  .strip-cmd.t-text{background:#29251d}.strip-cmd.t-bgm{background:#1b2528}.strip-cmd.t-fx{background:#292020}.strip-cmd.t-wait{background:#20262b}
+  .transport .tbtn{color:#9ba9b3;border-radius:2px}
+  .transport .tbtn:hover{background:#20272c;color:#e8edf0}
+  .transport .tbtn.on{background:#a5c7d5;color:#152027}
+  .transport .speed,.transport .chipbtn{border-color:#354048;background:#171c20;border-radius:2px;color:#9ba9b3}
+  .transport .chipbtn:hover{background:#20272c;color:#e8edf0;border-color:#576570}
+  .input,.select,.textarea{
+    background:#20272c;border-color:#283138;border-radius:2px;color:#e8edf0;
+  }
+  .input:focus,.select:focus,.textarea:focus{border-color:#a5c7d5;box-shadow:none}
+  .range{accent-color:#a5c7d5}
+  .field label{color:#9ba9b3}
+  .field label .unit{color:#83939f}
+  .meta-box{background:#111518;border-color:#283138;border-radius:2px}
+  .meta-box .v{color:#9ba9b3}
+  .insp-head b,.insp-sub{color:#e8edf0}
+  .insp-sub{color:#9ba9b3}
+  .stage-chip{border-radius:2px;letter-spacing:0}
+  .stage-chip.P0{background:rgba(164,198,160,.10);color:#a4c6a0;border:1px solid rgba(164,198,160,.32)}
+  .stage-chip.P1{background:rgba(223,192,128,.10);color:#dfc080;border:1px solid rgba(223,192,128,.32)}
+  .stage-chip.P2{background:rgba(165,199,213,.10);color:#a5c7d5;border:1px solid rgba(165,199,213,.32)}
+  .lanes-wrap,.cmdlist-wrap{border-color:#283138}
+  .lane .tr{background:#111518;border-color:#283138;border-radius:2px}
+  .lane .blk{border-radius:1px;opacity:.72}
+  .lane .blk.bg{background:#7f9f83}.lane .blk.char{background:#8b87b0}.lane .blk.text{background:#c7a86f}.lane .blk.bgm{background:#7f9fa8}
+  .lane .ph{background:#e8eff2}
+  .lane .ln,.lane-tick{color:#83939f}
+  .board-card,.deliver-card,.proto-note,.rm-item,.drawer,.modal .box,.toast,.card,.panel{border-radius:2px}
+  .board-card{background:#20272c;border-color:#283138}
+  .board-card:hover{border-color:#576570}
+  .board-card .meta b{color:#e8edf0}
+  .board-card .meta span{color:#9ba9b3}
+  .board-empty{border-color:#354048;color:#83939f;border-radius:2px}
+  .view-head{background:#111518;border-bottom-color:#283138}
+  .view-head h2{color:#e8edf0;font-size:18px}
+  .view-head p{color:#9ba9b3}
+  .script-tools{background:#171c20;border-bottom-color:#283138}
+  .script-table th{background:#171c20;color:#9ba9b3;border-bottom-color:#283138}
+  .script-table td{border-bottom-color:#20272c}
+  .script-table tr:hover td{background:#20272c}
+  .script-table tr.on td{background:#252d33}
+  .script-table input[type=text]{color:#e8edf0}
+  .deliver-card{background:#20272c;border-color:#283138}
+  .deliver-card .hd{border-bottom-color:#283138}
+  .issue,.export-row,.version{border-bottom-color:#283138}
+  .version .t{color:#c2ccd3}
+  .drawer{background:#171c20;border-left-color:#354048}
+  .drawer .dh,.modal .mh{border-bottom-color:#283138}
+  .rm-item{background:#20272c;border-color:#283138}
+  .rm-item:hover{border-color:#576570}
+  .rm-item .tt{color:#e8edf0}
+  .rm-item p,.proto-note{color:#9ba9b3}
+  .rm-item .st{border-radius:2px;background:#252d33;border-color:#354048;color:#c2ccd3}
+  .rm-item .st.part{background:rgba(223,192,128,.10);border-color:rgba(223,192,128,.32);color:#dfc080}
+  .rm-item .st.plan{background:#20272c;border-color:#354048;color:#9ba9b3}
+  .modal .box{background:#171c20;border-color:#354048}
+  .graph{border-color:#283138;background:#111518}
+  .gnode{background:#20272c;border-color:#354048;border-radius:2px;color:#c2ccd3}
+  .gnode b{color:#e8edf0}
+  .gnode.choice{border-color:#576570;background:#252d33}
+  .gnode.end{border-color:#4f6b52;background:#1d2624}
+  .toast{background:#20272c;border-color:#354048;color:#e8edf0}
+  .toast b{color:#a5c7d5}
+  .backdrop{background:rgba(5,8,10,.7)}
+  .back-desktop{background:#171c20;border-color:#354048;border-radius:2px}
+
+  /* 移动端：应用底栏 + 编辑器工作区 */
+  .m-frame{background:#111518;border-color:#354048}
+  .m-status{background:#171c20;color:#9ba9b3;border-bottom:1px solid #283138}
+  .m-top{background:#171c20;border-bottom-color:#283138;height:42px;flex-basis:42px}
+  .m-top b{color:#e8edf0;font-size:12px}
+  .m-workspaces{height:36px;flex:0 0 36px;display:flex;gap:2px;padding:4px 6px;background:#171c20;border-bottom:1px solid #283138;overflow-x:auto}
+  .m-workspaces.hidden{display:none}
+  .m-ws{border:0;background:transparent;color:#9ba9b3;font-size:10px;padding:0 8px;border-radius:2px;display:flex;align-items:center;gap:4px;white-space:nowrap}
+  .m-ws.on{background:#20272c;color:#e8edf0}
+  .m-ws .stage-chip{transform:scale(.8);transform-origin:left center}
+  .m-screen{background:#111518}
+  .m-app-nav{height:72px;flex:0 0 72px;display:flex;background:#171c20;border-top:1px solid #283138}
+  .m-app-nav button{flex:1;border:0;background:transparent;color:#9ba9b3;font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+  .m-app-nav button svg{width:22px;height:22px;stroke-width:1.6}
+  .m-app-nav button.on{color:#a5c7d5}
+  .m-app-nav button:hover{background:#20272c}
+  .m-sheet{bottom:72px;background:#171c20;border-top-color:#354048;border-radius:0}
+  .m-sheet .sh,.m-sheet .sb{border-color:#283138}
+  .m-transport{background:#171c20;border-bottom-color:#283138}
+  .m-monitor{background:#000}
+  .m-cmd.on{background:#20272c;border-left-color:#a5c7d5}
+  .m-page-head{padding:14px 14px 10px;border-bottom:1px solid #283138}
+  .m-page-head h2{font-size:19px;margin:0;color:#e8edf0}
+  .m-page-head p{margin:4px 0 0;font-size:10.5px;color:#9ba9b3}
+  .m-page-search{margin:10px 12px;height:40px;display:flex;align-items:center;gap:8px;padding:0 11px;background:#20272c;border:1px solid #283138;color:#83939f;font-size:11px}
+  .m-page-tabs{display:flex;gap:16px;padding:0 12px;height:38px;align-items:flex-end;border-bottom:1px solid #283138;overflow-x:auto}
+  .m-page-tab{font-size:10.5px;color:#9ba9b3;padding-bottom:9px;white-space:nowrap;position:relative}
+  .m-page-tab.on{color:#e8edf0}
+  .m-page-tab.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:#e8eff2}
+  .m-page-row{margin:8px 12px;min-height:64px;background:#20272c;border:1px solid #283138;display:flex;align-items:center;gap:10px;padding:0 11px}
+  .m-page-row .tt{font-size:12px;color:#e8edf0;font-weight:500}
+  .m-page-row .ss{font-size:9.5px;color:#9ba9b3;margin-top:3px}
+  .m-page-row .thumb{margin-left:auto;width:76px;height:40px;background:linear-gradient(120deg,#3a464f,#252d33 60%,#1b2126);border:1px solid #354048}
+  .m-page-note{color:#83939f;font-size:9.5px;line-height:1.6;padding:12px}
+  .m-char-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}
+  .m-char-card{background:#20272c;border:1px solid #283138}
+  .m-char-card .p{height:100px;background:linear-gradient(180deg,#252d33,#171c20);display:grid;place-items:center;color:#83939f;font-size:9px}
+  .m-char-card .m{padding:7px 8px;font-size:10px;color:#e8edf0}
+  .m-set-row{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid #283138;color:#c2ccd3;font-size:11px}
+  .m-set-row>.ic{width:20px;display:grid;place-items:center;color:#9ba9b3;flex:0 0 20px}
+  .m-set-row>.ic svg{width:17px;height:17px;stroke-width:1.6}
+  .m-set-row .tx{flex:1;min-width:0}
+  .m-set-row .tx b{display:block;font-size:11px;font-weight:500;color:#e8edf0}
+  .m-set-row .tx span{display:block;margin-top:1px;font-size:9px;color:#83939f}
+  .m-set-row .chev{margin-left:auto;color:#83939f}
+  .m-issue .go,.go{border-radius:2px;background:#20272c;border-color:#354048;color:#c2ccd3}
+</style>
+</head>
+<body class="device-desktop">
+
+<div class="desktop-app" id="desktopApp">
+
+  <aside class="app-sidebar" id="appSidebar">
+    <div class="app-brand">
+      <div class="app-logo">A</div>
+      <div><b>方舟档案室</b></div>
+    </div>
+    <nav class="app-nav">
+      <button class="app-nav-item" data-app="library">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h6v15H4zM14 5.5h6v15h-6zM10 5.5h4v15h-4z"/></svg>
+        <span>剧情馆</span>
+      </button>
+      <button class="app-nav-item" data-app="character">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"/><path d="M3.5 19c.6-3.2 2.7-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="10" r="2.4"/><path d="M15.6 19c.3-2.2 1.5-3.6 3.4-3.6 1.2 0 2.2.6 2.8 1.8"/></svg>
+        <span>人物档案</span>
+      </button>
+      <button class="app-nav-item on" data-app="create">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16"/><path d="M8 14.5l5.5-5.5 2.5 2.5L10.5 17H8zM14 8.5l1.5-1.5 2.5 2.5-1.5 1.5"/></svg>
+        <span>创作</span>
+      </button>
+      <button class="app-nav-item" data-app="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h7M15 7h5M4 17h5M13 17h7"/><circle cx="13" cy="7" r="2"/><circle cx="11" cy="17" r="2"/></svg>
+        <span>系统设置</span>
+      </button>
+    </nav>
+    <div class="app-sidebar-foot">剧情浏览与离线阅读</div>
+  </aside>
+
+  <div class="app-main">
+
+    <section class="app-page" id="page-library">
+      <div class="app-page-head">
+        <div><div class="tline"><h1>剧情馆</h1><span class="app-note-chip">既有功能 · 位置占位</span></div><p>PRTS 剧情目录、离线篇章与播放</p></div>
+        <div class="grow"></div>
+        <button class="iconbtn" title="离线与缓存">↓</button>
+      </div>
+      <div class="app-page-body">
+        <div class="app-search"><span class="ic">⌕</span><span>搜索剧情标题或活动名</span></div>
+        <div class="app-tabs">
+          <button class="app-tab on">全部</button><button class="app-tab">主线篇章</button><button class="app-tab">支线活动</button>
+          <button class="app-tab">微型故事集</button><button class="app-tab">玩法衍生篇</button><button class="app-tab">其他档案</button>
+        </div>
+        <div class="app-stats">509 个篇章 · 2132 幕</div>
+        <div class="app-list">
+          <div class="app-row"><div class="txt"><div class="tt">主线篇章 · 示例条目</div><div class="ss">主线 · 12 幕 · 已缓存</div></div><div class="thumb"></div><span class="chev">›</span></div>
+          <div class="app-row"><div class="txt"><div class="tt">支线活动 · 示例条目</div><div class="ss">支线 · 8 幕 · 可离线阅读</div></div><div class="thumb"></div><span class="chev">›</span></div>
+          <div class="app-row"><div class="txt"><div class="tt">微型故事集 · 示例条目</div><div class="ss">短篇 · 3 幕</div></div><div class="thumb"></div><span class="chev">›</span></div>
+          <div class="app-row"><div class="txt"><div class="tt">玩法衍生篇 · 示例条目</div><div class="ss">衍生 · 5 幕 · 未缓存</div></div><div class="thumb"></div><span class="chev">›</span></div>
+          <div class="app-row"><div class="txt"><div class="tt">其他档案 · 示例条目</div><div class="ss">档案 · 2 幕</div></div><div class="thumb"></div><span class="chev">›</span></div>
+        </div>
+        <p class="app-footnote">此处只还原剧情馆在应用外壳中的位置与视觉，原型不展开搜索、分类、下载与播放。</p>
+      </div>
+    </section>
+
+    <section class="app-page" id="page-character">
+      <div class="app-page-head">
+        <div><div class="tline"><h1>人物档案</h1><span class="app-note-chip">既有功能 · 位置占位</span></div><p>干员档案、立绘与出场剧情</p></div>
+        <div class="grow"></div>
+      </div>
+      <div class="app-page-body">
+        <div class="app-search"><span class="ic">⌕</span><span>搜索干员名或别名</span></div>
+        <div class="app-char-grid" style="margin-top:16px">
+          <div class="app-char-card"><div class="portrait">PORTRAIT</div><div class="meta"><b>干员 A</b><span>近卫 · 档案 / 立绘 / 出场</span></div></div>
+          <div class="app-char-card"><div class="portrait">PORTRAIT</div><div class="meta"><b>干员 B</b><span>术师 · 档案 / 立绘 / 出场</span></div></div>
+          <div class="app-char-card"><div class="portrait">PORTRAIT</div><div class="meta"><b>干员 C</b><span>医疗 · 档案 / 立绘 / 出场</span></div></div>
+          <div class="app-char-card"><div class="portrait">PORTRAIT</div><div class="meta"><b>干员 D</b><span>狙击 · 档案 / 立绘 / 出场</span></div></div>
+          <div class="app-char-card"><div class="portrait">PORTRAIT</div><div class="meta"><b>干员 E</b><span>重装 · 档案 / 立绘 / 出场</span></div></div>
+          <div class="app-char-card"><div class="portrait">PORTRAIT</div><div class="meta"><b>干员 F</b><span>辅助 · 档案 / 立绘 / 出场</span></div></div>
+          <div class="app-char-card"><div class="portrait">PORTRAIT</div><div class="meta"><b>干员 G</b><span>特种 · 档案 / 立绘 / 出场</span></div></div>
+          <div class="app-char-card"><div class="portrait">PORTRAIT</div><div class="meta"><b>干员 H</b><span>先锋 · 档案 / 立绘 / 出场</span></div></div>
+        </div>
+        <p class="app-footnote">人物档案为独立应用页；与剧情编辑器共享素材与角色数据，但不是编辑器的工作区。</p>
+      </div>
+    </section>
+
+    <section class="app-page active" id="page-create">
+      <header class="topbar">
+        <div class="editor-context"><span>创作</span><b>剧情编辑器</b></div>
+        <button class="iconbtn" id="btnProjects" title="我的作品（新建 / 导入 / 正式播放器直放）">▤</button>
+        <button class="iconbtn" id="btnAssets" title="作品素材管理（引用计数与未引用清理）">◫</button>
+        <div class="proj">
+          <b id="topTitle">雨夜 · 未命名</b>
+          <span id="saveState">已保存 12:03</span>
+        </div>
+    <button class="iconbtn" id="btnUndo" title="撤销（Ctrl+Z）" style="width:26px;height:26px;border:1px solid var(--line)">↶</button>
+    <button class="iconbtn" id="btnRedo" title="重做（Ctrl+Shift+Z）" style="width:26px;height:26px;border:1px solid var(--line)">↷</button>
+    <div class="grow"></div>
+    <span class="hint">阶段视图</span>
+    <div class="seg" id="stageFilter">
+      <button data-filter="all" class="on">全部</button>
+      <button data-filter="P0">P0</button>
+      <button data-filter="P1">P0 + P1</button>
+    </div>
+    <button class="btn" id="btnRoadmap"><span style="color:#93c5fd">◈</span> 路线图</button>
+    <button class="btn" id="btnHelp" title="原型怎么玩">?</button>
+    <button class="btn" id="btnDemo">演示</button>
+    <div class="seg" id="deviceSwitch">
+      <button data-device="desktop" class="on">桌面</button>
+      <button data-device="mobile">手机</button>
+    </div>
+  </header>
+
+  <nav class="worktabs" id="worktabs">
+    <button class="tab" data-view="board">编排台 <span class="stage-chip P1">P1</span></button>
+    <button class="tab on" data-view="stage">演出台 <span class="stage-chip P0">P0</span></button>
+    <button class="tab" data-view="script">剧本台 <span class="stage-chip P1">P1</span></button>
+    <button class="tab" data-view="deliver">交付台 <span class="stage-chip P1">P1</span></button>
+    <div class="crumb" id="crumb"></div>
+    <div class="grow"></div>
+    <span class="hint" id="phaseHint">全部阶段：P0 可体验 · P1 部分示意 · P2 占位</span>
+  </nav>
+
+  <main class="views">
+    <section class="view active" id="view-stage">
+      <aside class="tree">
+        <div class="pane-head"><b>结构</b><span id="treeCount"></span><div class="right"><button class="iconbtn" title="搜索（P1 示意）" data-rm="P1-4">⌕</button><button class="iconbtn" title="新建分镜（P1 示意）" data-rm="P1-1">＋</button></div></div>
+        <div class="tree-scroll" id="tree"></div>
+        <div class="bin">
+          <div class="pane-head"><b>素材箱</b><span class="stage-chip P1">P1</span><div class="right"><button class="iconbtn" title="收藏">☆</button></div></div>
+          <div class="bin-grid" id="bin"></div>
+        </div>
+      </aside>
+
+      <div class="center">
+        <div class="monitor-shell" id="monitorShell">
+          <div class="monitor" id="monitor"></div>
+        </div>
+        <div class="transport" id="transport"></div>
+        <div class="strip" id="strip"></div>
+      </div>
+
+      <aside class="inspector">
+        <div class="pane-head"><b>检查器</b><span id="inspStage"></span><div class="right"><button class="iconbtn" title="重置（示意）">↺</button><button class="iconbtn" title="收起">›</button></div></div>
+        <div class="scroll" id="inspector"></div>
+      </aside>
+
+      <div class="bottom">
+        <div class="cmdlist-wrap">
+          <div class="pane-head"><b>分镜指令</b><span id="cmdCount"></span><div class="right"><span class="stage-chip P0" data-rm="P0-1" style="cursor:pointer">P0</span><span class="hint" id="selInfo"></span></div></div>
+          <div class="batchbar" id="batchbar"></div>
+          <div class="cmdlist" id="cmdlist"></div>
+        </div>
+        <div class="lanes-wrap">
+          <div class="pane-head"><b>状态泳道</b><span class="stage-chip P1">P1</span><div class="right"><button class="iconbtn" title="只看背景（示意）">◧</button></div></div>
+          <div class="lanes" id="lanes"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-board">
+      <div class="view-head">
+        <h2>编排台 · 故事板</h2>
+        <span class="stage-chip P1">P1</span>
+        <p>粗剪：看全貌、排顺序、批量处理。拖拽卡片可重排。</p>
+        <div class="grow"></div>
+        <button class="btn small" id="btnBoardNew">＋ 新建分镜</button>
+      </div>
+      <div class="view-body">
+        <div id="board"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-script">
+      <div class="view-head">
+        <h2>剧本台 · 对白表格</h2>
+        <span class="stage-chip P1">P1</span>
+        <p>批量改台词与说话人；双击任意行可跳回演出台定位。</p>
+        <div class="grow"></div>
+        <span class="hint" id="scriptCount"></span>
+      </div>
+      <div class="script-tools">
+        <input class="input" id="scriptSearch" placeholder="搜索台词 / 说话人">
+        <label class="hint"><input type="checkbox" class="check" id="scriptCurrentScene"> 仅当前幕</label>
+        <div class="grow"></div>
+        <span class="hint">已选 <b id="scriptSel">0</b> 行</span>
+        <input class="input" id="scriptSpeaker" placeholder="批量说话人" style="width:120px">
+        <button class="btn small" id="btnScriptApply">应用</button>
+      </div>
+      <div class="view-body" style="padding:0">
+        <table class="script-table">
+          <thead><tr><th style="width:28px"><input type="checkbox" class="check" id="scriptAll"></th><th style="width:120px">位置</th><th style="width:100px">说话人</th><th>台词</th><th style="width:56px">阶段</th></tr></thead>
+          <tbody id="scriptBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="view" id="view-deliver">
+      <div class="view-head">
+        <h2>交付台</h2>
+        <span class="stage-chip P1">P1</span>
+        <p>检查 → 预览 → 导出 → 留版本。P2 能力以占位呈现。</p>
+        <div class="grow"></div>
+        <button class="btn small" id="btnSnapshot">＋ 创建快照</button>
+      </div>
+      <div class="view-body">
+        <div class="deliver-grid">
+          <div class="deliver-card">
+            <div class="hd"><b>检查清单</b><span class="hint" id="issueSummary"></span><span class="stage-chip P1">P1</span></div>
+            <div class="bd" id="issues"></div>
+          </div>
+          <div>
+            <div class="deliver-card" id="exportCard">
+              <div class="hd"><b>导出</b><span class="stage-chip P1">P1</span><span class="hint">轻交付优先，视频后置</span></div>
+              <div class="bd" id="exports"></div>
+            </div>
+            <div class="deliver-card" style="margin-top:12px" id="versionCard">
+              <div class="hd"><b>版本快照</b><span class="stage-chip P1">P1</span></div>
+              <div class="bd" id="versions"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+    </section>
+
+    <section class="app-page" id="page-settings">
+      <div class="app-page-head">
+        <div><div class="tline"><h1>系统设置</h1><span class="app-note-chip">既有功能 · 位置占位</span></div><p>播放、缓存、网络与关于</p></div>
+        <div class="grow"></div>
+      </div>
+      <div class="app-page-body">
+        <div class="app-settings-card">
+          <div class="app-set-row"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h7M15 7h5M4 17h5M13 17h7"></path><circle cx="13" cy="7" r="2"></circle><circle cx="11" cy="17" r="2"></circle></svg></div><div class="txt"><b>基础设置</b><span>主题、音量与播放速度</span></div><span class="chev">›</span></div>
+          <div class="app-set-row"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="2.6"></ellipse><path d="M5 6v6c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6M5 12v6c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-6"></path></svg></div><div class="txt"><b>缓存设置</b><span>缓存占用、下载并发与本地文件</span></div><span class="chev">›</span></div>
+          <div class="app-set-row"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M3.5 12h17M12 3.5c2.4 2.2 3.7 5.2 3.7 8.5s-1.3 6.3-3.7 8.5c-2.4-2.2-3.7-5.2-3.7-8.5S9.6 5.7 12 3.5z"></path></svg></div><div class="txt"><b>网络设置</b><span>检查剧情与素材连接</span></div><span class="chev">›</span></div>
+          <div class="app-set-row"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 11v5M12 8h.01"></path></svg></div><div class="txt"><b>关于</b><span>版本、更新与开源信息</span></div><span class="chev">›</span></div>
+        </div>
+        <p class="app-footnote">系统设置是应用级页面；编辑器内部的阶段筛选、路线图与演示属于原型工具，不进入正式设置。</p>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<div class="mobile-shell" id="mobileShell">
+  <div class="m-frame">
+    <div class="m-status"><span>19:42</span><span>ArkArchive</span><span>100%</span></div>
+    <div class="m-app">
+      <div class="m-top" id="mTop"></div>
+      <div class="m-workspaces" id="mWorkspaces"></div>
+      <div class="m-screen" id="mScreen"></div>
+      <nav class="m-app-nav" id="mAppNav">
+        <button data-app="library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h6v15H4zM14 5.5h6v15h-6zM10 5.5h4v15h-4z"/></svg><span>剧情馆</span></button>
+        <button data-app="character"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"/><path d="M3.5 19c.6-3.2 2.7-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="10" r="2.4"/><path d="M15.6 19c.3-2.2 1.5-3.6 3.4-3.6 1.2 0 2.2.6 2.8 1.8"/></svg><span>人物档案</span></button>
+        <button data-app="create" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16"/><path d="M8 14.5l5.5-5.5 2.5 2.5L10.5 17H8zM14 8.5l1.5-1.5 2.5 2.5-1.5 1.5"/></svg><span>创作</span></button>
+        <button data-app="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h7M15 7h5M4 17h5M13 17h7"/><circle cx="13" cy="7" r="2"/><circle cx="11" cy="17" r="2"/></svg><span>系统设置</span></button>
+      </nav>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="backdrop"></div>
+<button class="btn back-desktop" id="backDesktop">返回桌面预览</button>
+<aside class="drawer" id="roadmapDrawer">
+  <div class="dh"><b>路线图 · 原型覆盖</b><span class="hint">P0 → P1 → P2</span><button class="iconbtn x" id="closeRoadmap">✕</button></div>
+  <div class="dbody" id="roadmapBody"></div>
+</aside>
+
+<div class="modal" id="branchModal">
+  <div class="box">
+    <div class="mh"><b>分支图 · 只读示意</b><span class="stage-chip P2">P2</span><span class="hint">P2-1，节点与连线为静态演示</span><button class="iconbtn x" id="closeBranch">✕</button></div>
+    <div class="mb">
+      <div class="graph">
+        <svg viewBox="0 0 700 320" preserveAspectRatio="none">
+          <path d="M118 78 C 190 78, 190 118, 250 118" fill="none" stroke="#3b6ea8" stroke-width="1.4"/>
+          <path d="M118 78 C 190 78, 190 210, 250 210" fill="none" stroke="#3b6ea8" stroke-width="1.4"/>
+          <path d="M352 118 C 420 118, 420 78, 478 78" fill="none" stroke="#2a5a44" stroke-width="1.4"/>
+          <path d="M352 210 C 420 210, 420 158, 478 158" fill="none" stroke="#2a5a44" stroke-width="1.4"/>
+          <path d="M580 78 C 620 78, 620 158, 580 158" fill="none" stroke="#5b4215" stroke-width="1.4" stroke-dasharray="4 3"/>
+        </svg>
+        <div class="gnode" style="left:44px;top:58px"><b>分镜 1</b><small>街角</small></div>
+        <div class="gnode choice" style="left:250px;top:96px"><b>选项 A</b><small>绕路</small></div>
+        <div class="gnode choice" style="left:250px;top:188px"><b>选项 B</b><small>强行通过</small></div>
+        <div class="gnode" style="left:478px;top:58px"><b>分镜 4</b><small>指挥室</small></div>
+        <div class="gnode" style="left:478px;top:138px"><b>分镜 5</b><small>走廊</small></div>
+        <div class="gnode end" style="left:560px;top:210px"><b>结局</b><small>回到主线</small></div>
+        <div class="gcap">P2 规划：节点 = 分镜/标签，边 = 选项与跳转；先做只读图，再做可视化编辑与选项路径 / Predicate 状态调试。</div>
+      </div>
+      <p class="hint" style="margin:10px 2px 0">当前引擎已支持 decision / predicate / label / warp（无通用变量系统）；缺口在可视化与路径调试。此图仅示意，不可编辑。</p>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="helpModal">
+  <div class="box" style="width:560px">
+    <div class="mh"><b>原型怎么玩</b><span class="hint">约 5 分钟</span><button class="iconbtn x" id="closeHelp">✕</button></div>
+    <div class="mb">
+      <ol class="help-list">
+        <li><b>选中即预览：</b>点击舞台下方任意指令，画面停在该指令执行后的状态；<span class="help-kbd">End</span> 回到分镜末态。</li>
+        <li><b>播放与传输：</b><span class="help-kbd">空格</span> 播放/暂停，<span class="help-kbd">←</span>/<span class="help-kbd">→</span> 按句跳，传输条可循环、倍速、全屏。</li>
+        <li><b>批量化：</b>点击一条后 <span class="help-kbd">Shift</span> 连选、<span class="help-kbd">Ctrl</span> 增减；批量条可改说话人、复制、删除。</li>
+        <li><b>舞台直编：</b>拖动立绘或舞台文字，接近中线会自动吸附；右侧检查器数值同步。缩放按钮可放大舞台。</li>
+        <li><b>多端工作区：</b>桌面端提供编排、演出、剧本（对白表格）、交付四工作区；右上角可切“手机”预览精简形态（演出主视图 + 轻分镜切换 + 检查定位）。</li>
+        <li><b>路线图联动：</b>点界面上的 <b>P0/P1/P2</b> 徽标或顶部“路线图”，都能打开分期面板并定位到对应区域；切换“阶段视图”可预览只交付 P0 时的界面。</li>
+      </ol>
+      <p class="hint" style="margin:10px 2px 0">原型数据为示意，不会真正导出文件；所有编辑仅在当前页面内存中生效，刷新即重置。</p>
+      <p class="hint" style="margin:8px 2px 0"><a href="ArkArchive-剧情编辑器产品交互分析.html" style="color:#7dd3fc">← 回到分析报告</a></p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const clamp = (n,a,b) => Math.max(a, Math.min(b, n));
+const r1 = n => Math.round(n*10)/10;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- data ---------- */
+const B = (asset, fit='coverall', fade=.5) => ({type:'bg', args:{asset, fit, fade}});
+const C = (slot, role, mood='calm', x=50, y=88) => ({type:'char', args:{slot, role, mood, x, y, fade:.3}});
+const L = (speaker, text) => ({type:'line', args:{speaker, text}});
+const T = (text, x=50, y=26, size=22, align='center') => ({type:'text', args:{text, x, y, size, align}});
+const G = (asset) => ({type:'cg', args:{asset}});
+const M = (asset, volume=.7) => ({type:'bgm', args:{asset, volume}});
+const F = (asset) => ({type:'fx', args:{asset}});
+const W = (time=1) => ({type:'wait', args:{time}});
+
+const project = {
+  title:'雨夜 · 未命名',
+  scenes:[
+    {title:'第一幕 · 雨夜', beats:[
+      {title:'分镜 1 · 街角', cmds:[
+        B('雨夜街道'), C('l','阿米娅','calm',26,88),
+        L('阿米娅','博士，前面的路被积水淹了。'),
+        T('19:42 · 龙门',50,25,22),
+        L('阿米娅','我们绕一圈吧。'),
+        M('雨声',.7)
+      ]},
+      {title:'分镜 2 · 屋檐下', cmds:[
+        B('屋檐下', 'coverall', .6), C('l','阿米娅','smile',26,88),
+        L('阿米娅','先在这里等雨小一点。'),
+        C('r','陈','serious',74,88),
+        L('陈','没时间了。')
+      ]},
+      {title:'分镜 3 · 天台', warn:true, cmds:[
+        B('天台'), C('l','无'), C('r','无'), C('m','凯尔希','calm',50,88),
+        L('凯尔希','你们迟到了。'),
+        G('信号塔'),
+        T('远处，信号塔亮起。',50,27,20)
+      ]}
+    ]},
+    {title:'第二幕 · 黎明', beats:[
+      {title:'分镜 4 · 指挥室', cmds:[
+        B('指挥室'), C('m','无'), C('l','阿米娅','serious',30,88),
+        L('阿米娅','行动开始。'),
+        M('紧迫',.8), W(1.4)
+      ]},
+      {title:'分镜 5 · 走廊', cmds:[
+        B('走廊'), C('l','无'), C('r','陈','serious',72,88),
+        L('陈','跟上。'),
+        F('震动')
+      ]},
+      {title:'分镜 6 · 天台 · 终', cmds:[
+        B('天台 · 黎明'), C('r','无'), C('m','凯尔希','calm',50,88),
+        L('凯尔希','天亮了。'),
+        T('第一幕 · 完',50,30,26)
+      ]}
+    ]}
+  ]
+};
+
+const BG = {
+  '雨夜街道':{cls:'bg-rain bg-grid'}, '屋檐下':{cls:'bg-eave'}, '天台':{cls:'bg-roof bg-grid'},
+  '指挥室':{cls:'bg-room'}, '走廊':{cls:'bg-corridor'}, '天台 · 黎明':{cls:'bg-roofdawn bg-grid'},
+  '黑场':{cls:'bg-black'}
+};
+const ROLE = {'阿米娅':'#3b82f6', '陈':'#ef4444', '凯尔希':'#10b981'};
+const MOOD = {calm:'平静', smile:'微笑', serious:'严肃', sad:'低落', angry:'愠怒'};
+const TYPE_NAME = {bg:'背景', char:'立绘', line:'对白', text:'舞台文字', cg:'CG', bgm:'BGM', fx:'特效', wait:'等待'};
+const SLOT_NAME = {l:'左', m:'中', r:'右'};
+
+const state = {
+  view:'stage', mView:'stage', device:'desktop', appPage:'create',
+  sel:{s:0,b:0,c:0}, multi:new Set(), anchor:0,
+  playing:false, loop:false, speed:1, timer:null,
+  zoom:1, pulse:false, drag:null,
+  undo:[], redo:[], clip:[],
+  filter:'all', demo:false,
+  sheet:false,
+  scriptSel:new Set(),
+  versions:[
+    {t:'11:42', label:'自动快照 · 调整立绘位置', auto:true},
+    {t:'10:18', label:'手动快照 · 完成第二幕', auto:false},
+    {t:'09:03', label:'自动快照 · 派生官方剧情', auto:true}
+  ],
+  saveTimer:null
+};
+
+let seq = 1000;
+const nid = () => 'n' + (++seq);
+
+const currentScene = () => project.scenes[state.sel.s];
+const currentBeat = () => currentScene()?.beats[state.sel.b];
+const currentCmds = () => currentBeat()?.cmds || [];
+const currentCmd = () => currentCmds()[state.sel.c] || null;
+const keyOf = (s,b,c) => `${s}:${b}:${c}`;
+const sameSel = (s,b,c) => state.sel.s===s && state.sel.b===b && state.sel.c===c;
+
+/* ---------- state machine ---------- */
+function blankState(){
+  return {bg:null, chars:{}, cg:null, subtitle:null, music:null, fx:null, dialogue:null};
+}
+function applyCmd(st, cmd){
+  const a = cmd.args;
+  switch(cmd.type){
+    case 'bg': st.bg = a.asset || null; break;
+    case 'char':
+      if(!a.role || a.role === '无') delete st.chars[a.slot];
+      else st.chars[a.slot] = {...a};
+      break;
+    case 'cg': st.cg = a.asset || null; break;
+    case 'text': st.subtitle = a.text ? {...a} : null; break;
+    case 'line': st.dialogue = {speaker:a.speaker, text:a.text}; break;
+    case 'bgm': st.music = a.asset || null; break;
+    case 'fx': st.fx = a.asset || null; break;
+  }
+}
+function stateAt(s, b, c){
+  const st = blankState();
+  for(let si=0; si<=s; si++){
+    const beats = project.scenes[si].beats;
+    const lastBeat = si===s ? b : beats.length-1;
+    for(let bi=0; bi<=lastBeat; bi++){
+      const cmds = beats[bi].cmds;
+      const lastCmd = (si===s && bi===b) ? c : cmds.length-1;
+      for(let ci=0; ci<=lastCmd; ci++) applyCmd(st, cmds[ci]);
+    }
+  }
+  return st;
+}
+
+/* ---------- text ---------- */
+function summary(cmd){
+  const a = cmd.args;
+  switch(cmd.type){
+    case 'line': return `${a.speaker}：${a.text || '（空台词）'}`;
+    case 'bg': return a.asset ? `背景：${a.asset}` : '清除背景';
+    case 'char': return (!a.role || a.role==='无') ? `清除立绘 · ${SLOT_NAME[a.slot]||''}` : `${a.role} · ${SLOT_NAME[a.slot]||''} · ${MOOD[a.mood]||a.mood}`;
+    case 'text': return a.text ? `文字：${a.text}` : '清除舞台文字';
+    case 'cg': return a.asset ? `CG：${a.asset}` : '清除 CG';
+    case 'bgm': return a.asset ? `BGM：${a.asset}` : '停止 BGM';
+    case 'fx': return `特效：${a.asset || '无'}`;
+    case 'wait': return `等待：${a.time} 秒`;
+    default: return cmd.type;
+  }
+}
+function fullSummary(cmd){
+  const a = cmd.args;
+  switch(cmd.type){
+    case 'bg': return a.asset ? `背景：${a.asset} · ${a.fit}` : '清除背景';
+    case 'char': return (!a.role || a.role==='无') ? '清除立绘' : `立绘：${a.role} · ${SLOT_NAME[a.slot]} · ${MOOD[a.mood]||a.mood} · (${a.x}, ${a.y})`;
+    default: return summary(cmd);
+  }
+}
+
+/* ---------- stage ---------- */
+function stageHTML(st, opts={}){
+  const bg = BG[st.bg] || BG['黑场'];
+  const chars = ['l','m','r'].map(slot => {
+    const c = st.chars[slot];
+    if(!c) return '';
+    const sel = opts.selType==='char' && opts.selSlot===slot;
+    return `<div class="char ${sel?'sel':''}" data-slot="${slot}" style="left:${c.x}%;top:${c.y}%;--ch:${ROLE[c.role]||'#64748b'}">
+      <div class="ch-name">${esc(c.role)} · ${esc(MOOD[c.mood]||c.mood||'')}</div>
+      <div class="ch-head"></div><div class="ch-body"></div>
+    </div>`;
+  }).join('');
+  const subtitle = st.subtitle ? `<div class="subtitle ${opts.selType==='text'?'sel':''}" data-drag="subtitle"
+    style="left:${st.subtitle.x}%;top:${st.subtitle.y}%;font-size:clamp(10px,${(st.subtitle.size/12.8).toFixed(2)}cqw,30px);text-align:${st.subtitle.align||'center'}">${esc(st.subtitle.text)}</div>` : '';
+  const cg = st.cg ? `<div class="cg"><span>CG · ${esc(st.cg)}</span></div>` : '';
+  const dlg = st.dialogue ? `<div class="dialogue"><div class="sp">${esc(st.dialogue.speaker||'旁白')}</div><div class="tx">${esc(st.dialogue.text||'')}</div><div class="tip">编辑预览</div></div>` : `<div class="hintline">选中指令，舞台停在执行后的状态</div>`;
+  const music = st.music ? `<div class="music">BGM · ${esc(st.music)}</div>` : '';
+  const fx = opts.fx ? (st.fx==='闪白' ? 'fx-flash' : st.fx==='震动' ? 'fx-shake' : '') : '';
+  const cap = opts.caption ? `<div style="position:absolute;left:2%;top:2.5%;font-size:9px;color:#64748b;background:rgba(0,0,0,.42);padding:1px 5px;border-radius:3px">${esc(opts.caption)}</div>` : '';
+  return `<div class="stage ${fx}" data-stage-root>
+    <div class="bg ${bg.cls}"></div>
+    ${cg}${chars}${subtitle}${music}${cap}${dlg}
+    <div class="snap-line"></div><div class="snap-line h"></div>
+  </div>`;
+}
+
+function fitMonitor(){
+  const shell = $('#monitorShell'), mon = $('#monitor');
+  if(!shell || !mon) return;
+  const shellW = shell.clientWidth, shellH = shell.clientHeight;
+  if(!shellW || !shellH) return;
+  const base = Math.min(shellW - 14, (shellH - 14) * 16 / 9);
+  const width = Math.max(220, base * state.zoom);
+  mon.style.width = width + 'px';
+  mon.style.height = (width * 9 / 16) + 'px';
+  shell.classList.toggle('zoomed', state.zoom > 1);
+  if(state.zoom > 1){ shell.style.justifyContent='flex-start'; shell.style.alignItems='flex-start'; shell.style.overflow='auto'; }
+  else { shell.style.justifyContent='center'; shell.style.alignItems='center'; shell.style.overflow='hidden'; }
+}
+
+function renderStage(){
+  const mon = $('#monitor');
+  if(!mon) return;
+  const cmds = currentCmds();
+  if(!cmds.length){ mon.innerHTML = '<div style="display:grid;place-items:center;height:100%;color:#5c6d80">此分镜还没有指令</div>'; return; }
+  const st = stateAt(state.sel.s, state.sel.b, state.sel.c);
+  const cmd = currentCmd();
+  const pulse = state.pulse; state.pulse = false;
+  mon.innerHTML = stageHTML(st, {
+    selType: cmd?.type, selSlot: cmd?.args?.slot, fx:pulse,
+    caption:`指令 ${state.sel.c+1} / ${cmds.length} · 执行后`
+  });
+}
+
+/* ---------- tree ---------- */
+function renderTree(){
+  const el = $('#tree'); if(!el) return;
+  let html = '';
+  project.scenes.forEach((scene, si) => {
+    html += `<div class="scene-row" data-scene="${si}"><span class="caret">▾</span>${esc(scene.title)}<span class="n">${scene.beats.length} 镜</span></div>`;
+    scene.beats.forEach((beat, bi) => {
+      const on = si===state.sel.s && bi===state.sel.b;
+      html += `<div class="beat-row ${on?'on':''}" data-s="${si}" data-b="${bi}">
+        <span class="dot"></span><span class="t">${esc(beat.title)}</span>
+        ${beat.warn?'<span class="warn">!</span>':''}
+        <span class="n" style="color:#4c5c6e;font-size:9px">${beat.cmds.length}</span>
+      </div>`;
+    });
+  });
+  el.innerHTML = html;
+  const total = project.scenes.reduce((n,s)=>n+s.beats.length,0);
+  $('#treeCount').textContent = `${project.scenes.length} 幕 · ${total} 镜`;
+  $('#topTitle').textContent = project.title;
+}
+
+/* ---------- bin ---------- */
+const BIN = [
+  {name:'雨夜街道', cls:'rain', kind:'bg'},
+  {name:'天台', cls:'roof', kind:'bg'},
+  {name:'屋檐下', cls:'warm', kind:'bg'},
+  {name:'天台 · 黎明', cls:'warm', kind:'bg'},
+  {name:'阿米娅', kind:'char', role:'阿米娅'},
+  {name:'陈', kind:'char', role:'陈'},
+  {name:'信号塔', cls:'cg', kind:'cg'},
+  {name:'雨声', kind:'bgm'}
+];
+function renderBin(){
+  const el = $('#bin'); if(!el) return;
+  el.innerHTML = BIN.map((it,i)=>{
+    const thumb = it.kind==='char'
+      ? `<div class="bin-thumb" style="background:linear-gradient(180deg,#132238,#0a111b)"><i style="color:${ROLE[it.role]}">●</i></div>`
+      : `<div class="bin-thumb ${it.cls||''}"><i>${it.kind==='cg'?'CG':it.kind==='bgm'?'BGM':'BG'}</i></div>`;
+    return `<div class="bin-item" data-bin="${i}" title="${esc(it.name)}">${thumb}<span>${esc(it.name)}</span></div>`;
+  }).join('');
+}
+
+/* ---------- transport / strip / cmd list ---------- */
+function stopIndexes(){
+  return currentCmds().map((c,i)=> (c.type==='line'||c.type==='wait') ? i : -1).filter(i=>i>=0);
+}
+function renderTransport(){
+  const el = $('#transport'); if(!el) return;
+  const cmds = currentCmds(), stops = stopIndexes();
+  const stopAt = stops.filter(i=>i<=state.sel.c).length;
+  el.innerHTML = `
+    <button class="tbtn" data-t="first" title="回到分镜开头">|◀</button>
+    <button class="tbtn" data-t="prev" title="上一句（←）">◀</button>
+    <button class="tbtn ${state.playing?'on':''}" data-t="play" title="播放 / 暂停（空格）">${state.playing?'❚❚':'▶'}</button>
+    <button class="tbtn" data-t="next" title="下一句（→）">▶|</button>
+    <span class="tlabel">指令 ${state.sel.c+1}/${cmds.length} · 第 ${Math.max(1,stopAt)}/${Math.max(1,stops.length)} 句</span>
+    <span class="sep"></span>
+    <button class="chipbtn ${state.loop?'on':''}" data-t="loop">循环本段</button>
+    <button class="chipbtn" data-t="speed">${state.speed.toFixed(1)}×</button>
+    <button class="chipbtn" data-t="end">分镜末态</button>
+    <span class="spacer"></span>
+    <button class="chipbtn" data-t="zoom">${state.zoom===1?'适配':state.zoom+'×'}</button>
+    <button class="chipbtn" data-t="full">全屏</button>
+    <span class="stage-chip P0" data-rm="P0-2" style="margin-left:4px;cursor:pointer">P0</span>
+  `;
+}
+function renderStrip(){
+  const el = $('#strip'); if(!el) return;
+  const cmds = currentCmds();
+  const weight = {line:1.7, wait:.55, bg:1, char:1, text:1.1, cg:1.1, bgm:1, fx:.7};
+  el.innerHTML = cmds.map((c,i)=>{
+    const active = i===state.sel.c;
+    return `<button class="strip-cmd t-${c.type} ${active?'active':''}" data-ci="${i}"
+      style="flex-grow:${weight[c.type]||1};flex-basis:${Math.max(16,(weight[c.type]||1)*26)}px"
+      title="${esc(TYPE_NAME[c.type])} ${i+1} · ${esc(summary(c))}">
+      <span class="t">${i+1}</span>${c.type==='line'?'':''}
+    </button>`;
+  }).join('');
+}
+
+function renderCmdList(){
+  const el = $('#cmdlist'); if(!el) return;
+  const cmds = currentCmds();
+  $('#cmdCount').textContent = `${cmds.length} 条`;
+  $('#selInfo').textContent = state.multi.size>1 ? `已选 ${state.multi.size} 条` : 'Shift 连选 · Ctrl 增减';
+  if(!cmds.length){ el.innerHTML = '<div class="empty">还没有指令。点击「＋」插入第一条。</div>'; return; }
+  el.innerHTML = cmds.map((c,i)=>{
+    const multi = state.multi.has(keyOf(state.sel.s,state.sel.b,i));
+    const sel = i===state.sel.c;
+    return `<div class="cmd-row ${sel?'sel':''} ${multi?'multi':''}" data-ci="${i}">
+      <span class="idx">${i+1}</span>
+      <span class="dot t-${c.type}"></span>
+      <span class="nm">${TYPE_NAME[c.type]||c.type}</span>
+      <span class="sum" data-sum="${i}">${esc(summary(c))}</span>
+      <span class="right">${c.type==='line'&&!c.args.text?'<span class="warn">!</span>':''}</span>
+    </div>`;
+  }).join('');
+  renderBatch();
+}
+function renderBatch(){
+  const el = $('#batchbar'); if(!el) return;
+  if(state.multi.size <= 1){ el.classList.remove('show'); el.innerHTML=''; return; }
+  el.classList.add('show');
+  el.innerHTML = `<b style="color:#93c5fd">已选 ${state.multi.size} 条</b>
+    <input id="batchSpeaker" placeholder="批量说话人">
+    <button class="btn tiny" data-batch="speaker">应用</button>
+    <button class="btn tiny" data-batch="copy">复制</button>
+    <button class="btn tiny" data-batch="delete">删除</button>
+    <span class="spacer"></span>
+    <button class="btn tiny" data-batch="clear">取消选择</button>`;
+}
+
+/* ---------- lanes ---------- */
+function laneSegments(type, slot){
+  const cmds = currentCmds(), out = [];
+  for(let i=0;i<cmds.length;i++){
+    const c = cmds[i];
+    if(c.type !== type) continue;
+    if(type==='char' && c.args.slot !== slot) continue;
+    let end = cmds.length;
+    for(let j=i+1;j<cmds.length;j++){
+      const d = cmds[j];
+      if(d.type===type && (type!=='char' || d.args.slot===slot)){ end=j; break; }
+    }
+    out.push({i,end});
+  }
+  return out;
+}
+function renderLanes(){
+  const el = $('#lanes'); if(!el) return;
+  const cmds = currentCmds(); const n = Math.max(1,cmds.length);
+  const tracks = [
+    {label:'背景', type:'bg'}, {label:'立绘 L', type:'char', slot:'l'},
+    {label:'立绘 M', type:'char', slot:'m'}, {label:'立绘 R', type:'char', slot:'r'},
+    {label:'文字', type:'text'}, {label:'BGM', type:'bgm'}
+  ];
+  const ph = ((state.sel.c+1)/n*100).toFixed(2);
+  let html = '';
+  tracks.forEach(tr=>{
+    const segs = laneSegments(tr.type, tr.slot);
+    const blocks = segs.map(sg=>{
+      const left = sg.i/n*100, width = Math.max(2.5,(sg.end-sg.i)/n*100);
+      const sel = sg.i===state.sel.c ? 'sel' : '';
+      return `<div class="blk ${tr.type==='char'?'char':tr.type} ${sel}" data-lane="${sg.i}"
+        style="left:${left}%;width:${width}%"
+        title="${esc(TYPE_NAME[tr.type])} ${sg.i+1}：${esc(summary(cmds[sg.i]))}"></div>`;
+    }).join('');
+    html += `<div class="lane"><div class="ln">${tr.label}</div><div class="tr">${blocks}<div class="ph" style="left:${ph}%"></div></div></div>`;
+  });
+  html += `<div class="lane-tick"><div></div><div class="ticks"><span>1</span><span>${Math.ceil(n/2)}</span><span>${n}</span></div></div>`;
+  el.innerHTML = html;
+}
+
+/* ---------- inspector ---------- */
+function fRow(label, inner, unit=''){
+  return `<div class="field"><label>${label}${unit?`<span class="unit">${unit}</span>`:''}</label>${inner}</div>`;
+}
+function options(map, cur){
+  return Object.entries(map).map(([k,v])=>`<option value="${esc(k)}" ${k===cur?'selected':''}>${esc(v)}</option>`).join('');
+}
+function range(key, value, min, max, step, suffix=''){
+  return `<div class="range-row"><input class="range" type="range" data-key="${key}" min="${min}" max="${max}" step="${step}" value="${value}"><span class="val" data-val="${key}">${Number(value).toFixed(step<1?1:0)}${suffix}</span></div>`;
+}
+function renderInspector(){
+  const el = $('#inspector'); if(!el) return;
+  const cmd = currentCmd();
+  $('#inspStage').innerHTML = cmd ? `<span class="stage-chip P0">P0</span>` : '';
+  if(!cmd){
+    el.innerHTML = `<div class="empty">未选中指令。<br>点击下方指令行，舞台会停在执行后的状态。</div>`;
+    return;
+  }
+  const a = cmd.args;
+  let fields = '';
+  if(cmd.type==='line'){
+    fields += fRow('说话人', `<input class="input" data-key="speaker" value="${esc(a.speaker)}">`);
+    fields += fRow('台词', `<textarea class="textarea" data-key="text">${esc(a.text)}</textarea>`);
+    fields += `<div class="inline-btns"><button class="btn tiny" data-act="prevStop">上一句</button><button class="btn tiny" data-act="nextStop">下一句</button><button class="btn tiny" data-act="focusScript">在剧本台查看</button></div>`;
+  } else if(cmd.type==='bg'){
+    fields += fRow('素材', `<button class="input" style="text-align:left" data-act="pickBin">${esc(a.asset||'选择背景')}</button>`);
+    fields += fRow('画面适配', `<select class="select" data-key="fit">${options({coverall:'铺满',showall:'完整显示',fill:'拉伸','':'原始尺寸'}, a.fit)}</select>`);
+    fields += fRow('淡入淡出', range('fade', a.fade, 0, 2, .05, 's'), '秒');
+    fields += `<div class="inline-btns"><button class="btn tiny" data-act="clearBg">清除背景</button></div>`;
+  } else if(cmd.type==='char'){
+    fields += fRow('站位', `<select class="select" data-key="slot">${options({l:'左',m:'中',r:'右'}, a.slot)}</select>`);
+    fields += fRow('角色', `<select class="select" data-key="role">${options({'阿米娅':'阿米娅','陈':'陈','凯尔希':'凯尔希','无':'（清除）'}, a.role||'无')}</select>`);
+    fields += fRow('表情', `<select class="select" data-key="mood">${options({calm:'平静',smile:'微笑',serious:'严肃',sad:'低落',angry:'愠怒'}, a.mood||'calm')}</select>`);
+    fields += fRow('位置 X', range('x', a.x, 8, 92, 1, '%'), '%');
+    fields += fRow('位置 Y', range('y', a.y, 30, 96, 1, '%'), '%');
+    fields += fRow('过渡', range('fade', a.fade, 0, 2, .05, 's'), '秒');
+    fields += `<div class="inline-btns"><button class="btn tiny" data-act="clearChar">清除该立绘</button><button class="btn tiny" data-act="centerChar">水平居中</button></div>`;
+  } else if(cmd.type==='text'){
+    fields += fRow('文字', `<textarea class="textarea" data-key="text">${esc(a.text)}</textarea>`);
+    fields += fRow('位置 X', range('x', a.x, 0, 100, 1, '%'), '%');
+    fields += fRow('位置 Y', range('y', a.y, 0, 100, 1, '%'), '%');
+    fields += fRow('字号', range('size', a.size, 12, 56, 1), 'px');
+    fields += fRow('对齐', `<select class="select" data-key="align">${options({left:'左',center:'居中',right:'右'}, a.align)}</select>`);
+  } else if(cmd.type==='cg'){
+    fields += fRow('素材', `<input class="input" data-key="asset" value="${esc(a.asset||'')}">`);
+    fields += `<div class="inline-btns"><button class="btn tiny" data-act="pickBin">从素材箱选择</button></div>`;
+  } else if(cmd.type==='bgm'){
+    fields += fRow('曲目', `<select class="select" data-key="asset">${options({'雨声':'雨声','紧迫':'紧迫','静默':'静默'}, a.asset||'')}</select>`);
+    fields += fRow('音量', range('volume', a.volume, 0, 1, .05), '0–1');
+    fields += `<div class="inline-btns"><button class="btn tiny" data-act="stopBgm">停止 BGM</button></div>`;
+  } else if(cmd.type==='wait'){
+    fields += fRow('等待', range('time', a.time, .2, 5, .1, 's'), '秒');
+  } else if(cmd.type==='fx'){
+    fields += fRow('特效', `<select class="select" data-key="asset">${options({'闪白':'闪白','震动':'震动','无':'（无）'}, a.asset||'无')}</select>`);
+    fields += `<div class="inline-btns"><button class="btn tiny" data-act="pulseFx">预览特效</button></div>`;
+  }
+  const pos = `第 ${state.sel.s+1} 幕 / ${esc(currentBeat().title)} / 指令 ${state.sel.c+1}`;
+  const boundaryNote = cmd.type==='char'
+    ? '边界：立绘仅支持位置移动与吸附（无自由缩放）。'
+    : cmd.type==='text'
+      ? '边界：舞台文字支持变换框调宽与字号。'
+      : '此指令会一直生效，直到被同类型指令覆盖。用状态泳道查看区间。';
+  el.innerHTML = `
+    <div class="insp-head"><b>${TYPE_NAME[cmd.type]}</b><span class="stage-chip P0">P0</span></div>
+    <div class="insp-sub">${esc(fullSummary(cmd))}</div>
+    ${fields}
+    <div class="divider"></div>
+    <div class="meta-box"><div class="k">来源</div><div class="v">${pos}</div></div>
+    <div class="meta-box"><div class="k">语义与边界</div><div class="v">${boundaryNote}</div></div>
+    <div class="meta-box"><div class="k">关联路线图</div><div class="v"><span class="rm-link" data-rm="P0-5">P0-5 检查器控件</span> · <span class="rm-link" data-rm="P1-2">P1-2 状态泳道</span></div></div>
+  `;
+}
+
+/* ---------- shared refresh ---------- */
+function updateCrumb(){
+  const beat = currentBeat();
+  $('#crumb').innerHTML = `${esc(project.title)} <span style="color:#3d4d60">/</span> <b>${esc(currentScene().title)}</b> <span style="color:#3d4d60">/</span> <b>${esc(beat.title)}</b> <span style="color:#3d4d60">/</span> 指令 ${state.sel.c+1}`;
+}
+function markDirty(){
+  const el = $('#saveState'); if(!el) return;
+  el.textContent = '保存中…';
+  clearTimeout(state.saveTimer);
+  state.saveTimer = setTimeout(()=>{
+    const d = new Date();
+    el.textContent = `已保存 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }, 650);
+}
+function pushUndo(){
+  try{
+    state.undo.push(JSON.stringify({scenes:project.scenes, sel:{...state.sel}}));
+    if(state.undo.length>30) state.undo.shift();
+    state.redo.length = 0;
+  }catch(e){}
+}
+function undo(){
+  if(!state.undo.length){ toast('没有可撤销的操作'); return; }
+  const cur = JSON.stringify({scenes:project.scenes, sel:{...state.sel}});
+  state.redo.push(cur);
+  const prev = JSON.parse(state.undo.pop());
+  project.scenes = prev.scenes;
+  state.sel = prev.sel;
+  state.multi.clear();
+  state.anchor = 0;
+  refreshAll();
+  toast('已撤销');
+}
+function redo(){
+  if(!state.redo.length){ toast('没有可重做的操作'); return; }
+  state.undo.push(JSON.stringify({scenes:project.scenes, sel:{...state.sel}}));
+  const next = JSON.parse(state.redo.pop());
+  project.scenes = next.scenes;
+  state.sel = next.sel;
+  state.multi.clear();
+  state.anchor = 0;
+  refreshAll();
+  toast('已重做');
+}
+function refreshAll(save=true){
+  renderTree(); renderStage(); renderTransport(); renderStrip(); renderCmdList(); renderLanes(); renderInspector(); updateCrumb(); fitMonitor();
+  if(state.view==='board') renderBoard();
+  if(state.view==='script') renderScript();
+  if(state.view==='deliver') renderDeliver();
+  if(state.device==='mobile') renderMobile();
+  if(save) markDirty();
+}
+
+function selectCmd(c, opts={}){
+  const cmds = currentCmds();
+  if(!cmds.length) return;
+  state.sel.c = clamp(c, 0, cmds.length-1);
+  if(!opts.keepMulti) { state.multi.clear(); state.anchor = state.sel.c; }
+  state.pulse = opts.pulse !== false;
+  renderStage(); renderTransport(); renderStrip(); renderCmdList(); renderLanes(); renderInspector(); updateCrumb();
+  if(opts.scroll !== false) scrollCmdIntoView();
+  if(state.device==='mobile') renderMobile();
+}
+function selectBeat(s,b){
+  state.sel = {s,b,c:0};
+  state.multi.clear(); state.anchor=0;
+  state.pulse = true;
+  refreshAll(false);
+  if(state.device==='mobile'){ state.sheet=false; renderMobile(); }
+}
+function scrollCmdIntoView(){
+  requestAnimationFrame(()=>{
+    const row = $(`.cmd-row[data-ci="${state.sel.c}"]`);
+    if(row) row.scrollIntoView({block:'nearest'});
+  });
+}
+
+/* ---------- board ---------- */
+function estimate(cmds){
+  let s = 0;
+  cmds.forEach(c=>{
+    if(c.type==='line') s += Math.max(1.8, (c.args.text||'').length * .16);
+    else if(c.type==='wait') s += Number(c.args.time||0);
+    else s += .7;
+  });
+  const m = Math.floor(s/60), sec = Math.round(s%60);
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+function miniStage(st){
+  const bg = BG[st.bg] || BG['黑场'];
+  const chars = Object.values(st.chars).map(c=>`<div class="mini-char" style="left:${c.x}%;background:linear-gradient(180deg,${ROLE[c.role]||'#64748b'},rgba(8,12,20,.9))"></div>`).join('');
+  const cg = st.cg ? '<div class="mini-cg"></div>' : '';
+  const line = st.dialogue ? `<div class="mini-line">${esc(st.dialogue.speaker)}：${esc(st.dialogue.text)}</div>` : '';
+  return `<div class="bg ${bg.cls}"></div>${cg}${chars}${line}`;
+}
+function renderBoard(){
+  const el = $('#board'); if(!el) return;
+  let html = '';
+  project.scenes.forEach((scene, si)=>{
+    html += `<div class="board-scene"><h3>${esc(scene.title)} <span style="color:#3d4d60">· ${scene.beats.length} 镜</span></h3><div class="board-grid" data-scene="${si}">`;
+    scene.beats.forEach((beat, bi)=>{
+      const st = stateAt(si, bi, beat.cmds.length-1);
+      const first = beat.cmds.find(c=>c.type==='line');
+      html += `<div class="board-card" draggable="true" data-s="${si}" data-b="${bi}">
+        <div class="thumb">${miniStage(st)}
+          <span class="stage-chip P1">P1</span>
+          ${beat.warn?'<span class="badge-warn">!</span>':''}
+        </div>
+        <div class="meta"><b>${esc(beat.title)}</b><span>${beat.cmds.length} 条 · 约 ${estimate(beat.cmds)} · ${esc(first?first.args.speaker:'')}</span></div>
+      </div>`;
+    });
+    html += `<div class="board-empty" data-newscene="${si}">＋ 新建分镜</div></div></div>`;
+  });
+  el.innerHTML = html;
+}
+
+/* ---------- script ---------- */
+function scriptRows(){
+  const rows = [];
+  project.scenes.forEach((scene, si)=>scene.beats.forEach((beat, bi)=>beat.cmds.forEach((c, ci)=>{
+    if(c.type==='line') rows.push({si, bi, ci, c, scene, beat});
+  })));
+  return rows;
+}
+function renderScript(){
+  const body = $('#scriptBody'); if(!body) return;
+  const q = ($('#scriptSearch')?.value || '').toLowerCase();
+  const only = !!$('#scriptCurrentScene')?.checked;
+  const rows = scriptRows().filter(r=>{
+    if(only && r.si!==state.sel.s) return false;
+    if(q && !(`${r.c.args.speaker} ${r.c.args.text}`.toLowerCase().includes(q))) return false;
+    return true;
+  });
+  $('#scriptCount').textContent = `${rows.length} 句对白`;
+  body.innerHTML = rows.map(r=>{
+    const k = keyOf(r.si, r.bi, r.ci);
+    const on = state.sel.s===r.si && state.sel.b===r.bi && state.sel.c===r.ci;
+    return `<tr class="${on?'on':''}" data-row="${k}" data-s="${r.si}" data-b="${r.bi}" data-c="${r.ci}">
+      <td><input type="checkbox" class="check srow" data-k="${k}" ${state.scriptSel.has(k)?'checked':''}></td>
+      <td class="meta">${esc(r.scene.title)} / ${esc(r.beat.title)}</td>
+      <td><input type="text" value="${esc(r.c.args.speaker)}" data-script-key="${k}" data-field="speaker"></td>
+      <td class="tx"><input type="text" value="${esc(r.c.args.text)}" data-script-key="${k}" data-field="text"></td>
+      <td><span class="stage-chip P0">P0</span></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5" class="m-empty">没有匹配的台词</td></tr>`;
+  $('#scriptSel').textContent = state.scriptSel.size;
+}
+
+/* ---------- deliver ---------- */
+const ISSUES = [
+  {lv:'err', title:'分镜 3 · 天台：CG 素材「信号塔」未加入作品素材', desc:'当前使用 PRTS 临时加载；导出到其它设备可能缺失。', target:{s:0,b:2,c:5}},
+  {lv:'warn', title:'分镜 5 · 走廊：特效「震动」为单次特效', desc:'导出视频时需确认时长与节奏；舞台预览只演示一次。', target:{s:1,b:1,c:4}},
+  {lv:'info', title:'全作品 6 个分镜，估算时长 01:24', desc:'导出前建议用「全屏」完整试播一次。', target:{s:0,b:0,c:0}}
+];
+function renderDeliver(){
+  const issues = $('#issues'); if(!issues) return;
+  const counts = {err:0,warn:0,info:0}; ISSUES.forEach(i=>counts[i.lv]++);
+  $('#issueSummary').textContent = `${counts.err} 错误 · ${counts.warn} 警告 · ${counts.info} 提示`;
+  issues.innerHTML = ISSUES.map((it,idx)=>`<div class="issue">
+    <span class="lv ${it.lv==='err'?'err':it.lv==='warn'?'warn':'info'}"></span>
+    <div class="tx"><b>${esc(it.title)}</b>${esc(it.desc)}</div>
+    <button class="go" data-issue="${idx}">前往</button>
+  </div>`).join('');
+  const exports = $('#exports');
+  exports.innerHTML = [
+    {t:'作品包 / 正式播放器直放', d:'导出作品 JSON，或调用本应用 StoryPlayer 直接播放', chip:'P0', st:'P0'},
+    {t:'台本 / 字幕', d:'TXT / CSV / SRT，基于 stopPoints 生成（零额外依赖）', chip:'P1', st:'P1'},
+    {t:'Web 只读交互包', d:'复用项目 Web 构建打包作品 JSON，比录屏更轻量', chip:'P1', st:'P1'},
+    {t:'预览视频 / 成片视频', d:'跨平台录制或离屏编码 MP4，需先评估编码与混音成本', chip:'P2', st:'P2'}
+  ].map(e=>`<div class="export-row"><div class="ic">⇩</div><div class="tx"><b>${e.t}</b><span>${e.d}</span></div><button class="btn tiny" data-export="${e.st}">导出</button><span class="stage-chip ${e.chip}">${e.chip}</span></div>`).join('');
+  const versions = $('#versions');
+  versions.innerHTML = state.versions.map((v,i)=>`<div class="version"><span class="dot" style="background:${v.auto?'#22c55e':'#60a5fa'}"></span><div class="t">${esc(v.label)}<span>${v.t} · ${v.auto?'自动':'手动'}</span></div><button data-version="${i}">恢复</button></div>`).join('');
+}
+
+/* ---------- road map ---------- */
+const ROADMAP = [
+  {id:'P0-1', stage:'P0', title:'播放头 + 文本不重建防闪屏', status:'live', view:'stage', target:'#cmdlist', desc:'点击指令，舞台停在执行后的状态；伴生前置：改对白不重建舞台、拖动期写盘节流。'},
+  {id:'P0-2', stage:'P0', title:'试播去模态 + 传输条', status:'live', view:'stage', target:'#transport', desc:'播放/暂停、上一句/下一句、循环、倍速、全屏；编辑时可直接看。'},
+  {id:'P0-3', stage:'P0', title:'选择集：多选、剪贴板、快捷键', status:'live', view:'stage', target:'#cmdlist', desc:'桌面优先：Shift 连选、Ctrl 增减、批量改说话人、复制粘贴、Delete、空格、方向键。'},
+  {id:'P0-4', stage:'P0', title:'舞台：缩放、吸附、继承直编边界', status:'part', view:'stage', target:'#monitor', desc:'变换框限舞台文字宽高/字号，立绘/CG 保持移动框+吸附；拖动继承对象可跳到来源或插入覆盖。'},
+  {id:'P0-5', stage:'P0', title:'检查器：滑杆、数值、分组', status:'part', view:'stage', target:'#inspector', desc:'严格映射真实指令参数，原型演示滑杆/数值联动与字段分组；数值 scrub 待实现。'},
+  {id:'P0-6', stage:'P0', title:'存量修复与原有入口保留', status:'part', view:'stage', target:'#cmdlist', desc:'修复窄屏拖动/列表倒序/校验定位；保留「我的作品」与「作品素材管理」弹窗。'},
+  {id:'P1-1', stage:'P1', title:'故事板：卡片墙（移动端轻量化）', status:'live', view:'board', target:'#board', desc:'桌面卡片墙拖拽重排与批量；手机端收敛为轻量分镜横滑切换，不做桌面式四区对等。'},
+  {id:'P1-2', stage:'P1', title:'状态泳道：生效区间 + 点击跳转', status:'part', view:'stage', target:'#lanes', desc:'原型演示泳道与点击跳转；影响范围高亮与「在此固化状态」待实现。'},
+  {id:'P1-3', stage:'P1', title:'素材箱：常驻 + 引用治理', status:'part', view:'stage', target:'#bin', desc:'原型演示点击素材写入选中指令；后续承接「作品素材管理」的引用统计与未引用清理。'},
+  {id:'P1-4', stage:'P1', title:'结构树 + 搜索 + 标记', status:'part', view:'stage', target:'#tree', desc:'原型演示三层结构与切换；全局搜索、标记、恢复位置待实现。'},
+  {id:'P1-5', stage:'P1', title:'分层保存 + 自动快照 + 撤销历史', status:'part', view:'deliver', target:'#versionCard', desc:'结构/素材分层写盘（解决大包阻塞），配合自动快照轮转与差异恢复。'},
+  {id:'P1-6', stage:'P1', title:'剧本台：对白表格（桌面优先）', status:'live', view:'script', target:'#scriptBody', desc:'桌面端批量改词与官方派生润色核心视图；手机端不上大表格，保留搜索定位。'},
+  {id:'P2-1', stage:'P2', title:'分支图 + 路径 / Predicate 调试', status:'plan', view:'stage', target:'', desc:'只读节点图已可查看；支持选项路径与 Predicate 命中状态调试（无通用变量系统）。'},
+  {id:'P2-2', stage:'P2', title:'交付：台本先行，Web 包与视频后置', status:'plan', view:'deliver', target:'#exportCard', desc:'P1 先交付台本/SRT 与正式播放器直放；Web 只读交互包与 MP4 录制编码按需后置评估。'},
+  {id:'P2-3', stage:'P2', title:'深层缓存：缩略图与关键帧缓存', status:'plan', view:'stage', target:'#monitor', desc:'面向超长作品的分镜缩略图持久缓存与关键帧状态快照。'},
+  {id:'P2-4', stage:'P2', title:'跨作品素材库 + 智能辅助', status:'plan', view:'stage', target:'#bin', desc:'全局素材/预设库；文本拆分镜、素材检索等建议式辅助。'}
+];
+const RM_STATUS = {live:'可体验', part:'部分示意', plan:'规划占位'};
+function renderRoadmap(){
+  const body = $('#roadmapBody'); if(!body) return;
+  let html = `<div class="proto-note"><b>怎么用：</b>点击任意条目「定位」会切到对应工作区并高亮区域；反之，界面上的 P0/P1/P2 徽标也会打开这里。顶部阶段筛选可预览分期后的界面。</div>`;
+  ['P0','P1','P2'].forEach(st=>{
+    html += `<div class="rm-group"><h3><span class="stage-chip ${st}">${st}</span>${st==='P0'?'体验基建':st==='P1'?'结构能力':'交付与高级能力'}</h3>`;
+    ROADMAP.filter(r=>r.stage===st).forEach(r=>{
+      html += `<div class="rm-item" data-rmid="${r.id}">
+        <div class="top"><span class="id">${r.id}</span><span class="tt">${esc(r.title)}</span><span class="st ${r.status==='part'?'part':r.status==='plan'?'plan':''}">${RM_STATUS[r.status]}</span></div>
+        <p>${esc(r.desc)}</p>
+        <span class="go-line" data-locate="${r.id}">定位到界面 →</span>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+  body.innerHTML = html;
+}
+function openRoadmap(focusId){
+  renderRoadmap();
+  $('#roadmapDrawer').classList.add('show');
+  $('#backdrop').classList.add('show');
+  if(focusId){
+    requestAnimationFrame(()=>{
+      const item = $(`.rm-item[data-rmid="${focusId}"]`);
+      if(item){ item.classList.add('hl'); item.scrollIntoView({block:'center'}); }
+    });
+  }
+}
+function closeRoadmap(){
+  $('#roadmapDrawer').classList.remove('show');
+  $('#backdrop').classList.remove('show');
+}
+function flash(sel){
+  const el = $(sel);
+  if(!el) return;
+  el.classList.remove('flash');
+  void el.offsetWidth;
+  el.classList.add('flash');
+  setTimeout(()=>el.classList.remove('flash'), 1300);
+}
+function locateRoadmap(id){
+  const item = ROADMAP.find(r=>r.id===id);
+  if(!item) return;
+  closeRoadmap();
+  if(item.stage==='P1' && state.filter==='P0'){ state.filter='P1'; applyStageFilter(); }
+  if(item.stage==='P2' && state.filter!=='all'){ state.filter='all'; applyStageFilter(); }
+  if(id==='P2-1'){ openBranch(); return; }
+  switchView(item.view);
+  if(item.target){
+    setTimeout(()=>{
+      const el = $(item.target);
+      if(el) el.scrollIntoView({block:'nearest'});
+      flash(item.target);
+    }, 120);
+  } else {
+    toast(`${id} · ${item.title}：${RM_STATUS[item.status]}`);
+  }
+}
+
+/* ---------- mobile ---------- */
+function mobileInspector(cmd){
+  const a = cmd.args;
+  if(cmd.type==='line'){
+    return `<div class="field"><label>说话人</label><input class="input" data-mkey="speaker" value="${esc(a.speaker)}"></div>
+      <div class="field"><label>台词</label><textarea class="textarea" data-mkey="text">${esc(a.text)}</textarea></div>
+      <div class="inline-btns"><button class="btn tiny" data-mact="stage">回到舞台</button><button class="btn tiny" data-mact="next">下一句</button></div>`;
+  }
+  if(cmd.type==='char'){
+    return `<div class="field"><label>角色</label><select class="select" data-mkey="role">${options({'阿米娅':'阿米娅','陈':'陈','凯尔希':'凯尔希','无':'（清除）'}, a.role||'无')}</select></div>
+      <div class="field"><label>站位</label><select class="select" data-mkey="slot">${options({l:'左',m:'中',r:'右'}, a.slot)}</select></div>
+      <div class="inline-btns"><button class="btn tiny" data-mact="center">水平居中</button></div>`;
+  }
+  if(cmd.type==='text'){
+    return `<div class="field"><label>文字</label><textarea class="textarea" data-mkey="text">${esc(a.text)}</textarea></div>`;
+  }
+  if(cmd.type==='bg'){
+    return `<div class="field"><label>背景</label><select class="select" data-mkey="asset">${options({'雨夜街道':'雨夜街道','屋檐下':'屋檐下','天台':'天台','指挥室':'指挥室','走廊':'走廊','天台 · 黎明':'天台 · 黎明','':'（清除）'}, a.asset||'')}</select></div>`;
+  }
+  if(cmd.type==='bgm'){
+    return `<div class="field"><label>BGM</label><select class="select" data-mkey="asset">${options({'雨声':'雨声','紧迫':'紧迫','静默':'静默','':'（停止）'}, a.asset||'')}</select></div>`;
+  }
+  return `<div class="meta-box"><div class="k">说明</div><div class="v">该指令在桌面端有更完整的参数；手机端先保留查看与基础编辑。</div></div>`;
+}
+function mobileAppPageHTML(page){
+  if(page==='library'){
+    return `
+      <div class="m-page-head"><h2>剧情馆</h2><p>PRTS 剧情目录、离线篇章与播放</p></div>
+      <div class="m-page-search"><span>⌕</span><span>搜索剧情标题或活动名</span></div>
+      <div class="m-page-tabs"><span class="m-page-tab on">全部</span><span class="m-page-tab">主线</span><span class="m-page-tab">支线</span><span class="m-page-tab">短篇</span></div>
+      <div class="m-page-row"><div><div class="tt">主线篇章 · 示例条目</div><div class="ss">主线 · 12 幕 · 已缓存</div></div><div class="thumb"></div></div>
+      <div class="m-page-row"><div><div class="tt">支线活动 · 示例条目</div><div class="ss">支线 · 8 幕</div></div><div class="thumb"></div></div>
+      <div class="m-page-row"><div><div class="tt">微型故事集 · 示例条目</div><div class="ss">短篇 · 3 幕</div></div><div class="thumb"></div></div>
+      <p class="m-page-note">既有功能占位：原型不展开搜索、分类、下载与播放；它位于应用主导航，不属于剧情编辑器。</p>`;
+  }
+  if(page==='character'){
+    return `
+      <div class="m-page-head"><h2>人物档案</h2><p>干员档案、立绘与出场剧情</p></div>
+      <div class="m-page-search"><span>⌕</span><span>搜索干员名或别名</span></div>
+      <div class="m-char-grid">
+        <div class="m-char-card"><div class="p">PORTRAIT</div><div class="m">干员 A<br><span style="color:#83939f;font-size:9px">近卫 · 档案 / 立绘 / 出场</span></div></div>
+        <div class="m-char-card"><div class="p">PORTRAIT</div><div class="m">干员 B<br><span style="color:#83939f;font-size:9px">术师 · 档案 / 立绘 / 出场</span></div></div>
+        <div class="m-char-card"><div class="p">PORTRAIT</div><div class="m">干员 C<br><span style="color:#83939f;font-size:9px">医疗 · 档案 / 立绘 / 出场</span></div></div>
+        <div class="m-char-card"><div class="p">PORTRAIT</div><div class="m">干员 D<br><span style="color:#83939f;font-size:9px">狙击 · 档案 / 立绘 / 出场</span></div></div>
+        <div class="m-char-card"><div class="p">PORTRAIT</div><div class="m">干员 E<br><span style="color:#83939f;font-size:9px">重装 · 档案 / 立绘 / 出场</span></div></div>
+        <div class="m-char-card"><div class="p">PORTRAIT</div><div class="m">干员 F<br><span style="color:#83939f;font-size:9px">辅助 · 档案 / 立绘 / 出场</span></div></div>
+      </div>
+      <p class="m-page-note">人物档案是独立应用页，与剧情编辑器共享素材与角色数据，但不是编辑器的工作区。</p>`;
+  }
+  return `
+    <div class="m-page-head"><h2>系统设置</h2><p>播放、缓存、网络与关于</p></div>
+    <div class="m-set-row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h7M15 7h5M4 17h5M13 17h7"></path><circle cx="13" cy="7" r="2"></circle><circle cx="11" cy="17" r="2"></circle></svg></span><span class="tx"><b>基础设置</b><span>主题、音量与播放速度</span></span><span class="chev">›</span></div>
+    <div class="m-set-row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="2.6"></ellipse><path d="M5 6v6c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6M5 12v6c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-6"></path></svg></span><span class="tx"><b>缓存设置</b><span>缓存占用、下载并发与本地文件</span></span><span class="chev">›</span></div>
+    <div class="m-set-row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M3.5 12h17M12 3.5c2.4 2.2 3.7 5.2 3.7 8.5s-1.3 6.3-3.7 8.5c-2.4-2.2-3.7-5.2-3.7-8.5S9.6 5.7 12 3.5z"></path></svg></span><span class="tx"><b>网络设置</b><span>检查剧情与素材连接</span></span><span class="chev">›</span></div>
+    <div class="m-set-row"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 11v5M12 8h.01"></path></svg></span><span class="tx"><b>关于</b><span>版本、更新与开源信息</span></span><span class="chev">›</span></div>
+    <p class="m-page-note">系统设置是应用级页面；编辑器内的阶段筛选、路线图与演示属于原型工具，不进入正式设置。</p>`;
+}
+
+function renderMobile(){
+  const top = $('#mTop'), screen = $('#mScreen'), workspaces = $('#mWorkspaces');
+  if(!top || !screen) return;
+  $$('.m-frame > .m-sheet').forEach(n=>n.remove());
+  $$('#mAppNav button').forEach(b=>b.classList.toggle('on', b.dataset.app===state.appPage));
+  if(state.appPage !== 'create'){
+    if(workspaces){ workspaces.classList.add('hidden'); workspaces.innerHTML=''; }
+    const title = state.appPage==='library' ? '剧情馆' : state.appPage==='character' ? '人物档案' : '系统设置';
+    top.innerHTML = `<b>方舟档案室</b><span class="app-note-chip">${title} · 位置占位</span><div class="grow"></div><button class="iconbtn" data-mroadmap="1">◈</button>`;
+    screen.innerHTML = mobileAppPageHTML(state.appPage);
+    return;
+  }
+  if(workspaces){
+    workspaces.classList.remove('hidden');
+    if(state.mView==='script') state.mView='stage';
+    workspaces.innerHTML = [
+      ['stage','演出（主）','P0'],['board','分镜切换','P1'],['deliver','检查导出','P1']
+    ].map(([v,n,p])=>`<button class="m-ws ${state.mView===v?'on':''}" data-mview="${v}">${n}<span class="stage-chip ${p}">${p}</span></button>`).join('') +
+    `<span style="margin-left:auto;align-self:center;font-size:9px;color:#83939f;white-space:nowrap;padding:0 4px" title="移动端不做对白表格与复杂框选">精简态</span>`;
+  }
+  top.innerHTML = `<b>${esc(project.title)}</b><span class="stage-chip P0">P0</span><div class="grow"></div><button class="iconbtn" data-mroadmap="1">◈</button>`;
+  if(state.mView==='stage'){
+    const st = stateAt(state.sel.s, state.sel.b, state.sel.c);
+    const cmd = currentCmd();
+    const pulse = state.pulse; state.pulse = false;
+    const stops = stopIndexes();
+    const stopAt = stops.filter(i=>i<=state.sel.c).length;
+    screen.innerHTML = `
+      <div class="m-monitor" id="mMonitor">${stageHTML(st,{selType:cmd?.type, selSlot:cmd?.args?.slot, fx:pulse, caption:`指令 ${state.sel.c+1}/${currentCmds().length}`})}</div>
+      <div class="m-transport">
+        <button class="tbtn" data-mt="prev">◀</button>
+        <button class="tbtn ${state.playing?'on':''}" data-mt="play">${state.playing?'❚❚':'▶'}</button>
+        <button class="tbtn" data-mt="next">▶</button>
+        <span class="tlabel">${Math.max(1,stopAt)}/${Math.max(1,stops.length)} 句</span>
+        <div class="grow"></div>
+        <button class="tbtn" data-mt="sheet">☰</button>
+      </div>
+      <div class="m-list">${currentCmds().map((c,i)=>`<div class="m-cmd ${i===state.sel.c?'on':''}" data-mc="${i}">
+        <span class="idx">${i+1}</span><span class="dot t-${c.type}"></span><span class="nm">${TYPE_NAME[c.type]}</span>
+        <span class="sum">${esc(summary(c))}</span><span class="stage-chip P0">P0</span></div>`).join('')}</div>
+      <div class="m-sheet ${state.sheet?'show':''}">
+        <div class="sh"><b>${cmd?TYPE_NAME[cmd.type]:'属性'}</b><span>${cmd?esc(fullSummary(cmd)):''}</span><button class="iconbtn x" data-mt="closeSheet">✕</button></div>
+        <div class="sb">${cmd?mobileInspector(cmd):'<div class="m-empty">未选中指令</div>'}</div>
+      </div>`;
+    const sheet = screen.querySelector('.m-sheet');
+    if(sheet) document.querySelector('.m-frame')?.appendChild(sheet);
+  } else if(state.mView==='board'){
+    let html = `<div style="padding:8px 10px 2px;color:#83939f;font-size:9.5px">移动端轻分镜切换：点击卡片直接回演出台；多选批量与剧本表格请用桌面端。</div>`;
+    project.scenes.forEach((scene,si)=>{
+      html += `<div style="padding:8px 10px 0;color:#7d90a6;font-size:10px">${esc(scene.title)}</div><div class="m-board">`;
+      scene.beats.forEach((beat,bi)=>{
+        const st = stateAt(si,bi,beat.cmds.length-1);
+        html += `<div class="m-card" data-ms="${si}" data-mb="${bi}"><div class="thumb">${miniStage(st)}<span class="stage-chip P1" style="position:absolute;top:4px;right:4px">P1</span></div>
+          <div class="meta"><b>${esc(beat.title)}</b><span>${beat.cmds.length} 条 · ${estimate(beat.cmds)}</span></div></div>`;
+      });
+      html += `</div>`;
+    });
+    screen.innerHTML = html || '<div class="m-empty">还没有分镜</div>';
+  } else {
+    screen.innerHTML = `<div class="m-deliver">${ISSUES.map((it,i)=>`<div class="m-issue"><span class="lv" style="background:${it.lv==='err'?'#ef4444':it.lv==='warn'?'#f59e0b':'#38bdf8'}"></span><div style="flex:1">${esc(it.title)}</div><button class="go" data-missue="${i}">前往</button></div>`).join('')}
+      <div style="margin-top:12px;color:#83939f;font-size:9.5px;line-height:1.6">移动端仅保留检查定位与轻导出（作品 JSON / 台本）；Web 只读交互包与 MP4 导出属桌面/后期探索。</div></div>`;
+  }
+}
+
+/* ---------- toast ---------- */
+let toastTimer = null;
+function toast(msg, opts={}){
+  const el = $('#toast');
+  el.innerHTML = msg;
+  el.classList.toggle('interactive', !!opts.interactive);
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ el.classList.remove('show','interactive'); }, opts.duration || 3000);
+}
+
+/* ---------- playback ---------- */
+function togglePlay(){ state.playing ? pause() : play(); }
+function play(){
+  if(!currentCmds().length) return;
+  pause();
+  state.playing = true;
+  renderTransport(); if(state.device==='mobile') renderMobile();
+  const step = ()=>{
+    if(!state.playing) return;
+    const next = state.sel.c + 1;
+    if(next >= currentCmds().length){
+      if(state.loop){
+        selectCmd(0, {keepMulti:true});
+        state.timer = setTimeout(step, 900/state.speed);
+      } else {
+        pause();
+        toast('分镜播放完毕 · 可用「循环本段」反复看');
+      }
+      return;
+    }
+    selectCmd(next, {keepMulti:true});
+    state.timer = setTimeout(step, 900/state.speed);
+  };
+  state.timer = setTimeout(step, 550/state.speed);
+}
+function pause(){
+  state.playing = false;
+  clearTimeout(state.timer);
+  state.timer = null;
+  renderTransport(); if(state.device==='mobile') renderMobile();
+}
+function prevStop(){
+  const stops = stopIndexes();
+  const prev = [...stops].reverse().find(i=>i < state.sel.c);
+  selectCmd(prev == null ? 0 : prev);
+}
+function nextStop(){
+  const stops = stopIndexes();
+  const next = stops.find(i=>i > state.sel.c);
+  if(next == null){ selectCmd(currentCmds().length-1); toast('已是最后一句'); }
+  else selectCmd(next);
+}
+
+/* ---------- selection ops ---------- */
+function selectedIndexes(){
+  if(state.multi.size > 1){
+    return [...new Set([...state.multi].map(k=>Number(k.split(':')[2])))].filter(i=>i>=0 && i<currentCmds().length).sort((a,b)=>a-b);
+  }
+  return [state.sel.c];
+}
+function copySel(){
+  const idx = selectedIndexes();
+  if(!idx.length) return;
+  state.clip = idx.map(i=>JSON.parse(JSON.stringify(currentCmds()[i])));
+  toast(`已复制 ${state.clip.length} 条指令 · 可在其它分镜 Ctrl+V 粘贴`);
+}
+function pasteSel(){
+  if(!state.clip.length){ toast('剪贴板为空：先用 Ctrl+C 复制指令'); return; }
+  pushUndo();
+  const cmds = currentCmds();
+  const at = state.sel.c + 1;
+  const clones = state.clip.map(c=>({type:c.type, args:{...c.args}}));
+  cmds.splice(at, 0, ...clones);
+  state.sel.c = at;
+  state.multi.clear();
+  refreshAll();
+  toast(`已粘贴 ${clones.length} 条指令`);
+}
+function deleteSel(){
+  const idx = selectedIndexes();
+  if(!idx.length) return;
+  if(currentCmds().length <= idx.length){ toast('分镜至少保留一条指令'); return; }
+  pushUndo();
+  const cmds = currentCmds();
+  [...idx].sort((a,b)=>b-a).forEach(i=>cmds.splice(i,1));
+  state.sel.c = clamp(Math.min(...idx), 0, cmds.length-1);
+  state.multi.clear();
+  refreshAll();
+  toast(`已删除 ${idx.length} 条指令 · Ctrl+Z 可撤销`);
+}
+function batchSpeaker(){
+  const input = $('#batchSpeaker');
+  const name = input ? input.value.trim() : '';
+  if(!name){ toast('先输入说话人'); return; }
+  const idx = selectedIndexes();
+  const targets = idx.map(i=>currentCmds()[i]).filter(c=>c && c.type==='line');
+  if(!targets.length){ toast('所选指令里没有对白'); return; }
+  pushUndo();
+  targets.forEach(c=>c.args.speaker = name);
+  state.multi.clear();
+  refreshAll();
+  toast(`已把 ${targets.length} 条对白的说话人改为「${name}」`);
+}
+
+/* ---------- view / device / filter ---------- */
+function switchView(view){
+  state.view = view;
+  $$('.view').forEach(v=>v.classList.toggle('active', v.id === 'view-'+view));
+  $$('#worktabs .tab').forEach(t=>t.classList.toggle('on', t.dataset.view===view));
+  if(view==='stage') setTimeout(fitMonitor, 30);
+  if(view==='board') renderBoard();
+  if(view==='script') renderScript();
+  if(view==='deliver') renderDeliver();
+}
+function switchAppPage(page){
+  state.appPage = page;
+  $$('.app-page').forEach(el=>el.classList.toggle('active', el.id === 'page-'+page));
+  $$('#appSidebar .app-nav-item').forEach(b=>b.classList.toggle('on', b.dataset.app===page));
+  $$('#mAppNav button').forEach(b=>b.classList.toggle('on', b.dataset.app===page));
+  if(page !== 'create'){
+    state.sheet = false;
+    if(state.playing) pause();
+  }
+  if(state.device==='mobile') renderMobile();
+  else if(page==='create') setTimeout(fitMonitor, 40);
+}
+function setDevice(d){
+  state.device = d;
+  const shell = $('#mobileShell');
+  if(shell) shell.classList.toggle('show', d==='mobile');
+  document.body.classList.toggle('device-mobile', d==='mobile');
+  document.body.classList.toggle('device-desktop', d==='desktop');
+  $$('#deviceSwitch button').forEach(b=>b.classList.toggle('on', b.dataset.device===d));
+  if(d==='mobile'){ renderMobile(); }
+  else setTimeout(fitMonitor, 40);
+}
+function applyStageFilter(){
+  const f = state.filter;
+  $$('#stageFilter button').forEach(b=>b.classList.toggle('on', b.dataset.filter===f));
+  $$('#worktabs .tab').forEach(tab=>{
+    const st = tab.dataset.stage || 'P0';
+    tab.classList.toggle('locked', f==='P0' && st!=='P0');
+  });
+  $$('[data-stage]').forEach(el=>{
+    if(el.classList.contains('tab')) return;
+    const st = el.dataset.stage;
+    const allowed = f==='all' || (f==='P0' && st==='P0') || (f==='P1' && st!=='P2');
+    el.classList.toggle('planned', !allowed);
+  });
+  $('#phaseHint').innerHTML = f==='all'
+    ? '全部阶段：P0 可体验 · P1 部分示意 · P2 占位'
+    : f==='P0'
+      ? '<b style="color:#4ade80">P0 视图</b>：播放头/传输/选择集；P1/P2 显示为规划态'
+      : '<b style="color:#fbbf24">P0 + P1</b>：结构视图与检查清单可用；P2 仍为规划态';
+  if(f==='P0' && state.view!=='stage') switchView('stage');
+}
+function stageNote(el){
+  let rm = el.dataset.rm || el.dataset.stage;
+  if(el.classList.contains('bin')) rm = 'P1-3';
+  else if(el.classList.contains('lanes-wrap')) rm = 'P1-2';
+  else if(el.id==='view-board') rm = 'P1-1';
+  else if(el.id==='view-script') rm = 'P1-6';
+  else if(el.id==='view-deliver') rm = 'P1-5';
+  else if(el.id==='exportCard') rm = 'P2-2';
+  else if(el.classList.contains('tab')) rm = el.dataset.view==='board' ? 'P1-1' : el.dataset.view==='script' ? 'P1-6' : 'P1-5';
+  const item = ROADMAP.find(r=>r.id===rm);
+  if(item) toast(`<b>${item.id}</b> ${esc(item.title)} · ${RM_STATUS[item.status]}。点击顶部「路线图」查看分期。`);
+  else toast('该能力属于后续阶段；点击顶部「路线图」查看分期。');
+}
+
+/* ---------- events ---------- */
+function bindEvents(){
+  $('#worktabs').addEventListener('click', e=>{
+    const tab = e.target.closest('.tab'); if(!tab) return;
+    if(tab.classList.contains('locked')){ stageNote(tab); return; }
+    switchView(tab.dataset.view);
+  });
+  $('#stageFilter').addEventListener('click', e=>{
+    const b = e.target.closest('button'); if(!b) return;
+    state.filter = b.dataset.filter;
+    applyStageFilter();
+  });
+  $('#deviceSwitch').addEventListener('click', e=>{
+    const b = e.target.closest('button'); if(!b) return;
+    setDevice(b.dataset.device);
+  });
+  $('#btnDemo').addEventListener('click', demo);
+  $('#backDesktop')?.addEventListener('click', ()=>setDevice('desktop'));
+  $('#btnUndo').addEventListener('click', undo);
+  $('#btnRedo').addEventListener('click', redo);
+  $('#btnProjects').addEventListener('click', ()=>toast('「我的作品」是编辑前入口（新建 / 导入 / 正式播放器直放），与交付台分离；第一期保留。'));
+  $('#btnAssets')?.addEventListener('click', ()=>toast('「作品素材管理」弹窗（引用计数与未引用清理）在第一期保留，P1 后逐步并入常驻素材箱。'));
+  $('#appSidebar').addEventListener('click', e=>{
+    const b = e.target.closest('[data-app]'); if(!b) return;
+    switchAppPage(b.dataset.app);
+  });
+  $('#mAppNav').addEventListener('click', e=>{
+    const b = e.target.closest('[data-app]'); if(!b) return;
+    switchAppPage(b.dataset.app);
+  });
+  $('#mWorkspaces').addEventListener('click', e=>{
+    const b = e.target.closest('[data-mview]'); if(!b) return;
+    state.mView = b.dataset.mview;
+    state.sheet = false;
+    renderMobile();
+  });
+
+  $('#transport').addEventListener('click', e=>{
+    const b = e.target.closest('[data-t]'); if(!b) return;
+    const t = b.dataset.t;
+    const cmds = currentCmds();
+    if(t==='first') selectCmd(0);
+    else if(t==='prev') prevStop();
+    else if(t==='play') togglePlay();
+    else if(t==='next') nextStop();
+    else if(t==='loop'){ state.loop = !state.loop; renderTransport(); toast(state.loop?'循环当前分镜':'已关闭循环'); }
+    else if(t==='speed'){ state.speed = state.speed===1?2:state.speed===2?4:1; renderTransport(); toast(`播放速度 ${state.speed}×`); }
+    else if(t==='end') selectCmd(cmds.length-1);
+    else if(t==='zoom'){ state.zoom = state.zoom===1?1.5:state.zoom===1.5?2:1; fitMonitor(); renderTransport(); }
+    else if(t==='full'){ const m = $('#monitor'); if(m.requestFullscreen) m.requestFullscreen().catch(()=>toast('当前浏览器未允许全屏')); }
+  });
+
+  $('#strip').addEventListener('click', e=>{
+    const b = e.target.closest('[data-ci]'); if(!b) return;
+    selectCmd(Number(b.dataset.ci));
+  });
+
+  $('#cmdlist').addEventListener('click', e=>{
+    const row = e.target.closest('.cmd-row'); if(!row) return;
+    const i = Number(row.dataset.ci);
+    const key = keyOf(state.sel.s, state.sel.b, i);
+    if(e.shiftKey && state.anchor != null){
+      const a = Math.min(state.anchor, i), b = Math.max(state.anchor, i);
+      if(!(e.ctrlKey || e.metaKey)) state.multi.clear();
+      for(let k=a; k<=b; k++) state.multi.add(keyOf(state.sel.s, state.sel.b, k));
+      state.sel.c = i;
+    } else if(e.ctrlKey || e.metaKey){
+      state.multi.has(key) ? state.multi.delete(key) : state.multi.add(key);
+      state.sel.c = i;
+      state.anchor = i;
+    } else {
+      state.multi.clear();
+      state.sel.c = i;
+      state.anchor = i;
+    }
+    state.pulse = true;
+    renderStage(); renderTransport(); renderStrip(); renderCmdList(); renderLanes(); renderInspector(); updateCrumb();
+    if(state.device==='mobile') renderMobile();
+  });
+
+  $('#batchbar').addEventListener('click', e=>{
+    const b = e.target.closest('[data-batch]'); if(!b) return;
+    const a = b.dataset.batch;
+    if(a==='speaker') batchSpeaker();
+    else if(a==='copy') copySel();
+    else if(a==='delete') deleteSel();
+    else if(a==='clear'){ state.multi.clear(); renderCmdList(); renderInspector(); }
+  });
+
+  $('#lanes').addEventListener('click', e=>{
+    const b = e.target.closest('[data-lane]'); if(!b) return;
+    selectCmd(Number(b.dataset.lane));
+  });
+
+  $('#tree').addEventListener('click', e=>{
+    const beat = e.target.closest('.beat-row');
+    if(beat){ selectBeat(Number(beat.dataset.s), Number(beat.dataset.b)); return; }
+    const scene = e.target.closest('.scene-row');
+    if(scene){ const s = Number(scene.dataset.scene); selectBeat(s, 0); }
+  });
+
+  $('#bin').addEventListener('click', e=>{
+    const item = e.target.closest('[data-bin]'); if(!item) return;
+    const meta = BIN[Number(item.dataset.bin)];
+    const cmd = currentCmd();
+    if(!cmd){ toast('先在指令列表选中一条指令'); return; }
+    pushUndo();
+    if(meta.kind==='bg' && cmd.type==='bg'){ cmd.args.asset = meta.name; }
+    else if(meta.kind==='char' && cmd.type==='char'){ cmd.args.role = meta.role; }
+    else if(meta.kind==='cg' && cmd.type==='cg'){ cmd.args.asset = meta.name; }
+    else if(meta.kind==='bgm' && cmd.type==='bgm'){ cmd.args.asset = meta.name; }
+    else {
+      state.undo.pop();
+      toast(`当前选中的是「${TYPE_NAME[cmd.type]}」，请选中对应的${meta.kind==='bg'?'背景':meta.kind==='char'?'立绘':meta.kind==='cg'?' CG':' BGM'}指令`);
+      return;
+    }
+    refreshAll();
+    toast(`已应用素材「${meta.name}」`);
+  });
+
+  $('#inspector').addEventListener('focusin', e=>{
+    if(e.target.matches('[data-key]') && !state.editing){ pushUndo(); state.editing = true; }
+  });
+  $('#inspector').addEventListener('focusout', e=>{
+    if(e.target.matches('[data-key]')) state.editing = false;
+  });
+  $('#inspector').addEventListener('pointerdown', e=>{
+    if(e.target.matches('input[type=range]') && !state.editing){ pushUndo(); state.editing = true; }
+  });
+  $('#inspector').addEventListener('pointerup', ()=>{ state.editing = false; });
+
+  const unitOf = key => (key==='x'||key==='y') ? '%' : (key==='fade'||key==='time'||key==='duration') ? 's' : key==='size' ? 'px' : '';
+  $('#inspector').addEventListener('input', e=>{
+    const t = e.target; if(!t.matches('[data-key]')) return;
+    const cmd = currentCmd(); if(!cmd) return;
+    const key = t.dataset.key;
+    let v = t.value;
+    if(t.type==='range'){
+      v = Number(v);
+      const val = t.parentElement.querySelector('.val');
+      if(val) val.textContent = (key==='fade'||key==='volume'||key==='time' ? Number(v).toFixed(1) : Math.round(v)) + unitOf(key);
+    }
+    cmd.args[key] = v;
+    if(cmd.type==='char' && key==='role' && v==='无'){ /* 清除在渲染时处理 */ }
+    renderStage();
+    const sum = $(`.cmd-row[data-ci="${state.sel.c}"] .sum`);
+    if(sum) sum.textContent = summary(cmd);
+    if(state.device==='mobile'){ const m=$('#mMonitor'); if(m){ const st=stateAt(state.sel.s,state.sel.b,state.sel.c); m.innerHTML=stageHTML(st,{selType:cmd.type,selSlot:cmd.args.slot,caption:`指令 ${state.sel.c+1}/${currentCmds().length}`}); } }
+    markDirty();
+  });
+  $('#inspector').addEventListener('change', e=>{
+    if(!e.target.matches('[data-key]')) return;
+    renderInspector();
+    renderTransport(); renderCmdList(); updateCrumb();
+  });
+  $('#inspector').addEventListener('click', e=>{
+    const b = e.target.closest('[data-act]'); if(!b) return;
+    const cmd = currentCmd(); if(!cmd) return;
+    const a = b.dataset.act;
+    if(a==='prevStop') prevStop();
+    else if(a==='nextStop') nextStop();
+    else if(a==='focusScript'){ switchView('script'); renderScript(); }
+    else if(a==='pickBin'){ $('.bin')?.scrollIntoView({block:'nearest'}); toast('在左下素材箱点击背景素材即可应用'); }
+    else if(a==='clearBg'){ pushUndo(); cmd.args.asset=''; refreshAll(); }
+    else if(a==='clearChar'){ pushUndo(); cmd.args.role='无'; refreshAll(); }
+    else if(a==='centerChar'){ pushUndo(); cmd.args.x=50; refreshAll(); }
+    else if(a==='stopBgm'){ pushUndo(); cmd.args.asset=''; refreshAll(); }
+    else if(a==='pulseFx'){ state.pulse=true; renderStage(); }
+  });
+
+  /* board dnd */
+  let dragBeat = null;
+  $('#board').addEventListener('dragstart', e=>{
+    const card = e.target.closest('.board-card'); if(!card) return;
+    dragBeat = {s:Number(card.dataset.s), b:Number(card.dataset.b)};
+    card.classList.add('drag');
+    try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain','beat'); }catch(_){}
+  });
+  $('#board').addEventListener('dragover', e=>{
+    const card = e.target.closest('.board-card'); if(!card) return;
+    e.preventDefault();
+    $$('.board-card.drop-target').forEach(x=>x.classList.remove('drop-target'));
+    card.classList.add('drop-target');
+  });
+  $('#board').addEventListener('dragleave', e=>{
+    const card = e.target.closest('.board-card'); if(card) card.classList.remove('drop-target');
+  });
+  $('#board').addEventListener('drop', e=>{
+    const card = e.target.closest('.board-card'); if(!card || !dragBeat) return;
+    e.preventDefault();
+    const to = {s:Number(card.dataset.s), b:Number(card.dataset.b)};
+    moveBeat(dragBeat, to);
+    dragBeat = null;
+  });
+  $('#board').addEventListener('dragend', ()=>{
+    $$('.board-card').forEach(x=>x.classList.remove('drag','drop-target'));
+    dragBeat = null;
+  });
+  $('#board').addEventListener('click', e=>{
+    const card = e.target.closest('.board-card');
+    if(card){ selectBeat(Number(card.dataset.s), Number(card.dataset.b)); switchView('stage'); return; }
+    if(e.target.closest('[data-newscene]')) toast('新建分镜属 P1 示意；当前原型请用「复制分镜」或直接在数据中新增');
+  });
+  $('#btnBoardNew').addEventListener('click', ()=>toast('新建分镜属 P1 示意'));
+
+  /* script */
+  $('#scriptSearch').addEventListener('input', renderScript);
+  $('#scriptCurrentScene').addEventListener('change', renderScript);
+  $('#scriptBody').addEventListener('change', e=>{
+    const cb = e.target.closest('.srow');
+    if(cb){ cb.checked ? state.scriptSel.add(cb.dataset.k) : state.scriptSel.delete(cb.dataset.k); $('#scriptSel').textContent=state.scriptSel.size; return; }
+    const inp = e.target.closest('[data-script-key]');
+    if(inp){
+      const [s,b,c] = inp.dataset.scriptKey.split(':').map(Number);
+      const cmd = project.scenes[s].beats[b].cmds[c];
+      cmd.args[inp.dataset.field] = inp.value;
+      markDirty();
+      if(s===state.sel.s && b===state.sel.b){ renderStage(); }
+    }
+  });
+  $('#scriptBody').addEventListener('dblclick', e=>{
+    const tr = e.target.closest('tr[data-row]'); if(!tr) return;
+    selectBeat(Number(tr.dataset.s), Number(tr.dataset.b));
+    selectCmd(Number(tr.dataset.c));
+    switchView('stage');
+  });
+  $('#scriptAll').addEventListener('change', e=>{
+    if(e.target.checked){ scriptRows().forEach(r=>state.scriptSel.add(keyOf(r.si,r.bi,r.ci))); }
+    else state.scriptSel.clear();
+    renderScript();
+  });
+  $('#btnScriptApply').addEventListener('click', ()=>{
+    const name = $('#scriptSpeaker').value.trim();
+    if(!name){ toast('先输入说话人'); return; }
+    if(!state.scriptSel.size){ toast('先勾选要修改的行'); return; }
+    pushUndo();
+    let n = 0;
+    [...state.scriptSel].forEach(k=>{
+      const [s,b,c] = k.split(':').map(Number);
+      const cmd = project.scenes[s].beats[b].cmds[c];
+      if(cmd && cmd.type==='line'){ cmd.args.speaker = name; n++; }
+    });
+    state.scriptSel.clear();
+    refreshAll();
+    toast(`已批量修改 ${n} 句对白的说话人`);
+  });
+
+  /* deliver */
+  $('#issues').addEventListener('click', e=>{
+    const b = e.target.closest('[data-issue]'); if(!b) return;
+    const it = ISSUES[Number(b.dataset.issue)];
+    selectBeat(it.target.s, it.target.b);
+    selectCmd(it.target.c);
+    switchView('stage');
+    setTimeout(()=>flash('#cmdlist'), 120);
+    toast(`已定位：${esc(it.title)}`);
+  });
+  $('#exports').addEventListener('click', e=>{
+    const b = e.target.closest('[data-export]'); if(!b) return;
+    const st = b.dataset.export;
+    if(st==='P0') toast('<b>已有 / P0</b>：导出作品 JSON，或通过正式播放器 StoryPlayer 直接播放。');
+    else if(st==='P2') toast('<b>P2 远期探索</b>：跨平台 MP4 录制与离屏逐帧渲染，需先评估编码与混音成本。');
+    else toast('<b>P1 轻交付</b>：基于 stopPoints 生成 TXT/CSV/SRT 台本字幕，或复用 Web 构建生成只读交互包。原型不实际导出。');
+  });
+  $('#btnSnapshot').addEventListener('click', ()=>{
+    const d = new Date();
+    state.versions.unshift({t:`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`, label:'手动快照 · 当前编辑位置', auto:false});
+    renderDeliver();
+    toast('已创建快照（原型仅内存保存）');
+  });
+  $('#versions').addEventListener('click', e=>{
+    const b = e.target.closest('[data-version]'); if(!b) return;
+    toast('恢复快照属 P1 示意：真实实现会先预览差异，再覆盖当前草稿');
+  });
+
+  /* roadmap */
+  $('#btnRoadmap').addEventListener('click', ()=>openRoadmap());
+  $('#closeRoadmap').addEventListener('click', closeRoadmap);
+  $('#backdrop').addEventListener('click', ()=>{ closeRoadmap(); closeBranch(); });
+  $('#roadmapBody').addEventListener('click', e=>{
+    const loc = e.target.closest('[data-locate]');
+    if(loc){ locateRoadmap(loc.dataset.locate); return; }
+    const item = e.target.closest('.rm-item');
+    if(item){ locateRoadmap(item.dataset.rmid); }
+  });
+  $('#closeBranch').addEventListener('click', closeBranch);
+  $('#branchModal').addEventListener('click', e=>{ if(e.target.id==='branchModal') closeBranch(); });
+  $('#btnHelp').addEventListener('click', ()=>$('#helpModal').classList.add('show'));
+  $('#closeHelp').addEventListener('click', ()=>$('#helpModal').classList.remove('show'));
+  $('#helpModal').addEventListener('click', e=>{ if(e.target.id==='helpModal') $('#helpModal').classList.remove('show'); });
+
+  /* data-rm global */
+  document.addEventListener('click', e=>{
+    const rm = e.target.closest('[data-rm]');
+    if(!rm) return;
+    e.preventDefault(); e.stopPropagation();
+    openRoadmap(rm.dataset.rm);
+  }, true);
+  document.addEventListener('click', e=>{
+    if(e.defaultPrevented) return;
+    const planned = e.target.closest('.planned');
+    if(!planned) return;
+    e.preventDefault(); e.stopPropagation();
+    stageNote(planned);
+  }, true);
+  document.addEventListener('click', e=>{
+    if(e.defaultPrevented) return;
+    const planned = e.target.closest('.planned');
+    if(!planned) return;
+    e.preventDefault(); e.stopPropagation();
+    stageNote(planned);
+  }, true);
+
+  /* keyboard */
+  document.addEventListener('keydown', e=>{
+    const t = e.target;
+    if(t && (t.matches('input,textarea,select') || t.isContentEditable)) return;
+    if(e.ctrlKey || e.metaKey){
+      if(e.key.toLowerCase()==='z'){ e.preventDefault(); e.shiftKey ? redo() : undo(); }
+      else if(e.key.toLowerCase()==='c'){ e.preventDefault(); copySel(); }
+      else if(e.key.toLowerCase()==='v'){ e.preventDefault(); pasteSel(); }
+      else if(e.key.toLowerCase()==='d'){ e.preventDefault(); state.clip = [JSON.parse(JSON.stringify(currentCmd()||{type:'line',args:{speaker:'',text:''}}))]; pasteSel(); }
+      return;
+    }
+    if(e.code==='Space'){ e.preventDefault(); togglePlay(); }
+    else if(e.key==='ArrowLeft'){ e.preventDefault(); prevStop(); }
+    else if(e.key==='ArrowRight'){ e.preventDefault(); nextStop(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); selectCmd(state.sel.c-1); }
+    else if(e.key==='ArrowDown'){ e.preventDefault(); selectCmd(state.sel.c+1); }
+    else if(e.key==='Delete' || e.key==='Backspace'){ e.preventDefault(); deleteSel(); }
+    else if(e.key==='Escape'){ state.multi.clear(); state.sheet=false; renderCmdList(); renderInspector(); if(state.device==='mobile') renderMobile(); }
+  });
+
+  /* stage drag */
+  function findSourceCommand(kind, slot){
+    for(let si=state.sel.s; si>=0; si--){
+      const beats = project.scenes[si].beats;
+      const maxB = si===state.sel.s ? state.sel.b : beats.length-1;
+      for(let bi=maxB; bi>=0; bi--){
+        const cmds = beats[bi].cmds;
+        const maxC = (si===state.sel.s && bi===state.sel.b) ? state.sel.c : cmds.length-1;
+        for(let ci=maxC; ci>=0; ci--){
+          const c = cmds[ci];
+          if(kind==='char' && c.type==='char' && c.args.slot===slot && c.args.role && c.args.role!=='无') return {s:si,b:bi,c:ci,cmd:c};
+          if(kind==='text' && c.type==='text' && c.args.text) return {s:si,b:bi,c:ci,cmd:c};
+        }
+      }
+    }
+    return null;
+  }
+  function promptInheritedDrag(kind, slot){
+    const src = findSourceCommand(kind, slot);
+    if(!src){ toast('未找到来源指令'); return; }
+    window.__inheritPending = {src, kind, slot};
+    toast(`该${kind==='char'?'立绘':'文字'}继承自「${esc(project.scenes[src.s].beats[src.b].title)}」：
+      <button class="btn tiny" data-inherit="jump">跳到来源</button>
+      <button class="btn tiny" data-inherit="override">在此插入覆盖</button>`, {interactive:true, duration:6000});
+  }
+  $('#toast').addEventListener('click', e=>{
+    const b = e.target.closest('[data-inherit]'); if(!b || !window.__inheritPending) return;
+    const {src} = window.__inheritPending;
+    window.__inheritPending = null;
+    if(b.dataset.inherit==='jump'){
+      selectBeat(src.s, src.b); selectCmd(src.c);
+      toast('已跳转到来源指令，可直接拖动调整');
+    } else {
+      pushUndo();
+      const cmds = currentCmds();
+      const at = state.sel.c + 1;
+      cmds.splice(at, 0, {type:src.cmd.type, args:{...src.cmd.args}});
+      state.sel.c = at;
+      state.multi.clear();
+      refreshAll();
+      toast('已在当前分镜插入覆盖指令，现在可以直接拖动');
+    }
+  });
+  const monitor = $('#monitor');
+  monitor.addEventListener('pointerdown', e=>{
+    const charEl = e.target.closest('.char');
+    const subEl = e.target.closest('.subtitle');
+    if(!charEl && !subEl) return;
+    let cmd = currentCmd();
+    if(charEl){
+      const slot = charEl.dataset.slot;
+      if(!cmd || cmd.type!=='char' || cmd.args.slot!==slot){
+        const arr = currentCmds().map((c,i)=>({c,i})).filter(x=>x.c.type==='char' && x.c.args.slot===slot);
+        if(!arr.length){ promptInheritedDrag('char', slot); return; }
+        selectCmd(arr[arr.length-1].i, {pulse:false});
+        cmd = currentCmd();
+      }
+      beginDrag(e, 'char', slot, charEl, cmd);
+    } else {
+      if(!cmd || cmd.type!=='text'){
+        const arr = currentCmds().map((c,i)=>({c,i})).filter(x=>x.c.type==='text');
+        if(!arr.length){ promptInheritedDrag('text', null); return; }
+        selectCmd(arr[arr.length-1].i, {pulse:false});
+        cmd = currentCmd();
+      }
+      beginDrag(e, 'text', null, subEl, cmd);
+    }
+  });
+  let dragState = null;
+  function beginDrag(e, kind, slot, el, cmd){
+    const rect = monitor.getBoundingClientRect();
+    pushUndo();
+    dragState = {kind, slot, el, cmd, rect, sx:e.clientX, sy:e.clientY, ox:Number(cmd.args.x), oy:Number(cmd.args.y), moved:false};
+    monitor.querySelector('.stage')?.classList.add('dragging');
+    e.preventDefault();
+  }
+  window.addEventListener('pointermove', e=>{
+    if(!dragState) return;
+    const {rect} = dragState;
+    let dx = (e.clientX-dragState.sx)/rect.width*100;
+    let dy = (e.clientY-dragState.sy)/rect.height*100;
+    let x = clamp(dragState.ox+dx, 8, 92);
+    let y = clamp(dragState.oy+dy, dragState.kind==='char'?30:0, 96);
+    if(Math.abs(x-50) < 1.1) x = 50;
+    dragState.moved = dragState.moved || Math.abs(dx)>.2 || Math.abs(dy)>.2;
+    dragState.cmd.args.x = r1(x);
+    dragState.cmd.args.y = r1(y);
+    dragState.el.style.left = x+'%';
+    dragState.el.style.top = y+'%';
+    const ix = $('#inspector [data-key="x"]'), iy = $('#inspector [data-key="y"]');
+    if(ix) ix.value = x;
+    if(iy) iy.value = y;
+    const vx = $('#inspector [data-val="x"]'), vy = $('#inspector [data-val="y"]');
+    if(vx) vx.textContent = Math.round(x)+'%';
+    if(vy) vy.textContent = Math.round(y)+'%';
+  });
+  window.addEventListener('pointerup', ()=>{
+    if(!dragState) return;
+    dragState = null;
+    monitor.querySelector('.stage')?.classList.remove('dragging');
+    markDirty();
+    renderInspector(); renderStage(); renderTransport(); renderCmdList();
+  });
+
+  /* mobile */
+  $('#mTop').addEventListener('click', e=>{
+    if(e.target.closest('[data-mroadmap]')) openRoadmap();
+  });
+  $('#mobileShell').addEventListener('click', e=>{
+    const t = e.target.closest('[data-mt]');
+    if(t){
+      const a = t.dataset.mt;
+      if(a==='prev') prevStop();
+      else if(a==='play') togglePlay();
+      else if(a==='next') nextStop();
+      else if(a==='sheet'){ state.sheet = !state.sheet; renderMobile(); }
+      else if(a==='closeSheet'){ state.sheet = false; renderMobile(); }
+      return;
+    }
+    const cmdRow = e.target.closest('[data-mc]');
+    if(cmdRow){ selectCmd(Number(cmdRow.dataset.mc), {keepMulti:true}); state.sheet = true; renderMobile(); return; }
+    const card = e.target.closest('[data-ms]');
+    if(card && card.classList.contains('m-card')){
+      selectBeat(Number(card.dataset.ms), Number(card.dataset.mb));
+      state.mView='stage'; renderMobile(); return;
+    }
+    const issue = e.target.closest('[data-missue]');
+    if(issue){ const it = ISSUES[Number(issue.dataset.missue)]; selectBeat(it.target.s,it.target.b); selectCmd(it.target.c); state.mView='stage'; renderMobile(); }
+    const act = e.target.closest('[data-mact]');
+    if(act){
+      const cmd = currentCmd(); if(!cmd) return;
+      if(act.dataset.mact==='center'){ pushUndo(); cmd.args.x=50; refreshAll(); }
+      else if(act.dataset.mact==='next') nextStop();
+      else if(act.dataset.mact==='stage'){ state.sheet=false; renderMobile(); }
+    }
+    const line = e.target.closest('.m-line[data-mc2]');
+    if(line){ selectBeat(Number(line.dataset.ms), Number(line.dataset.mb)); selectCmd(Number(line.dataset.mc2)); state.mView='stage'; state.sheet=true; renderMobile(); }
+  });
+  $('#mobileShell').addEventListener('input', e=>{
+    const t = e.target.closest('[data-mkey]'); if(!t) return;
+    const cmd = currentCmd(); if(!cmd) return;
+    cmd.args[t.dataset.mkey] = t.value;
+    markDirty();
+    const mon = $('#mMonitor');
+    if(mon){ const st = stateAt(state.sel.s, state.sel.b, state.sel.c); mon.innerHTML = stageHTML(st,{selType:cmd.type, selSlot:cmd.args.slot, caption:`指令 ${state.sel.c+1}/${currentCmds().length}`}); }
+  });
+  $('#mobileShell').addEventListener('change', e=>{
+    const t = e.target.closest('[data-mkey]');
+    if(t && t.tagName==='SELECT'){ renderMobile(); }
+  });
+
+  window.addEventListener('resize', ()=>{ if(state.device==='desktop') fitMonitor(); });
+}
+
+function openBranch(){ $('#branchModal').classList.add('show'); }
+function closeBranch(){ $('#branchModal').classList.remove('show'); }
+
+function moveBeat(from, to){
+  if(from.s===to.s && from.b===to.b) return;
+  const fs = project.scenes[from.s], ts = project.scenes[to.s];
+  if(fs.beats.length===1 && from.s!==to.s){ toast('每一幕至少保留一个分镜'); return; }
+  pushUndo();
+  const [beat] = fs.beats.splice(from.b, 1);
+  let idx = to.b;
+  if(from.s===to.s && from.b<to.b) idx--;
+  idx = clamp(idx, 0, ts.beats.length);
+  ts.beats.splice(idx, 0, beat);
+  state.sel = {s:to.s, b:idx, c:0};
+  state.multi.clear();
+  refreshAll();
+  toast(`已移动「${esc(beat.title)}」`);
+}
+
+async function demo(){
+  if(state.demo) return;
+  state.demo = true;
+  switchAppPage('create');
+  setDevice('desktop');
+  state.filter = 'all'; applyStageFilter();
+  switchView('stage');
+  selectBeat(0, 0);
+  selectCmd(3);
+  toast('演示 1/5 · 选中第 4 条指令：舞台停在执行后的状态');
+  await sleep(1600);
+  selectCmd(2);
+  play();
+  toast('演示 2/5 · 播放头沿指令推进；空格暂停、←/→ 按句跳');
+  await sleep(2400);
+  pause();
+  await sleep(600);
+  switchView('board');
+  toast('演示 3/5 · 编排台：P1 故事板，可拖拽重排');
+  await sleep(1700);
+  switchView('script');
+  toast('演示 4/5 · 剧本台：批量改说话人与台词');
+  await sleep(1700);
+  switchView('deliver');
+  toast('演示 5/5 · 交付台：检查、导出、版本快照');
+  await sleep(1700);
+  openRoadmap('P0-1');
+  toast('路线图与界面双向关联：点「定位」回到对应区域');
+  state.demo = false;
+}
+
+/* ---------- init ---------- */
+function init(){
+  // stage metadata
+  const map = [['#view-board','P1'],['#view-script','P1'],['#view-deliver','P1'],['.bin','P1'],['.lanes-wrap','P1'],['#exportCard','P1']];
+  map.forEach(([sel,st])=>{ const el=$(sel); if(el) el.dataset.stage=st; });
+  $$('#worktabs .tab').forEach(tab=>{
+    const chip = tab.querySelector('.stage-chip');
+    tab.dataset.stage = chip ? chip.textContent.trim() : 'P0';
+  });
+  // extra css
+  const s = document.createElement('style');
+  s.textContent = `
+    #worktabs .tab.locked{opacity:.42;cursor:not-allowed}
+    #worktabs .tab.locked:hover{background:transparent;color:var(--muted)}
+    .monitor:fullscreen{width:100vw!important;height:100vh!important;background:#000}
+    .monitor:fullscreen .stage{position:absolute;inset:0}
+    .toast b{font-weight:600}
+    .chipbtn.on{color:#93c5fd;border-color:#2b4a6c;background:#102033}
+    .m-issue .go{border:1px solid #2a3d52;background:#0f1a26;color:#93c5fd;border-radius:4px;padding:1px 5px;font-size:9px}
+  `;
+  document.head.appendChild(s);
+
+  state.sel.c = 2;
+  renderTree(); renderBin(); renderTransport(); renderStrip(); renderCmdList(); renderLanes(); renderInspector(); renderStage();
+  renderBoard(); renderScript(); renderDeliver(); renderRoadmap(); renderMobile();
+  bindEvents();
+  applyStageFilter();
+  const initialDevice = window.innerWidth <= 900 ? 'mobile' : 'desktop';
+  setDevice(initialDevice);
+  switchAppPage('create');
+  setTimeout(fitMonitor, 60);
+  setTimeout(()=>toast('原型已就绪：点击指令体验「选中即预览」；P0/P1/P2 见右上路线图'), 700);
+}
+
+init();
+</script>
+</body>
+</html>
