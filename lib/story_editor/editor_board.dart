@@ -13,7 +13,7 @@ enum BoardFilter { all, warnings, marked }
 /// 分镜卡片定位引用。
 typedef BeatRef = ({int scene, int beat});
 
-/// 分镜缩略图摘要缓存（按分镜视觉签名缓存，避免滚动与局部改动时重复解析）。
+/// 单个分镜继承前序视觉状态后的缩略图摘要。
 class _BeatVisualSummary {
   const _BeatVisualSummary({
     required this.backgroundKey,
@@ -26,69 +26,6 @@ class _BeatVisualSummary {
   final int characterCount;
   final String headline;
   final double blockerAlpha;
-}
-
-final Map<String, _BeatVisualSummary> _beatThumbnailCache = {};
-
-_BeatVisualSummary _resolveBeatVisual(
-  EditorProject project,
-  int sceneIndex,
-  int beatIndex,
-) {
-  final beat = project.scenes[sceneIndex].beats[beatIndex];
-  final cacheKey = '${project.id}:$sceneIndex:$beatIndex:${beat.visualSignature}';
-  final cached = _beatThumbnailCache[cacheKey];
-  if (cached != null) return cached;
-
-  // 继承前序分镜的背景与角色槽位，保证缩略图反映分镜末态视觉。
-  String bg = '';
-  final chars = <String>{};
-  double blockerAlpha = 0;
-  String headline = beat.leadLine;
-  for (var si = 0; si <= sceneIndex; si++) {
-    final s = project.scenes[si];
-    final maxBeat = si == sceneIndex ? beatIndex : s.beats.length - 1;
-    for (var bi = 0; bi <= maxBeat; bi++) {
-      for (final cmd in s.beats[bi].commands) {
-        switch (cmd.tag) {
-          case 'background':
-          case 'image':
-            final img = cmd.value('image');
-            if (img.isNotEmpty) bg = img;
-          case 'charslot':
-            final slot = cmd.value('slot');
-            final name = cmd.value('name');
-            if (slot.isEmpty && name.isEmpty) {
-              chars.clear();
-            } else if (slot.isNotEmpty) {
-              if (name.isEmpty) {
-                chars.remove(slot);
-              } else {
-                chars.add(slot);
-              }
-            }
-          case 'blocker':
-            blockerAlpha = double.tryParse(cmd.value('a')) ?? blockerAlpha;
-          case 'subtitle':
-            if (si == sceneIndex && bi == beatIndex && headline.isEmpty) {
-              headline = cmd.value('text');
-            }
-        }
-      }
-    }
-  }
-
-  final summary = _BeatVisualSummary(
-    backgroundKey: bg,
-    characterCount: chars.length,
-    headline: headline,
-    blockerAlpha: blockerAlpha.clamp(0.0, 0.85),
-  );
-  if (_beatThumbnailCache.length > 256) {
-    _beatThumbnailCache.clear();
-  }
-  _beatThumbnailCache[cacheKey] = summary;
-  return summary;
 }
 
 /// 编排台：故事板卡片墙（P1-1 / F1）与移动端轻分镜切换（§4.2）。
@@ -130,6 +67,63 @@ class _EditorBoardViewState extends State<EditorBoardView> {
   BoardCardSize _cardSize = BoardCardSize.medium;
   BoardFilter _filter = BoardFilter.all;
   final Set<BeatRef> _selected = {};
+  EditorProject? _visualProject;
+  List<List<_BeatVisualSummary>> _visualSummaries = const [];
+  List<List<_BeatVisualSummary>> _visualsForProject() {
+    if (identical(_visualProject, widget.project)) return _visualSummaries;
+
+    String backgroundKey = '';
+    final characters = <String>{};
+    double blockerAlpha = 0;
+    final scenes = <List<_BeatVisualSummary>>[];
+    for (final scene in widget.project.scenes) {
+      final summaries = <_BeatVisualSummary>[];
+      for (final beat in scene.beats) {
+        var headline = beat.leadLine;
+        for (final command in beat.commands) {
+          switch (command.tag) {
+            case 'background':
+            case 'image':
+              final image = command.value('image');
+              if (image.isNotEmpty) backgroundKey = image;
+            case 'charslot':
+              final slot = command.value('slot');
+              final name = command.value('name');
+              if (slot.isEmpty && name.isEmpty) {
+                characters.clear();
+              } else if (slot.isNotEmpty) {
+                if (name.isEmpty) {
+                  characters.remove(slot);
+                } else {
+                  characters.add(slot);
+                }
+              }
+            case 'blocker':
+              blockerAlpha =
+                  double.tryParse(command.value('a')) ?? blockerAlpha;
+            case 'subtitle':
+              if (headline.isEmpty) headline = command.value('text');
+          }
+        }
+        summaries.add(
+          _BeatVisualSummary(
+            backgroundKey: backgroundKey,
+            characterCount: characters.length,
+            headline: headline,
+            blockerAlpha: blockerAlpha.clamp(0.0, 0.85),
+          ),
+        );
+      }
+      scenes.add(summaries);
+    }
+    _visualProject = widget.project;
+    _visualSummaries = scenes;
+    return scenes;
+  }
+
+  List<List<_BeatVisualSummary>> get _visuals => _visualsForProject();
+  List<EditorIssue>? _warningIssues;
+  final Map<BeatRef, int> _warningCounts = {};
 
   // P1-1 框选批量：鼠标在卡片墙空白处拖出矩形选区。
   static const double _marqueeSlop = 4.0;
@@ -144,13 +138,19 @@ class _EditorBoardViewState extends State<EditorBoardView> {
   Set<BeatRef> _marqueeBase = const {};
 
   int _warningsFor(int sceneIndex, int beatIndex) {
-    var count = 0;
-    for (final issue in widget.issues) {
-      if (issue.sceneIndex == sceneIndex && issue.beatIndex == beatIndex) {
-        count++;
+    if (!identical(_warningIssues, widget.issues)) {
+      _warningIssues = widget.issues;
+      _warningCounts.clear();
+      for (final issue in widget.issues) {
+        final scene = issue.sceneIndex;
+        final beat = issue.beatIndex;
+        if (scene >= 0 && beat >= 0) {
+          final ref = (scene: scene, beat: beat);
+          _warningCounts[ref] = (_warningCounts[ref] ?? 0) + 1;
+        }
       }
     }
-    return count;
+    return _warningCounts[(scene: sceneIndex, beat: beatIndex)] ?? 0;
   }
 
   bool _matchesFilter(int sceneIndex, int beatIndex) {
@@ -363,6 +363,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
                 width: 200,
                 child: _BeatCard(
                   project: widget.project,
+                  visual: _visuals[si][bi],
                   sceneIndex: si,
                   beatIndex: bi,
                   warnings: _warningsFor(si, bi),
@@ -404,10 +405,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(
-                '编排台 · 故事板',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
+              Text('编排台 · 故事板', style: Theme.of(context).textTheme.titleSmall),
               SegmentedButton<BoardFilter>(
                 showSelectedIcon: false,
                 style: const ButtonStyle(
@@ -513,9 +511,8 @@ class _EditorBoardViewState extends State<EditorBoardView> {
               const Spacer(),
               Text(
                 '空白处拖拽框选 · 双击卡片进入演出台 · 拖拽卡片可同幕或跨幕重排',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ],
           ),
@@ -557,9 +554,8 @@ class _EditorBoardViewState extends State<EditorBoardView> {
               const Spacer(),
               Text(
                 '双击卡片进演出台',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ],
           ),
@@ -639,6 +635,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
       width: _cardWidth,
       child: _BeatCard(
         project: widget.project,
+        visual: _visuals[sceneIndex][beatIndex],
         sceneIndex: sceneIndex,
         beatIndex: beatIndex,
         warnings: warnings,
@@ -698,6 +695,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
 class _BeatCard extends StatelessWidget {
   const _BeatCard({
     required this.project,
+    required this.visual,
     required this.sceneIndex,
     required this.beatIndex,
     required this.warnings,
@@ -711,6 +709,7 @@ class _BeatCard extends StatelessWidget {
   });
 
   final EditorProject project;
+  final _BeatVisualSummary visual;
   final int sceneIndex;
   final int beatIndex;
   final int warnings;
@@ -725,10 +724,12 @@ class _BeatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final beat = project.scenes[sceneIndex].beats[beatIndex];
-    final visual = _resolveBeatVisual(project, sceneIndex, beatIndex);
+
     final bgAsset = project.assets[visual.backgroundKey];
     final scheme = Theme.of(context).colorScheme;
-    final markerColor = Color(editorMarkerColors[beat.marker.color] ?? 0xFFA5C7D5);
+    final markerColor = Color(
+      editorMarkerColors[beat.marker.color] ?? 0xFFA5C7D5,
+    );
 
     return Card(
       key: ValueKey(('board-card', sceneIndex, beatIndex)),
@@ -777,7 +778,9 @@ class _BeatCard extends StatelessWidget {
                     ),
                   if (visual.blockerAlpha > 0)
                     Container(
-                      color: Colors.black.withValues(alpha: visual.blockerAlpha),
+                      color: Colors.black.withValues(
+                        alpha: visual.blockerAlpha,
+                      ),
                     ),
                   // 底部首句预览条
                   Positioned(

@@ -84,6 +84,7 @@ class _NavHistoryIntent extends Intent {
   const _NavHistoryIntent(this.delta);
   final int delta;
 }
+
 /// 快捷键动作：被焦点场景屏蔽时不消费按键，交给文本框编辑或舞台微调。
 class _GuardedAction<T extends Intent> extends Action<T> {
   _GuardedAction({required this.blocked, required this.handler});
@@ -162,6 +163,16 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       }
     }
     return _compiledCache;
+  }
+
+  EditorProject? _validationProject;
+  List<EditorIssue>? _validationCache;
+  List<EditorIssue> _validatedIssues(EditorProject current) {
+    if (!identical(_validationProject, current)) {
+      _validationProject = current;
+      _validationCache = current.validateIssues();
+    }
+    return _validationCache!;
   }
 
   @override
@@ -287,7 +298,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           ..addAll(targetCmd >= 0 ? [targetCmd] : const []);
         _selectionAnchor = targetCmd >= 0 ? targetCmd : null;
       } else {
-        final len = withPos.scenes[targetScene].beats[targetBeat].commands.length;
+        final len =
+            withPos.scenes[targetScene].beats[targetBeat].commands.length;
         _selectedCommands.removeWhere((i) => i < 0 || i >= len);
         if (_command >= len) _command = len - 1;
       }
@@ -553,7 +565,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   Future<void> _export({required bool scriptOnly}) async {
     try {
       final current = project;
-      final issues = current.validateIssues();
+      final issues = _validatedIssues(current);
       if (issues.isNotEmpty) {
         final outcome = await _issues(issues, title: '作品检查', allowExport: true);
         if (!mounted || !outcome.proceed) return;
@@ -696,7 +708,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         target.scene.clamp(0, project.scenes.length - 1),
         target.beat.clamp(
           0,
-          project.scenes[target.scene.clamp(0, project.scenes.length - 1)]
+          project
+                  .scenes[target.scene.clamp(0, project.scenes.length - 1)]
                   .beats
                   .length -
               1,
@@ -717,7 +730,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         target.scene.clamp(0, project.scenes.length - 1),
         target.beat.clamp(
           0,
-          project.scenes[target.scene.clamp(0, project.scenes.length - 1)]
+          project
+                  .scenes[target.scene.clamp(0, project.scenes.length - 1)]
                   .beats
                   .length -
               1,
@@ -743,10 +757,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     );
   }
 
-  EditorProject _withScene(EditorScene next, [int? sceneIndex]) =>
-      project.copyWith(
-        scenes: [...project.scenes]..[sceneIndex ?? _scene] = next,
-      );
+  EditorProject _withScene(EditorScene next, [int? sceneIndex]) => project
+      .copyWith(scenes: [...project.scenes]..[sceneIndex ?? _scene] = next);
 
   EditorProject _withBeat(StoryBeat next, {int? sceneIndex, int? beatIndex}) {
     final si = sceneIndex ?? _scene;
@@ -776,7 +788,10 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     for (var i = range.$1; i < range.$2; i++) {
       final command = compiled.script.commands[i];
       final isStop = switch (command.tag) {
-        'dialogue' || 'aside' || 'multiline' || 'endtip' => command.text.isNotEmpty,
+        'dialogue' ||
+        'aside' ||
+        'multiline' ||
+        'endtip' => command.text.isNotEmpty,
         'decision' => command.value('options').isNotEmpty,
         _ => false,
       };
@@ -804,9 +819,11 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   /// 多选点击：支持单击、Shift 连续区间选、Ctrl/⌘ 增减单条（P0-3）。
   void _onTapCommandRow(int index) {
     final keys = HardwareKeyboard.instance.logicalKeysPressed;
-    final shift = keys.contains(LogicalKeyboardKey.shiftLeft) ||
+    final shift =
+        keys.contains(LogicalKeyboardKey.shiftLeft) ||
         keys.contains(LogicalKeyboardKey.shiftRight);
-    final ctrl = keys.contains(LogicalKeyboardKey.controlLeft) ||
+    final ctrl =
+        keys.contains(LogicalKeyboardKey.controlLeft) ||
         keys.contains(LogicalKeyboardKey.controlRight) ||
         keys.contains(LogicalKeyboardKey.metaLeft) ||
         keys.contains(LogicalKeyboardKey.metaRight);
@@ -904,9 +921,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   void _copySelectedCommands({bool cut = false}) {
     final indices = _effectiveSelectedSorted();
     if (indices.isEmpty) return;
-    _sharedCommandClipboard = [
-      for (final i in indices) beat.commands[i],
-    ];
+    _sharedCommandClipboard = [for (final i in indices) beat.commands[i]];
     if (cut) {
       final removeSet = indices.toSet();
       final next = [
@@ -915,9 +930,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       ];
       _change(
         _withCommands(next),
-        selected: next.isEmpty
-            ? -1
-            : math.min(indices.first, next.length - 1),
+        selected: next.isEmpty ? -1 : math.min(indices.first, next.length - 1),
       );
       _toast('已剪切 ${indices.length} 条指令');
     } else {
@@ -933,7 +946,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     final insertAt = _command < 0
         ? beat.commands.length
         : (_command + 1).clamp(0, beat.commands.length);
-    final next = [...beat.commands]..insertAll(insertAt, _sharedCommandClipboard);
+    final next = [...beat.commands]
+      ..insertAll(insertAt, _sharedCommandClipboard);
     final pastedSet = {
       for (var i = 0; i < _sharedCommandClipboard.length; i++) insertAt + i,
     };
@@ -1062,8 +1076,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         : (_command + 1).clamp(0, beat.commands.length);
     final sourceBeatCommands =
         project.scenes[req.sourceScene].beats[req.sourceBeat].commands;
-    final sourceCmd = req.sourceCommand >= 0 &&
-            req.sourceCommand < sourceBeatCommands.length
+    final sourceCmd =
+        req.sourceCommand >= 0 && req.sourceCommand < sourceBeatCommands.length
         ? sourceBeatCommands[req.sourceCommand]
         : EditCommand(req.tag, {
             if (req.slot.isNotEmpty) 'slot': req.slot,
@@ -1083,7 +1097,9 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     if (action == 'add' || action == 'rename') {
       final name = await _title(
         action == 'add' ? '新建幕' : '重命名幕',
-        action == 'add' ? '第 ${project.scenes.length + 1} 幕' : targetScene.title,
+        action == 'add'
+            ? '第 ${project.scenes.length + 1} 幕'
+            : targetScene.title,
       );
       if (!mounted || name == null || !identical(original, project)) return;
       if (action == 'add') {
@@ -1162,7 +1178,11 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       final name = await _title('重命名分镜', targetBeat.title);
       if (mounted && name != null && identical(original, project)) {
         _change(
-          _withBeat(targetBeat.copyWith(title: name), sceneIndex: si, beatIndex: bi),
+          _withBeat(
+            targetBeat.copyWith(title: name),
+            sceneIndex: si,
+            beatIndex: bi,
+          ),
         );
       }
     } else if (action == 'delete') {
@@ -1297,7 +1317,9 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       initial: target.marker,
     );
     if (!mounted || next == null) return;
-    final marker = next.clear ? const EditorMarker() : (next.marker ?? const EditorMarker());
+    final marker = next.clear
+        ? const EditorMarker()
+        : (next.marker ?? const EditorMarker());
     _change(_withScene(target.copyWith(marker: marker), si));
   }
 
@@ -1315,9 +1337,15 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       initial: target.marker,
     );
     if (!mounted || next == null) return;
-    final marker = next.clear ? const EditorMarker() : (next.marker ?? const EditorMarker());
+    final marker = next.clear
+        ? const EditorMarker()
+        : (next.marker ?? const EditorMarker());
     _change(
-      _withBeat(target.copyWith(marker: marker), sceneIndex: si, beatIndex: bi),
+      _withBeat(
+        target.copyWith(marker: marker),
+        sceneIndex: si,
+        beatIndex: bi,
+      ),
     );
   }
 
@@ -1328,10 +1356,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     final b = s.beats[row.beatIndex];
     if (row.commandIndex >= b.commands.length) return;
     final cmd = b.commands[row.commandIndex];
-    final nextCmd = cmd.withArgs({
-      'name': ?speaker,
-      'text': ?text,
-    });
+    final nextCmd = cmd.withArgs({'name': ?speaker, 'text': ?text});
     final nextCommands = [...b.commands]..[row.commandIndex] = nextCmd;
     _change(
       _withBeat(
@@ -1476,9 +1501,21 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   /// 命令面板（P0-3：Ctrl+K 快捷执行所有编辑、切换与导出操作）。
   Future<void> _openCommandPalette() async {
     final actions = <({String label, String hint, VoidCallback run})>[
-      (label: '切换到演出台', hint: '工作区', run: () => setState(() => _workspace = _EditorWorkspace.stage)),
-      (label: '切换到编排台（故事板）', hint: '工作区', run: () => setState(() => _workspace = _EditorWorkspace.board)),
-      (label: '切换到剧本台（对白表格）', hint: '工作区', run: () => setState(() => _workspace = _EditorWorkspace.script)),
+      (
+        label: '切换到演出台',
+        hint: '工作区',
+        run: () => setState(() => _workspace = _EditorWorkspace.stage),
+      ),
+      (
+        label: '切换到编排台（故事板）',
+        hint: '工作区',
+        run: () => setState(() => _workspace = _EditorWorkspace.board),
+      ),
+      (
+        label: '切换到剧本台（对白表格）',
+        hint: '工作区',
+        run: () => setState(() => _workspace = _EditorWorkspace.script),
+      ),
       (label: '全局搜索', hint: '导航', run: _openGlobalSearch),
       (label: '添加演出指令', hint: '编辑', run: _showCommandChooser),
       (label: '新建分镜', hint: '结构', run: () => _beatAction('add')),
@@ -1486,7 +1523,11 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       (label: '全选当前分镜指令', hint: 'Ctrl+A', run: _selectAllCommands),
       (label: '反选当前分镜指令', hint: '选择集', run: _invertCommandSelection),
       (label: '复制选中指令', hint: 'Ctrl+C', run: () => _copySelectedCommands()),
-      (label: '剪切选中指令', hint: 'Ctrl+X', run: () => _copySelectedCommands(cut: true)),
+      (
+        label: '剪切选中指令',
+        hint: 'Ctrl+X',
+        run: () => _copySelectedCommands(cut: true),
+      ),
       (label: '粘贴指令到播放头后', hint: 'Ctrl+V', run: _pasteClipboardCommands),
       (label: '快速副本（选中指令）', hint: 'Ctrl+D', run: _duplicateSelectedCommands),
       (label: '删除选中指令', hint: 'Delete', run: _deleteSelectedCommands),
@@ -1566,7 +1607,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   }
 
   Future<void> _checkProjectIssues() async {
-    final issues = project.validateIssues();
+    final issues = _validatedIssues(project);
     final outcome = await _issues(
       issues.isEmpty ? [const EditorIssue('没有发现结构问题。')] : issues,
       title: '作品检查',
@@ -1580,8 +1621,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     final range = compiled.ranges[(_scene, _beat)]!;
     final stops = _stopIndexes();
     // 未选中时视为分镜起点之前：上一句回第一条指令，下一句到第一句。
-    final currentGlobal =
-        _command < 0 ? range.$1 - 1 : range.$1 + _command;
+    final currentGlobal = _command < 0 ? range.$1 - 1 : range.$1 + _command;
     final Iterable<int> candidates = delta < 0
         ? stops.where((s) => s < currentGlobal)
         : stops.where((s) => s > currentGlobal);
@@ -1836,7 +1876,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       if (!reached) throw StateError('无法从当前分镜开始播放');
       final warnings = {
         ...[
-          for (final issue in current.validateIssues()) issue.message,
+          for (final issue in _validatedIssues(current)) issue.message,
           ...stage.engine.warnings,
         ],
       };
@@ -1919,9 +1959,9 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
                             IconButton(
                               tooltip: '预览提示（${issues.length}）',
                               icon: const Icon(Icons.warning_amber),
-                              onPressed: () => _issues(
-                            [for (final issue in issues) EditorIssue(issue)],
-                          ),
+                              onPressed: () => _issues([
+                                for (final issue in issues) EditorIssue(issue),
+                              ]),
                             ),
                           IconButton(
                             tooltip: '退出试播',
@@ -2078,18 +2118,12 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
             const _StepStopIntent(-1),
         const SingleActivator(LogicalKeyboardKey.arrowRight):
             const _StepStopIntent(1),
-        const SingleActivator(
-          LogicalKeyboardKey.arrowLeft,
-          shift: true,
-        ): const _StepCommandIntent(-1),
-        const SingleActivator(
-          LogicalKeyboardKey.arrowRight,
-          shift: true,
-        ): const _StepCommandIntent(1),
-        const SingleActivator(LogicalKeyboardKey.home):
-            const _GotoIntent(true),
-        const SingleActivator(LogicalKeyboardKey.end):
-            const _GotoIntent(false),
+        const SingleActivator(LogicalKeyboardKey.arrowLeft, shift: true):
+            const _StepCommandIntent(-1),
+        const SingleActivator(LogicalKeyboardKey.arrowRight, shift: true):
+            const _StepCommandIntent(1),
+        const SingleActivator(LogicalKeyboardKey.home): const _GotoIntent(true),
+        const SingleActivator(LogicalKeyboardKey.end): const _GotoIntent(false),
         // P0-3：撤销/重做/剪贴板/副本/删除/全选/命令面板
         const SingleActivator(LogicalKeyboardKey.keyZ, control: true):
             const _UndoIntent(),
@@ -2102,11 +2136,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           control: true,
           shift: true,
         ): const _RedoIntent(),
-        const SingleActivator(
-          LogicalKeyboardKey.keyZ,
-          meta: true,
-          shift: true,
-        ): const _RedoIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true):
+            const _RedoIntent(),
         const SingleActivator(LogicalKeyboardKey.keyC, control: true):
             const _CopyCommandsIntent(),
         const SingleActivator(LogicalKeyboardKey.keyC, meta: true):
@@ -2234,7 +2265,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     builder: (context, size) {
       final wide = size.maxWidth >= 1100;
       final landscape = !wide && size.maxWidth >= 580 && size.maxHeight < 530;
-      final issues = project.validateIssues();
+      final issues = _validatedIssues(project);
       final stage = EditorStage(
         project: project,
         scene: _scene,
@@ -2338,10 +2369,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
                   ),
                   transport,
                   const Divider(height: 1),
-                  Expanded(
-                    flex: 4,
-                    child: _commands(inlineInspector: false),
-                  ),
+                  Expanded(flex: 4, child: _commands(inlineInspector: false)),
                 ],
               ),
             ),
@@ -2579,7 +2607,11 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       onPressed: disabled
           ? null
           : () => setState(
-              () => _speed = _speed == 1 ? 2 : _speed == 2 ? 4 : 1,
+              () => _speed = _speed == 1
+                  ? 2
+                  : _speed == 2
+                  ? 4
+                  : 1,
             ),
       style: OutlinedButton.styleFrom(
         visualDensity: VisualDensity.compact,
@@ -2858,7 +2890,9 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           ),
         IconButton(
           tooltip: '本地作品',
-          visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
+          visualDensity: compact
+              ? VisualDensity.compact
+              : VisualDensity.standard,
           onPressed: _busy ? null : _projects,
           icon: const Icon(Icons.folder_open),
         ),
@@ -2894,7 +2928,11 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           ),
         ),
         if (wide) ...[
-          tabButton(_EditorWorkspace.stage, '演出台', Icons.movie_creation_outlined),
+          tabButton(
+            _EditorWorkspace.stage,
+            '演出台',
+            Icons.movie_creation_outlined,
+          ),
           const SizedBox(width: 6),
           tabButton(_EditorWorkspace.board, '编排台', Icons.grid_view_outlined),
           const SizedBox(width: 6),
@@ -2927,7 +2965,11 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           ),
           if (!compact) ...[
             const SizedBox(width: 4),
-            tabButton(_EditorWorkspace.script, '剧本台', Icons.table_rows_outlined),
+            tabButton(
+              _EditorWorkspace.script,
+              '剧本台',
+              Icons.table_rows_outlined,
+            ),
           ],
           IconButton(
             tooltip: '全局搜索',
@@ -2942,17 +2984,23 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         ],
         IconButton(
           tooltip: '撤销',
-          visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
+          visualDensity: compact
+              ? VisualDensity.compact
+              : VisualDensity.standard,
           padding: compact ? EdgeInsets.zero : null,
           constraints: compact
               ? const BoxConstraints(minWidth: 32, minHeight: 32)
               : null,
-          onPressed: _busy || _undo.isEmpty ? null : () => _history(redo: false),
+          onPressed: _busy || _undo.isEmpty
+              ? null
+              : () => _history(redo: false),
           icon: const Icon(Icons.undo),
         ),
         IconButton(
           tooltip: '重做',
-          visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
+          visualDensity: compact
+              ? VisualDensity.compact
+              : VisualDensity.standard,
           padding: compact ? EdgeInsets.zero : null,
           constraints: compact
               ? const BoxConstraints(minWidth: 32, minHeight: 32)
@@ -2966,10 +3014,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           icon: const Icon(Icons.play_arrow),
           onSelected: _preview,
           itemBuilder: (_) => const [
-            PopupMenuItem(
-              value: _PreviewMode.beat,
-              child: Text('全屏：仅当前分镜'),
-            ),
+            PopupMenuItem(value: _PreviewMode.beat, child: Text('全屏：仅当前分镜')),
             PopupMenuItem(
               value: _PreviewMode.fromBeat,
               child: Text('全屏：从当前分镜开始'),
@@ -3003,11 +3048,9 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
               case 'delete':
                 await _deleteProject();
               case 'check':
-                final issues = project.validateIssues();
+                final issues = _validatedIssues(project);
                 await _issues(
-                  issues.isEmpty
-                      ? [const EditorIssue('没有发现结构问题。')]
-                      : issues,
+                  issues.isEmpty ? [const EditorIssue('没有发现结构问题。')] : issues,
                   title: '作品检查',
                 ).then((outcome) {
                   if (outcome.goto != null) _gotoIssue(outcome.goto!);
@@ -3152,9 +3195,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
-                    multiCount > 1
-                        ? '已选 $multiCount 条'
-                        : 'Shift 连选 · Ctrl 增减',
+                    multiCount > 1 ? '已选 $multiCount 条' : 'Shift 连选 · Ctrl 增减',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -3267,10 +3308,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         children: [
           Text(
             '已选 $count 条',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: scheme.primary,
-              fontWeight: FontWeight.w600,
-            ),
+            style: Theme.of(context).textTheme.labelMedium
+                ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600),
           ),
           if (!compact) ...[
             SizedBox(
@@ -3291,8 +3330,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
               ),
             ),
             FilledButton.tonal(
-              onPressed: () =>
-                  _applyBatchSpeaker(_batchSpeakerController.text),
+              onPressed: () => _applyBatchSpeaker(_batchSpeakerController.text),
               style: FilledButton.styleFrom(
                 visualDensity: VisualDensity.compact,
               ),
@@ -3363,7 +3401,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       'charslot' => '人物：${value('name')}（${value('slot')}）',
       'playmusic' => '播放音乐：${value('key')}',
       'playsound' => '播放音效：${value('key')}',
-      'delay' => '等待：${value('time').isEmpty ? value('duration') : value('time')} 秒',
+      'delay' =>
+        '等待：${value('time').isEmpty ? value('duration') : value('time')} 秒',
       'bgeffect' || 'effect' => '特效：${value('name')}',
       _ => entry.tag,
     };
@@ -3496,8 +3535,14 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
                     tooltip: '指令操作 ${i + 1}',
                     onSelected: (action) => _commandAction(i, action),
                     itemBuilder: (_) => [
-                      const PopupMenuItem(value: 'duplicate', child: Text('复制指令')),
-                      const PopupMenuItem(value: 'insert', child: Text('在此之后插入')),
+                      const PopupMenuItem(
+                        value: 'duplicate',
+                        child: Text('复制指令'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'insert',
+                        child: Text('在此之后插入'),
+                      ),
                       ..._reorderMenu(i, beat.commands.length),
                       const PopupMenuItem(value: 'delete', child: Text('删除指令')),
                     ],
