@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:arknights_story_player/app/archive_widgets.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -306,8 +307,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<PopupMenuItem<String>>(
-            find.widgetWithText(PopupMenuItem<String>, '已缓存'),
+          .widget<ArchivePopupMenuItem<String>>(
+            find.widgetWithText(ArchivePopupMenuItem<String>, '已缓存'),
           )
           .enabled,
       isFalse,
@@ -379,8 +380,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<PopupMenuItem<String>>(
-            find.widgetWithText(PopupMenuItem<String>, '缓存'),
+          .widget<ArchivePopupMenuItem<String>>(
+            find.widgetWithText(ArchivePopupMenuItem<String>, '缓存'),
           )
           .enabled,
       isTrue,

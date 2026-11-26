@@ -5,6 +5,8 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../app/archive_widgets.dart';
+
 import '../story_player/data/asset_store.dart';
 import '../story_player/ui/story_stage.dart';
 import 'editor_board.dart';
@@ -436,20 +438,20 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
                           onSelected: (action) =>
                               Navigator.pop(dialog, '$action:${draft.id}'),
                           itemBuilder: (_) => [
-                            PopupMenuItem(
+                            ArchivePopupMenuItem(
                               value: 'play',
                               enabled: widget.onPlayProject != null,
                               child: const Text('播放'),
                             ),
-                            const PopupMenuItem(
+                            const ArchivePopupMenuItem(
                               value: 'rename',
                               child: Text('重命名'),
                             ),
-                            const PopupMenuItem(
+                            const ArchivePopupMenuItem(
                               value: 'duplicate',
                               child: Text('复制'),
                             ),
-                            const PopupMenuItem(
+                            const ArchivePopupMenuItem(
                               value: 'delete',
                               child: Text('删除'),
                             ),
@@ -3014,12 +3016,18 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           icon: const Icon(Icons.play_arrow),
           onSelected: _preview,
           itemBuilder: (_) => const [
-            PopupMenuItem(value: _PreviewMode.beat, child: Text('全屏：仅当前分镜')),
-            PopupMenuItem(
+            ArchivePopupMenuItem(
+              value: _PreviewMode.beat,
+              child: Text('全屏：仅当前分镜'),
+            ),
+            ArchivePopupMenuItem(
               value: _PreviewMode.fromBeat,
               child: Text('全屏：从当前分镜开始'),
             ),
-            PopupMenuItem(value: _PreviewMode.full, child: Text('全屏：从头播放')),
+            ArchivePopupMenuItem(
+              value: _PreviewMode.full,
+              child: Text('全屏：从头播放'),
+            ),
           ],
         ),
         PopupMenuButton<String>(
@@ -3058,20 +3066,32 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
             }
           },
           itemBuilder: (_) => [
-            PopupMenuItem(
+            ArchivePopupMenuItem(
               value: 'play',
               enabled: widget.onPlayProject != null,
               child: const Text('播放作品'),
             ),
-            const PopupMenuItem(value: 'assets', child: Text('作品素材管理')),
-            const PopupMenuItem(value: 'export', child: Text('导出作品（含上传素材）')),
-            const PopupMenuItem(value: 'script', child: Text('导出纯脚本')),
-            const PopupMenuItem(value: 'export_txt', child: Text('导出台本 TXT')),
-            const PopupMenuItem(value: 'export_csv', child: Text('导出台本 CSV')),
-            const PopupMenuItem(value: 'export_srt', child: Text('导出字幕 SRT')),
-            const PopupMenuItem(value: 'duplicate', child: Text('复制作品')),
-            const PopupMenuItem(value: 'check', child: Text('检查作品')),
-            const PopupMenuItem(value: 'delete', child: Text('删除作品')),
+            const ArchivePopupMenuItem(value: 'assets', child: Text('作品素材管理')),
+            const ArchivePopupMenuItem(
+              value: 'export',
+              child: Text('导出作品（含上传素材）'),
+            ),
+            const ArchivePopupMenuItem(value: 'script', child: Text('导出纯脚本')),
+            const ArchivePopupMenuItem(
+              value: 'export_txt',
+              child: Text('导出台本 TXT'),
+            ),
+            const ArchivePopupMenuItem(
+              value: 'export_csv',
+              child: Text('导出台本 CSV'),
+            ),
+            const ArchivePopupMenuItem(
+              value: 'export_srt',
+              child: Text('导出字幕 SRT'),
+            ),
+            const ArchivePopupMenuItem(value: 'duplicate', child: Text('复制作品')),
+            const ArchivePopupMenuItem(value: 'check', child: Text('检查作品')),
+            const ArchivePopupMenuItem(value: 'delete', child: Text('删除作品')),
           ],
         ),
       ],
@@ -3107,10 +3127,10 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         tooltip: '幕操作',
         onSelected: _sceneAction,
         itemBuilder: (_) => [
-          const PopupMenuItem(value: 'add', child: Text('新建幕')),
-          const PopupMenuItem(value: 'rename', child: Text('重命名幕')),
+          const ArchivePopupMenuItem(value: 'add', child: Text('新建幕')),
+          const ArchivePopupMenuItem(value: 'rename', child: Text('重命名幕')),
           ..._reorderMenu(_scene, project.scenes.length),
-          PopupMenuItem(
+          ArchivePopupMenuItem(
             value: 'delete',
             enabled: project.scenes.length > 1,
             child: const Text('删除幕'),
@@ -3121,8 +3141,12 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   );
 
   List<PopupMenuEntry<String>> _reorderMenu(int index, int count) => [
-    PopupMenuItem(value: 'up', enabled: index > 0, child: const Text('向前移动')),
-    PopupMenuItem(
+    ArchivePopupMenuItem(
+      value: 'up',
+      enabled: index > 0,
+      child: const Text('向前移动'),
+    ),
+    ArchivePopupMenuItem(
       value: 'down',
       enabled: index + 1 < count,
       child: const Text('向后移动'),
@@ -3234,28 +3258,28 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
             }
           },
           itemBuilder: (_) => [
-            PopupMenuItem(
+            ArchivePopupMenuItem(
               value: 'all',
               enabled: beat.commands.isNotEmpty,
               child: const Text('全选指令（Ctrl+A）'),
             ),
-            PopupMenuItem(
+            ArchivePopupMenuItem(
               value: 'invert',
               enabled: beat.commands.isNotEmpty,
               child: const Text('反选指令'),
             ),
-            PopupMenuItem(
+            ArchivePopupMenuItem(
               value: 'copy',
               enabled: _selectedCommands.isNotEmpty || _command >= 0,
               child: const Text('复制所选（Ctrl+C）'),
             ),
-            PopupMenuItem(
+            ArchivePopupMenuItem(
               value: 'paste',
               enabled: _sharedCommandClipboard.isNotEmpty,
               child: Text('粘贴到播放头后（${_sharedCommandClipboard.length}）'),
             ),
             if (_selectedCommands.length > 1)
-              const PopupMenuItem(value: 'clear', child: Text('取消多选')),
+              const ArchivePopupMenuItem(value: 'clear', child: Text('取消多选')),
           ],
         ),
         IconButton(
@@ -3267,11 +3291,11 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           tooltip: '分镜操作',
           onSelected: _beatAction,
           itemBuilder: (_) => [
-            const PopupMenuItem(value: 'rename', child: Text('重命名分镜')),
-            const PopupMenuItem(value: 'duplicate', child: Text('复制分镜')),
-            const PopupMenuItem(value: 'mark', child: Text('标记与备注')),
+            const ArchivePopupMenuItem(value: 'rename', child: Text('重命名分镜')),
+            const ArchivePopupMenuItem(value: 'duplicate', child: Text('复制分镜')),
+            const ArchivePopupMenuItem(value: 'mark', child: Text('标记与备注')),
             ..._reorderMenu(_beat, scene.beats.length),
-            PopupMenuItem(
+            ArchivePopupMenuItem(
               value: 'delete',
               enabled: scene.beats.length > 1,
               child: const Text('删除分镜'),
@@ -3436,18 +3460,24 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         globalPosition.dy + 1,
       ),
       items: [
-        const PopupMenuItem(value: 'copy', child: Text('复制（Ctrl+C）')),
-        const PopupMenuItem(value: 'cut', child: Text('剪切（Ctrl+X）')),
-        PopupMenuItem(
+        const ArchivePopupMenuItem(value: 'copy', child: Text('复制（Ctrl+C）')),
+        const ArchivePopupMenuItem(value: 'cut', child: Text('剪切（Ctrl+X）')),
+        ArchivePopupMenuItem(
           value: 'paste',
           enabled: _sharedCommandClipboard.isNotEmpty,
           child: const Text('粘贴到此处后（Ctrl+V）'),
         ),
-        const PopupMenuItem(value: 'duplicate', child: Text('创建副本（Ctrl+D）')),
-        const PopupMenuItem(value: 'insert', child: Text('在此之后插入指令')),
-        const PopupMenuItem(value: 'toggle_multi', child: Text('加入/移出多选')),
+        const ArchivePopupMenuItem(
+          value: 'duplicate',
+          child: Text('创建副本（Ctrl+D）'),
+        ),
+        const ArchivePopupMenuItem(value: 'insert', child: Text('在此之后插入指令')),
+        const ArchivePopupMenuItem(
+          value: 'toggle_multi',
+          child: Text('加入/移出多选'),
+        ),
         const PopupMenuDivider(),
-        const PopupMenuItem(value: 'delete', child: Text('删除（Delete）')),
+        const ArchivePopupMenuItem(value: 'delete', child: Text('删除（Delete）')),
       ],
     );
     if (action == null) return;
@@ -3535,16 +3565,19 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
                     tooltip: '指令操作 ${i + 1}',
                     onSelected: (action) => _commandAction(i, action),
                     itemBuilder: (_) => [
-                      const PopupMenuItem(
+                      const ArchivePopupMenuItem(
                         value: 'duplicate',
                         child: Text('复制指令'),
                       ),
-                      const PopupMenuItem(
+                      const ArchivePopupMenuItem(
                         value: 'insert',
                         child: Text('在此之后插入'),
                       ),
                       ..._reorderMenu(i, beat.commands.length),
-                      const PopupMenuItem(value: 'delete', child: Text('删除指令')),
+                      const ArchivePopupMenuItem(
+                        value: 'delete',
+                        child: Text('删除指令'),
+                      ),
                     ],
                   ),
                 ),

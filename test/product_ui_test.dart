@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:arknights_story_player/app/archive_widgets.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -1002,8 +1003,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<PopupMenuItem<String>>(
-            find.widgetWithText(PopupMenuItem<String>, '已缓存'),
+          .widget<ArchivePopupMenuItem<String>>(
+            find.widgetWithText(ArchivePopupMenuItem<String>, '已缓存'),
           )
           .enabled,
       isFalse,

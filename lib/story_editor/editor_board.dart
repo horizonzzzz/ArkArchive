@@ -2,6 +2,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../app/archive_widgets.dart';
+
 import 'editor_project.dart';
 
 /// 编排台卡片缩放档位（P1-1）。
@@ -916,18 +918,27 @@ class _BeatCard extends StatelessWidget {
                       padding: EdgeInsets.zero,
                       onSelected: onMenuAction,
                       itemBuilder: (context) => const [
-                        PopupMenuItem(value: 'open', child: Text('在演出台打开')),
-                        PopupMenuItem(
+                        ArchivePopupMenuItem(
+                          value: 'open',
+                          child: Text('在演出台打开'),
+                        ),
+                        ArchivePopupMenuItem(
                           value: 'insert_after',
                           child: Text('在此后插入分镜'),
                         ),
-                        PopupMenuItem(
+                        ArchivePopupMenuItem(
                           value: 'duplicate',
                           child: Text('从此派生副本'),
                         ),
-                        PopupMenuItem(value: 'mark', child: Text('设置标记与备注')),
+                        ArchivePopupMenuItem(
+                          value: 'mark',
+                          child: Text('设置标记与备注'),
+                        ),
                         PopupMenuDivider(),
-                        PopupMenuItem(value: 'delete', child: Text('删除分镜')),
+                        ArchivePopupMenuItem(
+                          value: 'delete',
+                          child: Text('删除分镜'),
+                        ),
                       ],
                     ),
                 ],

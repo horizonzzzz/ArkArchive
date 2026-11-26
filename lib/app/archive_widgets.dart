@@ -55,6 +55,22 @@ class ArchiveHeading extends StatelessWidget {
   );
 }
 
+/// 方舟档案室紧凑型弹出菜单项，统一收窄默认 48px 行高。
+class ArchivePopupMenuItem<T> extends PopupMenuItem<T> {
+  const ArchivePopupMenuItem({
+    super.key,
+    super.value,
+    super.enabled = true,
+    super.onTap,
+    super.height = 36,
+    super.padding = const EdgeInsets.symmetric(horizontal: 12),
+    super.textStyle,
+    super.labelTextStyle,
+    super.mouseCursor,
+    required super.child,
+  });
+}
+
 /// 顶部区域独立于列表滚动，避免固定高度截断放大的系统文字。
 class ArchivePageHeader extends StatelessWidget {
   const ArchivePageHeader({

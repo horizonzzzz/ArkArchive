@@ -210,8 +210,8 @@ ThemeData buildAppTheme({bool light = false}) {
       surfaceTintColor: Colors.transparent,
       elevation: 3,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(2)),
-        side: BorderSide(color: colors.border),
+        borderRadius: BorderRadius.all(Radius.circular(4)),
+        side: BorderSide(color: colors.indicator),
       ),
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.disabled)

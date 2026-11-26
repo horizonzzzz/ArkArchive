@@ -1602,7 +1602,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                           setState(() => _catalogPages[category] = value),
                       itemBuilder: (context) => [
                         for (var index = 0; index < pageCount; index++)
-                          PopupMenuItem(
+                          ArchivePopupMenuItem(
                             value: index,
                             child: Text('第 ${index + 1} 页'),
                           ),
@@ -2014,8 +2014,11 @@ class _StoryLauncherState extends State<StoryLauncher> {
                   _ => null,
                 },
                 itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'derive', child: Text('派生到创作')),
-                  PopupMenuItem(
+                  const ArchivePopupMenuItem(
+                    value: 'derive',
+                    child: Text('派生到创作'),
+                  ),
+                  ArchivePopupMenuItem(
                     value: 'cache',
                     enabled:
                         !_cached.contains(entry.path) &&
@@ -2043,7 +2046,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
                     ),
                   ),
                   if (_repository.store.supportsExport)
-                    PopupMenuItem(
+                    ArchivePopupMenuItem(
                       value: 'export',
                       enabled:
                           !activeJob && !_deletingCache && !_movingDirectory,

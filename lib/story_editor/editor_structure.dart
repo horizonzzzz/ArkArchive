@@ -1,3 +1,5 @@
+import '../app/archive_widgets.dart';
+
 import 'package:material_ui/material_ui.dart';
 
 import 'editor_project.dart';
@@ -66,7 +68,8 @@ List<EditorSearchHit> searchProjectContent(EditorProject project, String raw) {
             cmd.args.values.any((v) => v.toLowerCase().contains(q));
         if (matched) {
           final label = editorFields[cmd.tag]?.$1 ?? cmd.tag;
-          final preview = cmd.raw ??
+          final preview =
+              cmd.raw ??
               (cmd.value('text').isNotEmpty
                   ? cmd.value('text')
                   : cmd.value('name').isNotEmpty
@@ -118,11 +121,7 @@ class EditorStructureTree extends StatefulWidget {
   final void Function(int scene, int beat, String action) onBeatAction;
   final void Function(int scene) onMarkScene;
   final void Function(int scene, int beat) onMarkBeat;
-  final void Function(
-    ({int scene, int beat}) from,
-    int toScene,
-    int toBeat,
-  )
+  final void Function(({int scene, int beat}) from, int toScene, int toBeat)
   onMoveBeat;
   final VoidCallback onOpenSearch;
 
@@ -179,7 +178,8 @@ class _EditorStructureTreeState extends State<EditorStructureTree> {
                 tooltip: '新建幕',
                 visualDensity: VisualDensity.compact,
                 iconSize: 18,
-                onPressed: () => widget.onSceneAction(widget.activeScene, 'add'),
+                onPressed: () =>
+                    widget.onSceneAction(widget.activeScene, 'add'),
                 icon: const Icon(Icons.create_new_folder_outlined),
               ),
             ],
@@ -202,9 +202,8 @@ class _EditorStructureTreeState extends State<EditorStructureTree> {
           ),
           child: Text(
             '约 ${formatEstimatedDuration(widget.project.estimatedSeconds)} · ${widget.issues.length} 警告',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ),
       ],
@@ -215,7 +214,9 @@ class _EditorStructureTreeState extends State<EditorStructureTree> {
     final scene = widget.project.scenes[si];
     final collapsed = _collapsedScenes.contains(si);
     final sceneWarnings = _warningsForScene(si);
-    final markerColor = Color(editorMarkerColors[scene.marker.color] ?? 0xFFA5C7D5);
+    final markerColor = Color(
+      editorMarkerColors[scene.marker.color] ?? 0xFFA5C7D5,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -234,7 +235,10 @@ class _EditorStructureTreeState extends State<EditorStructureTree> {
                   visualDensity: VisualDensity.compact,
                   iconSize: 16,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
                   onPressed: () => setState(() {
                     if (!_collapsedScenes.remove(si)) {
                       _collapsedScenes.add(si);
@@ -298,20 +302,29 @@ class _EditorStructureTreeState extends State<EditorStructureTree> {
                     }
                   },
                   itemBuilder: (_) => [
-                    const PopupMenuItem(value: 'add_beat', child: Text('新建分镜')),
-                    const PopupMenuItem(value: 'rename', child: Text('重命名幕')),
-                    const PopupMenuItem(value: 'mark', child: Text('标记与备注')),
-                    PopupMenuItem(
+                    const ArchivePopupMenuItem(
+                      value: 'add_beat',
+                      child: Text('新建分镜'),
+                    ),
+                    const ArchivePopupMenuItem(
+                      value: 'rename',
+                      child: Text('重命名幕'),
+                    ),
+                    const ArchivePopupMenuItem(
+                      value: 'mark',
+                      child: Text('标记与备注'),
+                    ),
+                    ArchivePopupMenuItem(
                       value: 'up',
                       enabled: si > 0,
                       child: const Text('上移幕'),
                     ),
-                    PopupMenuItem(
+                    ArchivePopupMenuItem(
                       value: 'down',
                       enabled: si + 1 < widget.project.scenes.length,
                       child: const Text('下移幕'),
                     ),
-                    PopupMenuItem(
+                    ArchivePopupMenuItem(
                       value: 'delete',
                       enabled: widget.project.scenes.length > 1,
                       child: const Text('删除幕'),
@@ -339,7 +352,9 @@ class _EditorStructureTreeState extends State<EditorStructureTree> {
     final beat = widget.project.scenes[si].beats[bi];
     final selected = si == widget.activeScene && bi == widget.activeBeat;
     final warnings = _warningsForBeat(si, bi);
-    final markerColor = Color(editorMarkerColors[beat.marker.color] ?? 0xFFA5C7D5);
+    final markerColor = Color(
+      editorMarkerColors[beat.marker.color] ?? 0xFFA5C7D5,
+    );
     final ref = (scene: si, beat: bi);
 
     final row = Container(
@@ -400,10 +415,13 @@ class _EditorStructureTreeState extends State<EditorStructureTree> {
               }
             },
             itemBuilder: (_) => [
-              const PopupMenuItem(value: 'rename', child: Text('重命名分镜')),
-              const PopupMenuItem(value: 'duplicate', child: Text('复制分镜')),
-              const PopupMenuItem(value: 'mark', child: Text('标记与备注')),
-              PopupMenuItem(
+              const ArchivePopupMenuItem(value: 'rename', child: Text('重命名分镜')),
+              const ArchivePopupMenuItem(
+                value: 'duplicate',
+                child: Text('复制分镜'),
+              ),
+              const ArchivePopupMenuItem(value: 'mark', child: Text('标记与备注')),
+              ArchivePopupMenuItem(
                 value: 'delete',
                 enabled: widget.project.scenes[si].beats.length > 1,
                 child: const Text('删除分镜'),

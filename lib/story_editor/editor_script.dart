@@ -1,3 +1,5 @@
+import '../app/archive_widgets.dart';
+
 import 'package:material_ui/material_ui.dart';
 
 import 'editor_project.dart';
@@ -94,8 +96,7 @@ class _EditorScriptViewState extends State<EditorScriptView> {
     final rows = _filteredRows();
     final validIds = {for (final r in rows) _rowId(r)};
     _selectedKeys.removeWhere((id) => !validIds.contains(id));
-    final allSelected =
-        rows.isNotEmpty && _selectedKeys.length == rows.length;
+    final allSelected = rows.isNotEmpty && _selectedKeys.length == rows.length;
     final scheme = Theme.of(context).colorScheme;
 
     return Column(
@@ -176,12 +177,24 @@ class _EditorScriptViewState extends State<EditorScriptView> {
                 tooltip: '导出台本',
                 onSelected: widget.onExportScript,
                 itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'txt', child: Text('导出台本 (.txt)')),
-                  PopupMenuItem(value: 'csv', child: Text('导出对白表 (.csv)')),
-                  PopupMenuItem(value: 'srt', child: Text('导出字幕 (.srt)')),
+                  ArchivePopupMenuItem(
+                    value: 'txt',
+                    child: Text('导出台本 (.txt)'),
+                  ),
+                  ArchivePopupMenuItem(
+                    value: 'csv',
+                    child: Text('导出对白表 (.csv)'),
+                  ),
+                  ArchivePopupMenuItem(
+                    value: 'srt',
+                    child: Text('导出字幕 (.srt)'),
+                  ),
                 ],
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: const [
@@ -242,7 +255,13 @@ class _EditorScriptViewState extends State<EditorScriptView> {
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
                 ),
               ),
-              const SizedBox(width: 68, child: Text('类型', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12))),
+              const SizedBox(
+                width: 68,
+                child: Text(
+                  '类型',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                ),
+              ),
             ],
           ),
         ),
@@ -252,9 +271,8 @@ class _EditorScriptViewState extends State<EditorScriptView> {
               ? Center(
                   child: Text(
                     '没有匹配的台词',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+                    style: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(color: scheme.onSurfaceVariant),
                   ),
                 )
               : ListView.separated(
@@ -325,9 +343,9 @@ class _EditorScriptViewState extends State<EditorScriptView> {
                                             '${row.sceneTitle} / ${row.beatTitle}',
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.bodySmall,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall,
                                           ),
                                         ),
                                       ],
@@ -361,10 +379,8 @@ class _EditorScriptViewState extends State<EditorScriptView> {
                                         isDense: true,
                                         border: OutlineInputBorder(),
                                       ),
-                                      onChanged: (v) => widget.onEditRow(
-                                        row,
-                                        speaker: v,
-                                      ),
+                                      onChanged: (v) =>
+                                          widget.onEditRow(row, speaker: v),
                                     )
                                   : Text(
                                       '舞台文字',
