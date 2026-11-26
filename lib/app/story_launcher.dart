@@ -953,9 +953,19 @@ class _StoryLauncherState extends State<StoryLauncher> {
     snippet: snippet,
   );
   Future<void> _deriveEntry(StoryEntry entry) async {
-    if (_busy) return;
+    if (_busy || _deletingCache || _movingDirectory) return;
     setState(() => _busy = true);
     try {
+      if (!_cached.contains(entry.path)) {
+        final group = (_groups ?? const <StoryGroup>[])
+            .where(
+              (group) => group.entries.any((item) => item.path == entry.path),
+            )
+            .firstOrNull;
+        final errors = await _repository.cacheEntry(entry, group: group);
+        if (errors.isNotEmpty) throw StateError(errors.join('；'));
+        _cached.add(entry.path);
+      }
       final document = await _repository.loadEntry(entry);
       final derived = EditorProject.fromScript(
         entry.title,
