@@ -399,11 +399,12 @@ void main() {
 '''),
       effectAssets: {'test_fx': FxAsset.parse(fixture())},
     );
-    addTearDown(engine.dispose);
-
+    // addTearDown 晚于 testWidgets 的 pending timer 校验，
+    // 引擎的 16ms 周期 ticker 必须在测试体内 dispose（同文件其他用例）。
     await engine.start();
     expect(engine.state.effects, isEmpty);
     expect(engine.state.text, '完成');
+    engine.dispose();
   });
   testWidgets('特效 delay 错开粒子启动并允许清除待启动实例', (tester) async {
     final start = tester.binding.clock.now();

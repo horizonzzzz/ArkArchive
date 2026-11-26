@@ -255,17 +255,21 @@ void main() {
       typingInterval: Duration.zero,
       elapsed: () => tester.binding.clock.now().difference(start),
     );
-    addTearDown(engine.dispose);
+    // addTearDown 晚于 testWidgets 的 pending timer 校验，
+    // 引擎的 16ms 周期 ticker 必须在测试体内 dispose（同文件其他用例）。
+    try {
+      final playback = engine.start();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(engine.state.text, isEmpty);
+      expect(engine.state.characters.single.actionX, lessThan(100));
 
-    final playback = engine.start();
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(engine.state.text, isEmpty);
-    expect(engine.state.characters.single.actionX, lessThan(100));
-
-    await tester.pump(const Duration(milliseconds: 150));
-    await playback;
-    expect(engine.state.characters.single.actionX, 100);
-    expect(engine.state.text, '到达');
+      await tester.pump(const Duration(milliseconds: 150));
+      await playback;
+      expect(engine.state.characters.single.actionX, 100);
+      expect(engine.state.text, '到达');
+    } finally {
+      engine.dispose();
+    }
   });
 
   test('charslot char_empty 只清除指定槽位', () async {

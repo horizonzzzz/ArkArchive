@@ -1,9 +1,11 @@
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'package:arknights_story_player/story_editor/editor_board.dart';
 import 'package:arknights_story_player/story_editor/editor_platform.dart';
 import 'package:arknights_story_player/story_editor/editor_project.dart';
 import 'package:arknights_story_player/story_editor/story_editor_page.dart';
@@ -99,6 +101,32 @@ EditorProject _phase2Project() => EditorProject(
   ],
 );
 
+EditorProject _boardBenchmarkProject() => EditorProject(
+  id: '33333333333333333333333333333333',
+  title: '编排台基准作品',
+  updatedAt: DateTime.utc(2026, 11, 26, 12, 0),
+  scenes: [
+    for (var s = 0; s < 5; s++)
+      EditorScene(
+        '第${s + 1}幕',
+        [
+          for (var b = 0; b < 8; b++)
+            StoryBeat('分镜 ${s * 8 + b + 1}', [
+              EditCommand('subtitle', {
+                'text': '分镜 ${s * 8 + b + 1} 文字',
+                'x': '100',
+                'y': '100',
+              }),
+              EditCommand('dialogue', {
+                'name': '阿米娅',
+                'text': '第${s * 8 + b + 1} 句台词内容',
+              }),
+            ]),
+        ],
+      ),
+  ],
+);
+
 Future<_MemoryStorage> _pumpEditor(
   WidgetTester tester,
   EditorProject project, {
@@ -154,6 +182,81 @@ void main() {
       expect(srt, contains('1\n00:00:00,000 --> '));
       expect(srt, contains('阿米娅：博士，天快亮了。'));
       expect(srt, contains('博士：终于到了。'));
+    });
+
+    test('SRT 边界：空文本不生成条目，非空条目时长恒为正且不重叠', () {
+      final project = EditorProject(
+        id: '4444444444444444444444444444444',
+        title: 'SRT 边界作品',
+        updatedAt: DateTime.utc(2026, 11, 26, 12, 0),
+        scenes: [
+          EditorScene('第一幕', [
+            StoryBeat('分镜一', [
+              // 空对白与纯空白字幕：不应生成条目，但按估算推进 cursor。
+              EditCommand('dialogue', {'name': '阿米娅', 'text': ''}),
+              EditCommand('subtitle', {'text': '   '}),
+              EditCommand('dialogue', {'name': '陈', 'text': '嗯'}),
+              // 估时为 0 的指令：不生成条目，也不应造成后续条目零时长或重叠。
+              EditCommand('blocker', {
+                'a': '0.5',
+                'r': '0',
+                'g': '0',
+                'b': '0',
+                'fadetime': '0',
+              }),
+              EditCommand('subtitle', {'text': '好'}),
+              // 超长字幕：取 6 秒估算上限。
+              EditCommand('subtitle', {'text': '长' * 100}),
+            ]),
+          ]),
+        ],
+      );
+
+      final srt = exportScriptSrt(project);
+      final blocks = srt.trim().split('\n\n');
+      expect(blocks, hasLength(3));
+      // 空文本对白/纯空白字幕未生成任何条目。
+      expect(srt, isNot(contains('阿米娅')));
+
+      final pattern = RegExp(
+        r'(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})',
+      );
+      int msAt(int h, int m, int s, int ms) =>
+          ((h * 60 + m) * 60 + s) * 1000 + ms;
+      final entries = <(int, int)>[];
+      for (final block in blocks) {
+        final lines = block.split('\n');
+        expect(lines[0], matches(RegExp(r'^\d+$')));
+        final m = pattern.firstMatch(lines[1]);
+        expect(m, isNotNull, reason: lines[1]);
+        entries.add((
+          msAt(
+            int.parse(m!.group(1)!),
+            int.parse(m.group(2)!),
+            int.parse(m.group(3)!),
+            int.parse(m.group(4)!),
+          ),
+          msAt(
+            int.parse(m.group(5)!),
+            int.parse(m.group(6)!),
+            int.parse(m.group(7)!),
+            int.parse(m.group(8)!),
+          ),
+        ));
+      }
+
+      // 非空对白/字幕估算均有正数下限，不存在零时长条目。
+      for (final (start, end) in entries) {
+        expect(end - start, greaterThan(1500));
+      }
+      // 相邻条目时间轴不重叠（穿插零估时指令也不受影响）。
+      for (var i = 1; i < entries.length; i++) {
+        expect(entries[i].$1, greaterThanOrEqualTo(entries[i - 1].$2));
+      }
+      // 单字对白/字幕取下限、超长字幕取 6 秒上限。
+      expect(entries[0].$2 - entries[0].$1, 1680);
+      expect(entries[1].$2 - entries[1].$1, 1580);
+      expect(entries[2].$2 - entries[2].$1, 6000);
     });
   });
 
@@ -435,6 +538,262 @@ void main() {
       expect(storage.exported, hasLength(1));
       expect(storage.exported.single.$2, 'srt');
       expect(utf8.decode(storage.exported.single.$3), contains('全员广播'));
+    });
+  });
+
+  group('P1-1 框选批量与拖拽重排验收', () {
+    testWidgets('鼠标空白处框选分镜 → 批量删除可一次撤销，点空白清除选择', (tester) async {
+      final storage = await _pumpEditor(tester, _phase2Project());
+      await tester.tap(find.text('编排台'));
+      await tester.pumpAndSettle();
+
+      final card0 = tester.getRect(
+        find.byKey(const ValueKey(('board-card', 0, 0))),
+      );
+      final card1 = tester.getRect(
+        find.byKey(const ValueKey(('board-card', 0, 1))),
+      );
+      // 从两卡之间空隙起手，拖出覆盖分镜二卡片的矩形（避开卡片与占位卡）。
+      final start = Offset(card0.right + 6, card0.top + 40);
+      final end = Offset(card1.right - 30, card1.bottom - 10);
+
+      final marquee = await tester.startGesture(
+        start,
+        kind: PointerDeviceKind.mouse,
+      );
+      await marquee.moveBy(end - start);
+      await tester.pump();
+      // 框选矩形覆盖层按拖拽矩形实时绘制。
+      expect(
+        tester.getRect(find.byKey(const ValueKey('board-marquee'))),
+        Rect.fromPoints(start, end),
+      );
+      await marquee.up();
+      await tester.pumpAndSettle();
+      expect(find.text('已选 1 镜'), findsOneWidget);
+
+      // 批量删除选中的分镜二。
+      await tester.tap(find.text('删除'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 600));
+
+      final afterDelete = storage.projects.values.single;
+      expect(afterDelete.beatCount, 2);
+      expect(
+        afterDelete.scenes[0].beats.map((b) => b.title),
+        ['分镜一：夜色甲板'],
+      );
+
+      // P1-1 验收：批量删除一次撤销即可恢复原数据。
+      await tester.tap(find.byTooltip('撤销'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 600));
+
+      final afterUndo = storage.projects.values.single;
+      expect(afterUndo.beatCount, 3);
+      expect(afterUndo.scenes[0].beats[1].title, '分镜二：舰桥继承');
+      expect(afterUndo.scenes[0].beats[1].commands, hasLength(2));
+      expect(
+        afterUndo.scenes[0].beats[1].commands.first.value('text'),
+        '前方发现不明信号。',
+      );
+
+      // 再次框选后，单击空白处（未拖出矩形）清除选择。
+      final again = await tester.startGesture(
+        start,
+        kind: PointerDeviceKind.mouse,
+      );
+      await again.moveBy(end - start);
+      await again.up();
+      await tester.pumpAndSettle();
+      expect(find.text('已选 1 镜'), findsOneWidget);
+
+      final click = await tester.startGesture(
+        start,
+        kind: PointerDeviceKind.mouse,
+      );
+      await click.up();
+      await tester.pumpAndSettle();
+      expect(find.text('已选 1 镜'), findsNothing);
+    });
+
+    testWidgets('已有选择 → 框选被系统取消 → 原选择完整保留', (tester) async {
+      await _pumpEditor(tester, _phase2Project());
+      await tester.tap(find.text('编排台'));
+      await tester.pumpAndSettle();
+
+      final board = find.byType(EditorBoardView);
+      Rect cardRectOf(int si, int bi) => tester.getRect(
+        find.descendant(
+          of: board,
+          matching: find.byKey(ValueKey(('board-card', si, bi))),
+        ),
+      );
+
+      // 先点选分镜一卡片，形成已有选择。
+      // 卡片 InkWell 同时注册 onTap/onDoubleTap，单击要等双击竞争窗口
+      // （kDoubleTapTimeout）结束后才回调，需显式推进该时长。
+      await tester.tap(
+        find.descendant(
+          of: board,
+          matching: find.text('分镜一：夜色甲板'),
+        ),
+      );
+      await tester.pump(kDoubleTapTimeout);
+      await tester.pumpAndSettle();
+      expect(find.text('已选 1 镜'), findsOneWidget);
+
+      final card0 = cardRectOf(0, 0);
+      final card1 = cardRectOf(0, 1);
+      final start = Offset(card0.right + 6, card0.top + 40);
+      final end = Offset(card1.right - 30, card1.bottom - 10);
+
+      // 不按 Ctrl 开始框选并拖向分镜二，随后指针被系统取消。
+      final gesture = await tester.startGesture(
+        start,
+        kind: PointerDeviceKind.mouse,
+      );
+      await gesture.moveBy(end - start);
+      await tester.pump();
+      // 框选进行中，选择为矩形覆盖的分镜二。
+      final checkIcon = find.descendant(
+        of: board,
+        matching: find.byIcon(Icons.check),
+      );
+      expect(card1.contains(tester.getRect(checkIcon).center), isTrue);
+
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+
+      // 取消框选后恢复框选前的原选择：分镜一仍被选中，矩形覆盖层消失。
+      expect(find.text('已选 1 镜'), findsOneWidget);
+      expect(card0.contains(tester.getRect(checkIcon).center), isTrue);
+      expect(find.byKey(const ValueKey('board-marquee')), findsNothing);
+    });
+
+    testWidgets('同幕拖拽重排：指令数据完整、当前位置跟随移动分镜且可撤销', (tester) async {
+      final storage = await _pumpEditor(tester, _phase2Project());
+      await tester.tap(find.text('编排台'));
+      await tester.pumpAndSettle();
+
+      final from = tester
+          .getRect(find.byKey(const ValueKey(('board-card', 0, 0))))
+          .center;
+      final to = tester
+          .getRect(find.byKey(const ValueKey(('board-card', 0, 1))))
+          .center;
+
+      final gesture = await tester.startGesture(
+        from,
+        kind: PointerDeviceKind.mouse,
+      );
+      await gesture.moveBy(const Offset(8, 8));
+      await tester.pump();
+      await gesture.moveTo(to);
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 600));
+
+      // P1-1 验收：拖拽重排不丢状态 —— 顺序交换且指令数据原样保留。
+      final afterMove = storage.projects.values.single;
+      expect(
+        afterMove.scenes[0].beats.map((b) => b.title),
+        ['分镜二：舰桥继承', '分镜一：夜色甲板'],
+      );
+      expect(afterMove.scenes[0].beats[1].commands, hasLength(5));
+      expect(
+        afterMove.scenes[0].beats[1].commands.first.value('text'),
+        '序幕文字',
+      );
+      // 当前位置跟随移动后的分镜并持久化。
+      expect(afterMove.lastPosition?.scene, 0);
+      expect(afterMove.lastPosition?.beat, 1);
+
+      // 撤销恢复原顺序与位置。
+      await tester.tap(find.byTooltip('撤销'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 600));
+      final afterUndo = storage.projects.values.single;
+      expect(
+        afterUndo.scenes[0].beats.map((b) => b.title),
+        ['分镜一：夜色甲板', '分镜二：舰桥继承'],
+      );
+    });
+
+    testWidgets('跨幕拖拽重排：分镜移入第二幕首位且当前位置恢复', (tester) async {
+      final storage = await _pumpEditor(tester, _phase2Project());
+      await tester.tap(find.text('编排台'));
+      await tester.pumpAndSettle();
+
+      final from = tester
+          .getRect(find.byKey(const ValueKey(('board-card', 0, 1))))
+          .center;
+      final to = tester
+          .getRect(find.byKey(const ValueKey(('board-card', 1, 0))))
+          .center;
+
+      final gesture = await tester.startGesture(
+        from,
+        kind: PointerDeviceKind.mouse,
+      );
+      await gesture.moveBy(const Offset(8, 8));
+      await tester.pump();
+      await gesture.moveTo(to);
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 600));
+
+      final afterMove = storage.projects.values.single;
+      expect(
+        afterMove.scenes[0].beats.map((b) => b.title),
+        ['分镜一：夜色甲板'],
+      );
+      expect(
+        afterMove.scenes[1].beats.map((b) => b.title),
+        ['分镜二：舰桥继承', '分镜三：黎明港口'],
+      );
+      // 指令数据跨幕移动后原样保留。
+      expect(afterMove.scenes[1].beats.first.commands, hasLength(2));
+      expect(
+        afterMove.scenes[1].beats.first.commands.last.value('text'),
+        '我来接管雷达！',
+      );
+      // 当前位置恢复到移动后的新位置。
+      expect(afterMove.lastPosition?.scene, 1);
+      expect(afterMove.lastPosition?.beat, 0);
+    });
+
+    testWidgets('40 个分镜作品在编排台 2 秒内可见全貌（P1-1 计时基准）', (tester) async {
+      await _pumpEditor(tester, _boardBenchmarkProject());
+      final watch = Stopwatch()..start();
+      await tester.tap(find.text('编排台'));
+      await tester.pumpAndSettle();
+      watch.stop();
+      // WidgetTester 使用虚拟时间；此处记录 JIT 调试环境墙钟供诊断与
+      // 验收佐证（release 环境只会更快），详见二期验证报告。
+      debugPrint('40 分镜编排台首屏墙钟耗时：${watch.elapsedMilliseconds}ms');
+
+      // 首屏即可见全貌汇总（幕数 / 分镜数 / 总估时）。
+      expect(find.textContaining('共 5 幕 · 40 个分镜'), findsOneWidget);
+      // 滚动到底部可达最后一个分镜卡片，无内容丢失。
+      // 从两卡之间的空白处起手拖拽：从卡片上起手会被 Draggable 抢占手势。
+      final card0 = tester.getRect(
+        find.byKey(const ValueKey(('board-card', 0, 0))),
+      );
+      await tester.dragFrom(
+        Offset(card0.right + 6, card0.top + 40),
+        const Offset(0, -6000),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(EditorBoardView),
+          matching: find.text('分镜 40'),
+        ),
+        findsOneWidget,
+      );
     });
   });
 

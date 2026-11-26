@@ -1,3 +1,5 @@
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'editor_project.dart';
@@ -129,6 +131,18 @@ class _EditorBoardViewState extends State<EditorBoardView> {
   BoardFilter _filter = BoardFilter.all;
   final Set<BeatRef> _selected = {};
 
+  // P1-1 框选批量：鼠标在卡片墙空白处拖出矩形选区。
+  static const double _marqueeSlop = 4.0;
+  final Map<BeatRef, GlobalKey> _cardKeys = {};
+  final Map<int, GlobalKey> _newBeatKeys = {};
+  final GlobalKey _boardAreaKey = GlobalKey();
+  int? _marqueePointer;
+  Offset? _marqueeOrigin;
+  Offset? _marqueeCurrent;
+  Rect? _marquee;
+  bool _marqueeAdditive = false;
+  Set<BeatRef> _marqueeBase = const {};
+
   int _warningsFor(int sceneIndex, int beatIndex) {
     var count = 0;
     for (final issue in widget.issues) {
@@ -162,14 +176,141 @@ class _EditorBoardViewState extends State<EditorBoardView> {
     });
   }
 
+  GlobalKey _cardKey(BeatRef ref) => _cardKeys.putIfAbsent(ref, GlobalKey.new);
+
+  GlobalKey _newBeatKey(int sceneIndex) =>
+      _newBeatKeys.putIfAbsent(sceneIndex, GlobalKey.new);
+
+  Rect? _globalRect(GlobalKey key) {
+    final box = key.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  /// 框选只在卡片墙空白处生效；落在分镜卡片或「新建分镜」占位卡上时
+  /// 让位给点选/勾选/拖拽重排等既有交互。
+  bool _isOnInteractiveControl(Offset global) {
+    for (final key in _cardKeys.values) {
+      if (_globalRect(key)?.contains(global) ?? false) return true;
+    }
+    for (final key in _newBeatKeys.values) {
+      if (_globalRect(key)?.contains(global) ?? false) return true;
+    }
+    return false;
+  }
+
+  void _onBoardPointerDown(PointerDownEvent event) {
+    if (_marqueePointer != null) return;
+    // 仅鼠标左键框选；触摸/触控笔不在框选范围（触控笔在默认 dragDevices
+    // 内，同时框选会与列表滚动冲突，且 §4.2 移动端本就无多选）。
+    if (event.kind != PointerDeviceKind.mouse) return;
+    if ((event.buttons & kPrimaryButton) == 0) return;
+    if (_isOnInteractiveControl(event.position)) return;
+    _marqueePointer = event.pointer;
+    _marqueeOrigin = event.position;
+    _marqueeCurrent = event.position;
+    _marqueeAdditive = HardwareKeyboard.instance.isControlPressed;
+    // 始终保存框选前的完整选择：取消框选时恢复原选择，
+    // Ctrl 追加与否在选区同步时再决定。
+    _marqueeBase = {..._selected};
+  }
+
+  void _onBoardPointerMove(PointerMoveEvent event) {
+    if (event.pointer != _marqueePointer) return;
+    _marqueeCurrent = event.position;
+    if (_marquee == null &&
+        (_marqueeCurrent! - _marqueeOrigin!).distance <= _marqueeSlop) {
+      return;
+    }
+    setState(_syncMarqueeSelection);
+  }
+
+  /// 以拖拽矩形实时覆盖卡片更新选择集；Ctrl 按住时在原选择上追加。
+  void _syncMarqueeSelection() {
+    final rect = Rect.fromPoints(_marqueeOrigin!, _marqueeCurrent!);
+    _marquee = rect;
+    _selected
+      ..clear()
+      ..addAll(_marqueeAdditive ? _marqueeBase : const {});
+    for (final entry in _cardKeys.entries) {
+      final cardRect = _globalRect(entry.value);
+      if (cardRect != null && cardRect.overlaps(rect)) {
+        _selected.add(entry.key);
+      }
+    }
+  }
+
+  void _onBoardPointerUp(PointerUpEvent event) {
+    if (event.pointer != _marqueePointer) return;
+    final wasMarquee = _marquee != null;
+    final additive = _marqueeAdditive;
+    _resetMarqueeTracking();
+    setState(() {
+      _marquee = null;
+      // 未拖出矩形：视作点击空白处，清除已有选择。
+      if (!wasMarquee && !additive) _selected.clear();
+    });
+  }
+
+  void _onBoardPointerCancel(PointerCancelEvent event) {
+    if (event.pointer != _marqueePointer) return;
+    final base = _marqueeBase;
+    _resetMarqueeTracking();
+    setState(() {
+      _marquee = null;
+      _selected
+        ..clear()
+        ..addAll(base);
+    });
+  }
+
+  void _resetMarqueeTracking() {
+    _marqueePointer = null;
+    _marqueeOrigin = null;
+    _marqueeCurrent = null;
+    _marqueeAdditive = false;
+    _marqueeBase = const {};
+  }
+
+  /// 框选矩形覆盖层（全局坐标 → 卡片墙本地坐标）。
+  Widget _marqueeOverlay() {
+    final rect = _marquee;
+    final box = _boardAreaKey.currentContext?.findRenderObject();
+    if (rect == null || box is! RenderBox || !box.attached || !box.hasSize) {
+      return const SizedBox.shrink();
+    }
+    final scheme = Theme.of(context).colorScheme;
+    return Positioned.fromRect(
+      rect: Rect.fromPoints(
+        box.globalToLocal(rect.topLeft),
+        box.globalToLocal(rect.bottomRight),
+      ),
+      child: IgnorePointer(
+        child: Container(
+          key: const ValueKey('board-marquee'),
+          decoration: BoxDecoration(
+            color: scheme.primary.withValues(alpha: 0.08),
+            border: Border.all(color: scheme.primary),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // 清理因删除导致的失效选择。
+    // 清理因删除导致的失效选择与对应 key。
     _selected.removeWhere(
       (r) =>
           r.scene >= widget.project.scenes.length ||
           r.beat >= widget.project.scenes[r.scene].beats.length,
     );
+    _cardKeys.removeWhere(
+      (r, _) =>
+          r.scene >= widget.project.scenes.length ||
+          r.beat >= widget.project.scenes[r.scene].beats.length,
+    );
+    _newBeatKeys.removeWhere((si, _) => si >= widget.project.scenes.length);
 
     if (widget.compact) {
       return _buildMobileSwitcher(context);
@@ -334,14 +475,27 @@ class _EditorBoardViewState extends State<EditorBoardView> {
             ],
           ),
         ),
-        // 按幕分组的卡片墙
+        // 按幕分组的卡片墙；Listener 支撑框选（鼠标空白处拖出矩形）。
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(14),
-            children: [
-              for (var si = 0; si < widget.project.scenes.length; si++)
-                _buildSceneSection(context, si),
-            ],
+          child: Listener(
+            onPointerDown: _onBoardPointerDown,
+            onPointerMove: _onBoardPointerMove,
+            onPointerUp: _onBoardPointerUp,
+            onPointerCancel: _onBoardPointerCancel,
+            child: Stack(
+              key: _boardAreaKey,
+              fit: StackFit.expand,
+              children: [
+                ListView(
+                  padding: const EdgeInsets.all(14),
+                  children: [
+                    for (var si = 0; si < widget.project.scenes.length; si++)
+                      _buildSceneSection(context, si),
+                  ],
+                ),
+                if (_marquee != null) _marqueeOverlay(),
+              ],
+            ),
           ),
         ),
         // 底部全作品估算时长与分镜数统计
@@ -358,7 +512,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
               ),
               const Spacer(),
               Text(
-                '双击卡片进入演出台 · 拖拽可同幕或跨幕重排',
+                '空白处拖拽框选 · 双击卡片进入演出台 · 拖拽卡片可同幕或跨幕重排',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -427,7 +581,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
                   scene.beats.length,
                 ),
                 builder: (context, candidate, _) => InkWell(
-                  key: ValueKey(('board-new-beat', sceneIndex)),
+                  key: _newBeatKey(sceneIndex),
                   borderRadius: BorderRadius.circular(10),
                   onTap: () => widget.onAddBeat(sceneIndex),
                   child: Container(
@@ -512,6 +666,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
     );
 
     return DragTarget<BeatRef>(
+      key: _cardKey(ref),
       onWillAcceptWithDetails: (details) => details.data != ref,
       onAcceptWithDetails: (details) =>
           widget.onMoveBeat(details.data, sceneIndex, beatIndex),

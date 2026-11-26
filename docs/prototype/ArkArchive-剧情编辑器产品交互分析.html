@@ -1007,7 +1007,7 @@
 
       <h3>第二期落地状态（2026-11-26）</h3>
       <div class="callout">
-        <p><b>第二期「批量编辑与结构浏览」已实现并完成验收验证。</b>在保持 JSON v1 存档与引擎向后兼容的前提下，于 <code>lib/story_editor/</code> 新增 <code>editor_inspector.dart</code>、<code>editor_structure.dart</code>、<code>editor_board.dart</code>、<code>editor_script.dart</code> 并升级 <code>editor_project.dart</code>、<code>editor_stage.dart</code>、<code>story_editor_page.dart</code>；验收以 release Web 构建 + Playwright 双视口（1600×1000 / 390×844，0 控制台报错）+ <code>dart analyze</code> 0 issues + 42 个 <code>story_editor</code> 单测全量回归完成，逐项证据（含 12 张截图）见 <a href="ArkArchive-第二期批量编辑与结构浏览验证报告.html">《第二期批量编辑与结构浏览验证报告》</a>。</p>
+        <p><b>第二期「批量编辑与结构浏览」已实现并完成验收验证。</b>在保持 JSON v1 存档与引擎向后兼容的前提下，于 <code>lib/story_editor/</code> 新增 <code>editor_inspector.dart</code>、<code>editor_structure.dart</code>、<code>editor_board.dart</code>、<code>editor_script.dart</code> 并升级 <code>editor_project.dart</code>、<code>editor_stage.dart</code>、<code>story_editor_page.dart</code>；验收以 release Web 构建 + Playwright 双视口（1600×1000 / 390×844，0 控制台报错）+ <code>dart analyze</code> 0 issues + 48 个 <code>story_editor</code> 单测全量回归完成；两轮复审的三处 Should 缺口（故事板框选、框选取消保留原选择、P1-1 性能与拖拽证据）已补齐并回归，逐项证据（含 12 张截图）见 <a href="ArkArchive-第二期批量编辑与结构浏览验证报告.html">《第二期批量编辑与结构浏览验证报告》</a>。</p>
       </div>
       <div class="table-wrap">
         <table>
@@ -1030,8 +1030,8 @@
             </tr>
             <tr>
               <td><b>P1-1 编排台（故事板）</b></td>
-              <td>新增 <code>editor_board.dart</code>：桌面端按幕分组卡片墙，按分镜视觉签名缓存末态缩略图，展示首句、指令数、估算时长、警告徽标、标记色与含音频/特效/分支角标；支持小/中/大卡缩放、全部/有警告/有标记筛选、同幕及跨幕拖拽重排、多选批量复制/删除、每幕末尾「＋ 新建分镜」与双击回演出台；底部汇总总幕数、分镜数与估算时长。</td>
-              <td>宽屏编排台卡片墙、缩放/筛选与双击定位均通过单测与截图验证；移动端自动降级为轻分镜切换。</td>
+              <td>新增 <code>editor_board.dart</code>：桌面端按幕分组卡片墙，按分镜视觉签名缓存末态缩略图，展示首句、指令数、估算时长、警告徽标、标记色与含音频/特效/分支角标；支持小/中/大卡缩放、全部/有警告/有标记筛选、同幕及跨幕拖拽重排、多选批量复制/删除、鼠标空白处拖出矩形框选批量（Ctrl 追加、点空白清除，触摸不启用以保留原生滚动）、每幕末尾「＋ 新建分镜」与双击回演出台；底部汇总总幕数、分镜数与估算时长。</td>
+              <td>宽屏卡片墙、缩放/筛选、框选批量（批量删除可一次撤销）、同幕/跨幕拖拽重排（数据完整、当前位置跟随并持久化）与双击定位均通过单测与截图验证；40 分镜作品切换编排台首屏墙钟多轮实测 107–257ms（JIT 调试环境），满足「2 秒内看到全貌」验收；移动端自动降级为轻分镜切换。</td>
             </tr>
             <tr>
               <td><b>P1-4 结构树 / 搜索 / 标记</b></td>
@@ -1051,6 +1051,7 @@
           </tbody>
         </table>
       </div>
+      <p class="small"><b>审查闭环：</b>二期验收后经两轮独立 review：Must 无缺陷；三处 Should 均核实并修复——故事板框选批量补齐（鼠标空白处拖矩形、Ctrl 追加、点空白清除、取消恢复原选择，触摸与触控笔不启用），P1-1 性能与拖拽验收补实测证据（40 分镜首屏墙钟多轮实测 107–257ms，远低于 2 秒线；同幕/跨幕重排的数据、位置与撤销均有断言），取消框选清空原选择已修复（框选开始即保存原选择、取消时恢复）；Nice 项（SRT 零时长/重叠边界）补测试覆盖（空文本跳过、每条时长恒为正且时间轴不重叠）。另修复两个先于本期的基线测试失败（<code>engine_test</code> / <code>fx_test</code> 在 testWidgets 内 addTearDown 清理引擎晚于 pending timer 校验，改为测试体内 dispose），全量回归 473 通过 · 2 跳过 · 0 失败。</p>
       <p class="small"><b>二期明确未纳入 / 留待后续迭代：</b>舞台拖拽框选多对象（同时移动多个舞台元素）与检查器音量独立试听按钮未在本轮最小完整闭环展开；常驻素材箱（P1-3）、D1 面板拖拽改宽与布局自定义，以及第三期能力（P1-2 状态泳道与固化状态、P1-5 分层保存与自动快照、P2-1 分支图、P2-2 Web 只读包/MP4、P2-4 跨作品素材库）留待后续批次。本轮实机构建仅覆盖 Web Release，Windows / Android / iOS 原生端真机包待后续补测。</p>
 
       <h3>P0 · 体验基建与性能止血（约 2–3 周，低风险）</h3>
