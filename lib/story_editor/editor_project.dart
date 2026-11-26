@@ -133,22 +133,223 @@ class EditorIssue {
   bool get locatable => sceneIndex >= 0 && beatIndex >= 0 && commandIndex >= 0;
 }
 
+/// 标记预设色键（用于分镜与指令标记）。
+const editorMarkerColors = <String, int>{
+  'amber': 0xFFE5A93B,
+  'red': 0xFFE06C75,
+  'cyan': 0xFF56B6C2,
+  'green': 0xFF98C379,
+  'purple': 0xFFC678DD,
+};
+
+/// 标记颜色的中文说明。
+const editorMarkerLabels = <String, String>{
+  'amber': '待核对',
+  'red': '问题',
+  'cyan': '重点',
+  'green': '完成',
+  'purple': '创意',
+};
+
+/// 分镜或幕的轻量标记（颜色键 + 可选备注）。
+class EditorMarker {
+  const EditorMarker({this.color = '', this.note = ''});
+
+  final String color;
+  final String note;
+
+  bool get isEmpty => color.isEmpty && note.trim().isEmpty;
+  bool get isNotEmpty => !isEmpty;
+
+  EditorMarker copyWith({String? color, String? note}) =>
+      EditorMarker(color: color ?? this.color, note: note ?? this.note);
+
+  Map<String, Object> toJson() => {
+    if (color.isNotEmpty) 'color': color,
+    if (note.isNotEmpty) 'note': note,
+  };
+
+  static EditorMarker fromJson(Object? raw) {
+    if (raw is! Map) return const EditorMarker();
+    final color = raw['color'] is String ? raw['color'] as String : '';
+    final note = raw['note'] is String ? raw['note'] as String : '';
+    return EditorMarker(
+      color: editorMarkerColors.containsKey(color) ? color : '',
+      note: note.length > 200 ? note.substring(0, 200) : note,
+    );
+  }
+}
+
+/// 上次编辑位置，用于重新打开作品时恢复视口焦点。
+class EditorPosition {
+  const EditorPosition({this.scene = 0, this.beat = 0, this.command = -1});
+
+  final int scene;
+  final int beat;
+  final int command;
+
+  Map<String, Object> toJson() => {
+    'scene': scene,
+    'beat': beat,
+    'command': command,
+  };
+
+  static EditorPosition? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final s = raw['scene'];
+    final b = raw['beat'];
+    final c = raw['command'];
+    if (s is! int || b is! int || c is! int) return null;
+    return EditorPosition(scene: s, beat: b, command: c);
+  }
+}
+
 class StoryBeat {
-  const StoryBeat(this.title, [this.commands = const []]);
+  const StoryBeat(
+    this.title, [
+    this.commands = const [],
+    this.marker = const EditorMarker(),
+  ]);
   final String title;
   final List<EditCommand> commands;
-  StoryBeat copyWith({String? title, List<EditCommand>? commands}) =>
-      StoryBeat(title ?? this.title, commands ?? this.commands);
+  final EditorMarker marker;
+
+  StoryBeat copyWith({
+    String? title,
+    List<EditCommand>? commands,
+    EditorMarker? marker,
+  }) => StoryBeat(
+    title ?? this.title,
+    commands ?? this.commands,
+    marker ?? this.marker,
+  );
+
+  /// 估算该分镜演出时长（秒），用于编排台、结构树与台本时间轴。
+  double get estimatedSeconds {
+    var total = 0.0;
+    for (final c in commands) {
+      total += estimateCommandSeconds(c);
+    }
+    return total;
+  }
+
+  /// 分镜内首句可读文案（对白/舞台文字），无则返回空字符串。
+  String get leadLine {
+    for (final c in commands) {
+      if (c.tag == 'dialogue') {
+        final text = c.value('text').trim();
+        if (text.isNotEmpty) {
+          final name = c.value('name').trim();
+          return name.isEmpty ? text : '$name：$text';
+        }
+      } else if (c.tag == 'subtitle') {
+        final text = c.value('text').trim();
+        if (text.isNotEmpty) return text;
+      }
+    }
+    return '';
+  }
+
+  bool get hasAudio => commands.any(
+    (c) =>
+        c.tag == 'playmusic' ||
+        c.tag == 'playsound' ||
+        c.tag == 'stopmusic' ||
+        c.tag == 'stopsound',
+  );
+
+  bool get hasFx => commands.any(
+    (c) =>
+        c.tag == 'bgeffect' ||
+        c.tag == 'effect' ||
+        c.tag == 'blocker' ||
+        c.tag == 'camerashake' ||
+        c.tag == 'cameraeffect',
+  );
+
+  bool get hasBranch => commands.any(
+    (c) => c.tag == 'decision' || c.tag == 'predicate' || c.tag == 'warp',
+  );
+
+  /// 仅与分镜视觉末态相关的轻量签名，用于编排台缩略图缓存去重。
+  String get visualSignature {
+    final buf = StringBuffer();
+    for (final c in commands) {
+      if (c.tag == 'background' ||
+          c.tag == 'image' ||
+          c.tag == 'charslot' ||
+          c.tag == 'subtitle' ||
+          c.tag == 'blocker' ||
+          c.tag == 'dialogue') {
+        buf
+          ..write(c.tag)
+          ..write(':')
+          ..write(c.source)
+          ..write('\n');
+      }
+    }
+    return buf.toString();
+  }
+}
+
+/// 估算单条指令播放耗时（秒）。
+double estimateCommandSeconds(EditCommand c) {
+  switch (c.tag) {
+    case 'dialogue':
+      final len = c.value('text').trim().length;
+      return (1.6 + len * 0.08).clamp(1.6, 8.0);
+    case 'subtitle':
+      final text = c.value('text').trim();
+      return text.isEmpty ? 0.3 : (1.5 + text.length * 0.08).clamp(1.5, 6.0);
+    case 'delay':
+      return (double.tryParse(c.value('time')) ?? 1.0).clamp(0.1, 30.0);
+    case 'blocker':
+    case 'background':
+    case 'image':
+    case 'bgeffect':
+    case 'effect':
+      final fade = double.tryParse(c.value('fadetime')) ?? 0;
+      return c.value('block') == 'true' ? fade.clamp(0.0, 15.0) : 0.0;
+    case 'charslot':
+      final dur = double.tryParse(c.value('duration')) ?? 0;
+      return c.value('isblock') == 'true' ? dur.clamp(0.0, 15.0) : 0.0;
+    default:
+      return 0.0;
+  }
+}
+
+/// 将秒数格式化为简短时长（如 12s / 1m08s）。
+String formatEstimatedDuration(double seconds) {
+  final rounded = seconds.round();
+  if (rounded < 60) return '${rounded}s';
+  final m = rounded ~/ 60;
+  final s = rounded % 60;
+  return '${m}m${s.toString().padLeft(2, '0')}s';
 }
 
 class EditorScene {
-  const EditorScene(this.title, this.beats);
+  const EditorScene(
+    this.title,
+    this.beats, [
+    this.marker = const EditorMarker(),
+  ]);
   final String title;
   final List<StoryBeat> beats;
-  EditorScene copyWith({String? title, List<StoryBeat>? beats}) =>
-      EditorScene(title ?? this.title, beats ?? this.beats);
-}
+  final EditorMarker marker;
 
+  EditorScene copyWith({
+    String? title,
+    List<StoryBeat>? beats,
+    EditorMarker? marker,
+  }) => EditorScene(
+    title ?? this.title,
+    beats ?? this.beats,
+    marker ?? this.marker,
+  );
+
+  double get estimatedSeconds =>
+      beats.fold(0.0, (sum, b) => sum + b.estimatedSeconds);
+}
 class EditorProject {
   EditorProject({
     required this.id,
@@ -157,6 +358,7 @@ class EditorProject {
     this.assets = const {},
     DateTime? updatedAt,
     this.derivedFrom,
+    this.lastPosition,
   }) : updatedAt = updatedAt ?? DateTime.now();
   factory EditorProject.create(String title) => EditorProject(
     id: newProjectId(),
@@ -171,6 +373,12 @@ class EditorProject {
   final Map<String, EditorAsset> assets;
   final DateTime updatedAt;
   final String? derivedFrom;
+  final EditorPosition? lastPosition;
+
+  double get estimatedSeconds =>
+      scenes.fold(0.0, (sum, s) => sum + s.estimatedSeconds);
+
+  int get beatCount => scenes.fold(0, (sum, s) => sum + s.beats.length);
 
   EditorProject copyWith({
     String? id,
@@ -179,6 +387,7 @@ class EditorProject {
     Map<String, EditorAsset>? assets,
     DateTime? updatedAt,
     String? derivedFrom,
+    EditorPosition? lastPosition,
   }) => EditorProject(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -186,6 +395,7 @@ class EditorProject {
     assets: assets ?? this.assets,
     updatedAt: updatedAt ?? DateTime.now(),
     derivedFrom: derivedFrom ?? this.derivedFrom,
+    lastPosition: lastPosition ?? this.lastPosition,
   );
 
   EditorProject touch() => copyWith(updatedAt: DateTime.now());
@@ -319,10 +529,12 @@ class EditorProject {
       for (final s in scenes)
         {
           'title': s.title,
+          if (s.marker.isNotEmpty) 'marker': s.marker.toJson(),
           'beats': [
             for (final b in s.beats)
               {
                 'title': b.title,
+                if (b.marker.isNotEmpty) 'marker': b.marker.toJson(),
                 'commands': [for (final c in b.commands) c.source],
               },
           ],
@@ -332,6 +544,8 @@ class EditorProject {
     'updatedAt': updatedAt.toIso8601String(),
     // ignore: use_null_aware_elements
     if (derivedFrom != null) 'derivedFrom': derivedFrom!,
+    // ignore: use_null_aware_elements
+    if (lastPosition != null) 'lastPosition': lastPosition!.toJson(),
   };
 
   Uint8List export() =>
@@ -375,10 +589,22 @@ class EditorProject {
             }
             commands.add(EditCommand.fromScript(parsed.single));
           }
-          beats.add(StoryBeat(title(beat['title']), commands));
+          beats.add(
+            StoryBeat(
+              title(beat['title']),
+              commands,
+              EditorMarker.fromJson(beat['marker']),
+            ),
+          );
         }
         if (beats.isEmpty) throw const FormatException('每一幕至少需要一个分镜');
-        scenes.add(EditorScene(title(scene['title']), beats));
+        scenes.add(
+          EditorScene(
+            title(scene['title']),
+            beats,
+            EditorMarker.fromJson(scene['marker']),
+          ),
+        );
       }
       if (scenes.isEmpty) throw const FormatException('作品至少需要一幕');
       return EditorProject(
@@ -388,6 +614,7 @@ class EditorProject {
         assets: assets,
         updatedAt: DateTime.tryParse(data['updatedAt'] as String? ?? ''),
         derivedFrom: data['derivedFrom'] as String?,
+        lastPosition: EditorPosition.fromJson(data['lastPosition']),
       );
     } on TypeError {
       throw const FormatException('作品文件结构无效');
@@ -587,3 +814,157 @@ const editorFields = <String, (String, List<EditorField>)>{
   'bgeffect': ('持续特效', _fx),
   'effect': ('单次特效', _fx),
 };
+
+/// 剧本台与台本导出的单条对白/舞台文字行。
+class ScriptRowRef {
+  const ScriptRowRef({
+    required this.sceneIndex,
+    required this.beatIndex,
+    required this.commandIndex,
+    required this.sceneTitle,
+    required this.beatTitle,
+    required this.command,
+  });
+
+  final int sceneIndex;
+  final int beatIndex;
+  final int commandIndex;
+  final String sceneTitle;
+  final String beatTitle;
+  final EditCommand command;
+
+  String get speaker =>
+      command.tag == 'dialogue' ? command.value('name') : '[舞台文字]';
+  String get text => command.value('text');
+  bool get isDialogue => command.tag == 'dialogue';
+}
+
+/// 收集作品中所有对白与舞台文字行（可按幕过滤）。
+List<ScriptRowRef> collectScriptRows(
+  EditorProject project, {
+  int? sceneIndex,
+}) {
+  final rows = <ScriptRowRef>[];
+  for (final (s, scene) in project.scenes.indexed) {
+    if (sceneIndex != null && s != sceneIndex) continue;
+    for (final (b, beat) in scene.beats.indexed) {
+      for (final (c, command) in beat.commands.indexed) {
+        if (command.tag == 'dialogue' || command.tag == 'subtitle') {
+          rows.add(
+            ScriptRowRef(
+              sceneIndex: s,
+              beatIndex: b,
+              commandIndex: c,
+              sceneTitle: scene.title,
+              beatTitle: beat.title,
+              command: command,
+            ),
+          );
+        }
+      }
+    }
+  }
+  return rows;
+}
+
+/// 导出可读纯文本台本（TXT）。
+String exportScriptTxt(EditorProject project, {int? sceneIndex}) {
+  final buf = StringBuffer()..writeln(project.title);
+  var lastScene = -1;
+  var lastBeat = -1;
+  for (final row in collectScriptRows(project, sceneIndex: sceneIndex)) {
+    if (row.sceneIndex != lastScene) {
+      buf
+        ..writeln()
+        ..writeln('=== ${row.sceneTitle} ===');
+      lastScene = row.sceneIndex;
+      lastBeat = -1;
+    }
+    if (row.beatIndex != lastBeat) {
+      buf.writeln('--- ${row.beatTitle} ---');
+      lastBeat = row.beatIndex;
+    }
+    final text = row.text.trim();
+    if (text.isEmpty) continue;
+    if (row.isDialogue) {
+      final speaker = row.speaker.trim();
+      buf.writeln(speaker.isEmpty ? text : '$speaker：$text');
+    } else {
+      buf.writeln('[文字] $text');
+    }
+  }
+  return buf.toString();
+}
+
+String _csvCell(String value) {
+  final needsQuote =
+      value.contains(',') ||
+      value.contains('"') ||
+      value.contains('\n') ||
+      value.contains('\r');
+  if (!needsQuote) return value;
+  return '"${value.replaceAll('"', '""')}"';
+}
+
+/// 导出 UTF-8 CSV 表格台本（含 BOM 便于 Excel 直接打开）。
+String exportScriptCsv(EditorProject project, {int? sceneIndex}) {
+  final buf = StringBuffer('${String.fromCharCode(0xFEFF)}幕,分镜,序号,类型,说话人,台词\r\n');
+  for (final row in collectScriptRows(project, sceneIndex: sceneIndex)) {
+    final fields = [
+      row.sceneTitle,
+      row.beatTitle,
+      '${row.commandIndex + 1}',
+      row.isDialogue ? '对白' : '舞台文字',
+      row.isDialogue ? row.speaker : '',
+      row.text,
+    ];
+    buf.writeln(fields.map(_csvCell).join(','));
+  }
+  return buf.toString();
+}
+
+String _srtTimestamp(double seconds) {
+  final totalMs = (seconds * 1000).round().clamp(0, 359999999);
+  final h = totalMs ~/ 3600000;
+  final m = (totalMs % 3600000) ~/ 60000;
+  final s = (totalMs % 60000) ~/ 1000;
+  final ms = totalMs % 1000;
+  return '${h.toString().padLeft(2, '0')}:'
+      '${m.toString().padLeft(2, '0')}:'
+      '${s.toString().padLeft(2, '0')},'
+      '${ms.toString().padLeft(3, '0')}';
+}
+
+/// 导出按估算时长顺序排列的 SRT 字幕文件。
+String exportScriptSrt(EditorProject project, {int? sceneIndex}) {
+  final buf = StringBuffer();
+  var cursor = 0.0;
+  var index = 1;
+  for (final (s, scene) in project.scenes.indexed) {
+    if (sceneIndex != null && s != sceneIndex) continue;
+    for (final beat in scene.beats) {
+      for (final command in beat.commands) {
+        final dur = estimateCommandSeconds(command);
+        if (command.tag == 'dialogue' || command.tag == 'subtitle') {
+          final text = command.value('text').trim();
+          if (text.isNotEmpty) {
+            final start = cursor;
+            final end = cursor + (dur > 0 ? dur : 2.0);
+            final speaker = command.tag == 'dialogue'
+                ? command.value('name').trim()
+                : '';
+            final line = speaker.isEmpty ? text : '$speaker：$text';
+            buf
+              ..writeln(index)
+              ..writeln('${_srtTimestamp(start)} --> ${_srtTimestamp(end)}')
+              ..writeln(line)
+              ..writeln();
+            index++;
+          }
+        }
+        cursor += dur;
+      }
+    }
+  }
+  return buf.toString();
+}

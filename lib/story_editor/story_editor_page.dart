@@ -6,15 +6,20 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../story_player/data/asset_store.dart';
-import '../story_player/script.dart';
 import '../story_player/ui/story_stage.dart';
+import 'editor_board.dart';
+import 'editor_inspector.dart';
 import 'editor_materials.dart';
 import 'editor_platform.dart';
 import 'editor_preview.dart';
 import 'editor_project.dart';
+import 'editor_script.dart';
 import 'editor_stage.dart';
+import 'editor_structure.dart';
 
 enum _PreviewMode { beat, fromBeat, full }
+
+enum _EditorWorkspace { stage, board, script }
 
 typedef _Selection = (EditorProject, int, int, int);
 
@@ -39,6 +44,46 @@ class _GotoIntent extends Intent {
   final bool toStart;
 }
 
+class _UndoIntent extends Intent {
+  const _UndoIntent();
+}
+
+class _RedoIntent extends Intent {
+  const _RedoIntent();
+}
+
+class _CopyCommandsIntent extends Intent {
+  const _CopyCommandsIntent();
+}
+
+class _CutCommandsIntent extends Intent {
+  const _CutCommandsIntent();
+}
+
+class _PasteCommandsIntent extends Intent {
+  const _PasteCommandsIntent();
+}
+
+class _DuplicateCommandsIntent extends Intent {
+  const _DuplicateCommandsIntent();
+}
+
+class _DeleteCommandsIntent extends Intent {
+  const _DeleteCommandsIntent();
+}
+
+class _SelectAllCommandsIntent extends Intent {
+  const _SelectAllCommandsIntent();
+}
+
+class _CommandPaletteIntent extends Intent {
+  const _CommandPaletteIntent();
+}
+
+class _NavHistoryIntent extends Intent {
+  const _NavHistoryIntent(this.delta);
+  final int delta;
+}
 /// 快捷键动作：被焦点场景屏蔽时不消费按键，交给文本框编辑或舞台微调。
 class _GuardedAction<T extends Intent> extends Action<T> {
   _GuardedAction({required this.blocked, required this.handler});
@@ -70,12 +115,20 @@ class StoryEditorPage extends StatefulWidget {
   State<StoryEditorPage> createState() => _StoryEditorPageState();
 }
 
+/// 跨作品共享的编辑器指令剪贴板（P0-3：支持跨分镜、跨幕、跨作品粘贴）。
+List<EditCommand> _sharedCommandClipboard = const [];
+
 class _StoryEditorPageState extends State<StoryEditorPage> {
   EditorProject? _project;
   int _scene = 0, _beat = 0, _command = -1, _formVersion = 0;
+  final Set<int> _selectedCommands = {};
+  int? _selectionAnchor;
   final _undo = <_Selection>[];
   final _redo = <_Selection>[];
+  final _navBack = <EditorPosition>[];
+  final _navForward = <EditorPosition>[];
   final _drafts = <String, EditorProject>{};
+  final _batchSpeakerController = TextEditingController();
   Timer? _saveTimer;
   Future<void> _writes = Future.value();
   EditorProject? _pending;
@@ -86,8 +139,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   bool _loaded = false;
   bool _playing = false, _loop = false;
   int _speed = 1;
+  _EditorWorkspace _workspace = _EditorWorkspace.stage;
   late final _resources = EditorPreviewResources(widget.store);
-
   EditorProject get project => _project!;
   EditorScene get scene => project.scenes[_scene];
   StoryBeat get beat => scene.beats[_beat];
@@ -151,13 +204,32 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     }
   }
 
+  void _toast(String text) => _message(text);
+
   void _open(EditorProject next, {bool save = false}) {
     _flush();
+    // P1-4：重开作品恢复上次停留的幕/分镜/指令位置。
+    final pos = next.lastPosition;
+    var s = 0, b = 0, c = -1;
+    if (pos != null && next.scenes.isNotEmpty) {
+      s = pos.scene.clamp(0, next.scenes.length - 1);
+      final beats = next.scenes[s].beats;
+      if (beats.isNotEmpty) {
+        b = pos.beat.clamp(0, beats.length - 1);
+        final cmds = beats[b].commands;
+        c = pos.command < 0 || cmds.isEmpty
+            ? -1
+            : pos.command.clamp(0, cmds.length - 1);
+      }
+    }
     setState(() {
-      _restore((next, 0, 0, -1));
+      _restore((next, s, b, c));
       _drafts[next.id] = next;
       _undo.clear();
       _redo.clear();
+      _navBack.clear();
+      _navForward.clear();
+      _workspace = _EditorWorkspace.stage;
       _status = save ? '待保存' : '本地草稿';
     });
     if (save) _queueSave(next);
@@ -168,6 +240,10 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     _scene = value.$2;
     _beat = value.$3;
     _command = value.$4;
+    _selectedCommands
+      ..clear()
+      ..addAll(_command >= 0 ? [_command] : const []);
+    _selectionAnchor = _command >= 0 ? _command : null;
     _formVersion++;
     _typing = null;
     _playing = false;
@@ -178,6 +254,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     int? sceneIndex,
     int? beatIndex,
     int? selected,
+    Set<int>? selectedSet,
     String? typing,
   }) {
     if (typing == null || _typing != typing) {
@@ -185,15 +262,39 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       if (_undo.length > 60) _undo.removeAt(0);
     }
     _redo.clear();
+    final targetScene = sceneIndex ?? _scene;
+    final targetBeat = beatIndex ?? _beat;
+    final targetCmd = selected ?? _command;
+    final withPos = next.copyWith(
+      lastPosition: EditorPosition(
+        scene: targetScene,
+        beat: targetBeat,
+        command: targetCmd,
+      ),
+    );
     setState(() {
-      _project = next;
-      _scene = sceneIndex ?? _scene;
-      _beat = beatIndex ?? _beat;
-      _command = selected ?? _command;
+      _project = withPos;
+      _scene = targetScene;
+      _beat = targetBeat;
+      _command = targetCmd;
+      if (selectedSet != null) {
+        _selectedCommands
+          ..clear()
+          ..addAll(selectedSet);
+      } else if (selected != null || sceneIndex != null || beatIndex != null) {
+        _selectedCommands
+          ..clear()
+          ..addAll(targetCmd >= 0 ? [targetCmd] : const []);
+        _selectionAnchor = targetCmd >= 0 ? targetCmd : null;
+      } else {
+        final len = withPos.scenes[targetScene].beats[targetBeat].commands.length;
+        _selectedCommands.removeWhere((i) => i < 0 || i >= len);
+        if (_command >= len) _command = len - 1;
+      }
       if (typing == null) _formVersion++;
       _typing = typing;
     });
-    _queueSave(next);
+    _queueSave(withPos);
   }
 
   void _history({required bool redo}) {
@@ -255,6 +356,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   @override
   void dispose() {
     _flush();
+    _batchSpeakerController.dispose();
     _resources.dispose();
     super.dispose();
   }
@@ -531,6 +633,101 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     return (proceed: proceed ?? false, goto: goto);
   }
 
+  /// 记录导航历史并跳转到指定位置（P1-4：Alt+←/→ 前进后退）。
+  void _navigateTo(
+    int sceneIndex,
+    int beatIndex, {
+    int commandIndex = -1,
+    bool recordHistory = true,
+    _EditorWorkspace? workspace,
+  }) {
+    if (sceneIndex < 0 || sceneIndex >= project.scenes.length) return;
+    final targetBeats = project.scenes[sceneIndex].beats;
+    if (beatIndex < 0 || beatIndex >= targetBeats.length) return;
+    final targetCmds = targetBeats[beatIndex].commands;
+    final clampedCmd = commandIndex < 0 || targetCmds.isEmpty
+        ? -1
+        : commandIndex.clamp(0, targetCmds.length - 1);
+    final current = EditorPosition(
+      scene: _scene,
+      beat: _beat,
+      command: _command,
+    );
+    final nextPos = EditorPosition(
+      scene: sceneIndex,
+      beat: beatIndex,
+      command: clampedCmd,
+    );
+    if (recordHistory && current != nextPos) {
+      _navBack.add(current);
+      if (_navBack.length > 50) _navBack.removeAt(0);
+      _navForward.clear();
+    }
+    final nextProject = project.copyWith(lastPosition: nextPos);
+    setState(() {
+      _project = nextProject;
+      _drafts[nextProject.id] = nextProject;
+      _scene = sceneIndex;
+      _beat = beatIndex;
+      _command = clampedCmd;
+      _selectedCommands
+        ..clear()
+        ..addAll(clampedCmd >= 0 ? [clampedCmd] : const []);
+      _selectionAnchor = clampedCmd >= 0 ? clampedCmd : null;
+      _playing = false;
+      _typing = null;
+      _formVersion++;
+      if (workspace != null) _workspace = workspace;
+    });
+    _queueSave(nextProject);
+  }
+
+  void _stepNavHistory(int delta) {
+    if (delta < 0) {
+      if (_navBack.isEmpty) return;
+      final current = EditorPosition(
+        scene: _scene,
+        beat: _beat,
+        command: _command,
+      );
+      final target = _navBack.removeLast();
+      _navForward.add(current);
+      _navigateTo(
+        target.scene.clamp(0, project.scenes.length - 1),
+        target.beat.clamp(
+          0,
+          project.scenes[target.scene.clamp(0, project.scenes.length - 1)]
+                  .beats
+                  .length -
+              1,
+        ),
+        commandIndex: target.command,
+        recordHistory: false,
+      );
+    } else {
+      if (_navForward.isEmpty) return;
+      final current = EditorPosition(
+        scene: _scene,
+        beat: _beat,
+        command: _command,
+      );
+      final target = _navForward.removeLast();
+      _navBack.add(current);
+      _navigateTo(
+        target.scene.clamp(0, project.scenes.length - 1),
+        target.beat.clamp(
+          0,
+          project.scenes[target.scene.clamp(0, project.scenes.length - 1)]
+                  .beats
+                  .length -
+              1,
+        ),
+        commandIndex: target.command,
+        recordHistory: false,
+      );
+    }
+  }
+
   /// 校验「前往」：切到问题所在分镜并选中问题指令（P0-6 校验定位）。
   void _gotoIssue(EditorIssue issue) {
     if (!issue.locatable ||
@@ -538,33 +735,34 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         issue.beatIndex >= project.scenes[issue.sceneIndex].beats.length) {
       return;
     }
-    final commands =
-        project.scenes[issue.sceneIndex].beats[issue.beatIndex].commands;
-    setState(() {
-      _scene = issue.sceneIndex;
-      _beat = issue.beatIndex;
-      _command = issue.commandIndex.clamp(-1, commands.length - 1);
-      _playing = false;
-      _typing = null;
-      _formVersion++;
-    });
+    _navigateTo(
+      issue.sceneIndex,
+      issue.beatIndex,
+      commandIndex: issue.commandIndex,
+      workspace: _EditorWorkspace.stage,
+    );
   }
 
-  EditorProject _withScene(EditorScene next) =>
-      project.copyWith(scenes: [...project.scenes]..[_scene] = next);
-  EditorProject _withBeat(StoryBeat next) =>
-      _withScene(scene.copyWith(beats: [...scene.beats]..[_beat] = next));
+  EditorProject _withScene(EditorScene next, [int? sceneIndex]) =>
+      project.copyWith(
+        scenes: [...project.scenes]..[sceneIndex ?? _scene] = next,
+      );
+
+  EditorProject _withBeat(StoryBeat next, {int? sceneIndex, int? beatIndex}) {
+    final si = sceneIndex ?? _scene;
+    final bi = beatIndex ?? _beat;
+    final targetScene = project.scenes[si];
+    return _withScene(
+      targetScene.copyWith(beats: [...targetScene.beats]..[bi] = next),
+      si,
+    );
+  }
+
   EditorProject _withCommands(List<EditCommand> next) =>
       _withBeat(beat.copyWith(commands: next));
 
-  void _selectBeat(int index, {int? sceneIndex}) => setState(() {
-    _scene = sceneIndex ?? _scene;
-    _beat = index;
-    _command = -1;
-    _playing = false;
-    _typing = null;
-    _formVersion++;
-  });
+  void _selectBeat(int index, {int? sceneIndex}) =>
+      _navigateTo(sceneIndex ?? _scene, index, commandIndex: -1);
 
   // —— 播放头与传输控制（P0-1 / P0-2）——
 
@@ -591,11 +789,789 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
 
   void _selectCommand(int index) {
     if (_beatLength == 0) return;
+    final clamped = index.clamp(-1, _beatLength - 1);
     setState(() {
-      _command = index.clamp(-1, _beatLength - 1);
+      _command = clamped;
+      _selectedCommands
+        ..clear()
+        ..addAll(clamped >= 0 ? [clamped] : const []);
+      _selectionAnchor = clamped >= 0 ? clamped : null;
       _typing = null;
       _formVersion++;
     });
+  }
+
+  /// 多选点击：支持单击、Shift 连续区间选、Ctrl/⌘ 增减单条（P0-3）。
+  void _onTapCommandRow(int index) {
+    final keys = HardwareKeyboard.instance.logicalKeysPressed;
+    final shift = keys.contains(LogicalKeyboardKey.shiftLeft) ||
+        keys.contains(LogicalKeyboardKey.shiftRight);
+    final ctrl = keys.contains(LogicalKeyboardKey.controlLeft) ||
+        keys.contains(LogicalKeyboardKey.controlRight) ||
+        keys.contains(LogicalKeyboardKey.metaLeft) ||
+        keys.contains(LogicalKeyboardKey.metaRight);
+    if (shift && _selectionAnchor != null) {
+      final start = math.min(_selectionAnchor!, index);
+      final end = math.max(_selectionAnchor!, index);
+      setState(() {
+        _selectedCommands
+          ..clear()
+          ..addAll([for (var i = start; i <= end; i++) i]);
+        _command = index;
+        _typing = null;
+        _formVersion++;
+      });
+      return;
+    }
+    if (ctrl) {
+      _toggleMultiCommand(index);
+      return;
+    }
+    _selectCommand(index);
+  }
+
+  /// 长按或 Ctrl 点击增减选中（含移动端轻量多选）。
+  void _toggleMultiCommand(int index) {
+    if (index < 0 || index >= _beatLength) return;
+    setState(() {
+      if (_selectedCommands.contains(index)) {
+        _selectedCommands.remove(index);
+        if (_command == index) {
+          _command = _selectedCommands.isEmpty ? -1 : _selectedCommands.last;
+        }
+      } else {
+        _selectedCommands.add(index);
+        _command = index;
+        _selectionAnchor ??= index;
+      }
+      _typing = null;
+      _formVersion++;
+    });
+  }
+
+  void _selectAllCommands() {
+    if (_beatLength == 0) return;
+    setState(() {
+      _selectedCommands
+        ..clear()
+        ..addAll([for (var i = 0; i < _beatLength; i++) i]);
+      _command = _beatLength - 1;
+      _selectionAnchor = 0;
+      _typing = null;
+      _formVersion++;
+    });
+  }
+
+  void _invertCommandSelection() {
+    if (_beatLength == 0) return;
+    setState(() {
+      final next = <int>{
+        for (var i = 0; i < _beatLength; i++)
+          if (!_selectedCommands.contains(i)) i,
+      };
+      _selectedCommands
+        ..clear()
+        ..addAll(next);
+      _command = next.isEmpty ? -1 : next.last;
+      _selectionAnchor = next.isEmpty ? null : next.first;
+      _typing = null;
+      _formVersion++;
+    });
+  }
+
+  void _clearMultiSelection() {
+    setState(() {
+      _selectedCommands.clear();
+      if (_command >= 0 && _command < _beatLength) {
+        _selectedCommands.add(_command);
+      }
+      _selectionAnchor = _command >= 0 ? _command : null;
+      _formVersion++;
+    });
+  }
+
+  List<int> _effectiveSelectedSorted() {
+    if (_selectedCommands.isNotEmpty) {
+      final sorted =
+          _selectedCommands.where((i) => i >= 0 && i < _beatLength).toList()
+            ..sort();
+      if (sorted.isNotEmpty) return sorted;
+    }
+    if (_command >= 0 && _command < _beatLength) return [_command];
+    return const [];
+  }
+
+  void _copySelectedCommands({bool cut = false}) {
+    final indices = _effectiveSelectedSorted();
+    if (indices.isEmpty) return;
+    _sharedCommandClipboard = [
+      for (final i in indices) beat.commands[i],
+    ];
+    if (cut) {
+      final removeSet = indices.toSet();
+      final next = [
+        for (var i = 0; i < beat.commands.length; i++)
+          if (!removeSet.contains(i)) beat.commands[i],
+      ];
+      _change(
+        _withCommands(next),
+        selected: next.isEmpty
+            ? -1
+            : math.min(indices.first, next.length - 1),
+      );
+      _toast('已剪切 ${indices.length} 条指令');
+    } else {
+      _toast('已复制 ${indices.length} 条指令');
+    }
+  }
+
+  void _pasteClipboardCommands() {
+    if (_sharedCommandClipboard.isEmpty) {
+      _toast('剪贴板为空');
+      return;
+    }
+    final insertAt = _command < 0
+        ? beat.commands.length
+        : (_command + 1).clamp(0, beat.commands.length);
+    final next = [...beat.commands]..insertAll(insertAt, _sharedCommandClipboard);
+    final pastedSet = {
+      for (var i = 0; i < _sharedCommandClipboard.length; i++) insertAt + i,
+    };
+    _change(
+      _withCommands(next),
+      selected: insertAt + _sharedCommandClipboard.length - 1,
+      selectedSet: pastedSet,
+    );
+    _toast('已粘贴 ${_sharedCommandClipboard.length} 条指令');
+  }
+
+  void _duplicateSelectedCommands() {
+    final indices = _effectiveSelectedSorted();
+    if (indices.isEmpty) return;
+    final copies = [for (final i in indices) beat.commands[i]];
+    final insertAt = indices.last + 1;
+    final next = [...beat.commands]..insertAll(insertAt, copies);
+    final dupSet = {for (var i = 0; i < copies.length; i++) insertAt + i};
+    _change(
+      _withCommands(next),
+      selected: insertAt + copies.length - 1,
+      selectedSet: dupSet,
+    );
+    _toast('已复制 ${copies.length} 条指令');
+  }
+
+  void _deleteSelectedCommands() {
+    final indices = _effectiveSelectedSorted();
+    if (indices.isEmpty) return;
+    final removeSet = indices.toSet();
+    final next = [
+      for (var i = 0; i < beat.commands.length; i++)
+        if (!removeSet.contains(i)) beat.commands[i],
+    ];
+    _change(
+      _withCommands(next),
+      selected: next.isEmpty ? -1 : math.min(indices.first, next.length - 1),
+    );
+    _toast('已删除 ${indices.length} 条指令');
+  }
+
+  void _applyBatchSpeaker(String speaker) {
+    final indices = _effectiveSelectedSorted();
+    if (indices.isEmpty) return;
+    final next = [...beat.commands];
+    var changed = 0;
+    for (final i in indices) {
+      final cmd = next[i];
+      if (cmd.raw == null && (cmd.tag == 'dialogue' || cmd.tag == 'dialog')) {
+        next[i] = cmd.withArgs({'name': speaker});
+        changed++;
+      }
+    }
+    if (changed == 0) {
+      _toast('所选指令中没有可修改说话人的对白');
+      return;
+    }
+    _change(_withCommands(next), selectedSet: indices.toSet());
+    _toast('已更新 $changed 条对白的说话人');
+  }
+
+  void _updateManyCommands(Set<int> indices, Map<String, String> values) {
+    if (indices.isEmpty) return;
+    final next = [...beat.commands];
+    for (final i in indices) {
+      if (i < 0 || i >= next.length) continue;
+      if (next[i].raw != null) continue;
+      next[i] = next[i].withArgs(values);
+    }
+    _change(_withCommands(next), selectedSet: indices);
+  }
+
+  void _resetCurrentCommand() {
+    final current = command;
+    if (current == null || current.raw != null) return;
+    final definition = editorFields[current.tag];
+    if (definition == null) return;
+    final defaults = EditCommand(current.tag, {
+      for (final field in definition.$2)
+        if (field.initial.isNotEmpty) field.key: field.initial,
+    });
+    _change(
+      _withCommands([...beat.commands]..[_command] = defaults),
+      selected: _command,
+    );
+  }
+
+  /// 处理拖动前序分镜继承对象时的轻量二选一（P0-4）。
+  Future<void> _handleInheritedStageDrag(StageInheritedRequest req) async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('「${req.label}」继承自前序分镜'),
+        content: Text(
+          '该对象由「${project.scenes[req.sourceScene].title} / '
+          '${project.scenes[req.sourceScene].beats[req.sourceBeat].title}」继承而来。\n'
+          '你可以直接跳到来源指令修改（会影响后续所有继承该状态的分镜），或在当前分镜插入一条覆盖指令。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: const Text('取消'),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(dialog, 'goto'),
+            child: const Text('跳转到来源指令'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, 'override'),
+            child: const Text('在当前分镜插入覆盖指令'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'goto') {
+      _navigateTo(
+        req.sourceScene,
+        req.sourceBeat,
+        commandIndex: req.sourceCommand,
+      );
+      return;
+    }
+    final insertAt = _command < 0
+        ? beat.commands.length
+        : (_command + 1).clamp(0, beat.commands.length);
+    final sourceBeatCommands =
+        project.scenes[req.sourceScene].beats[req.sourceBeat].commands;
+    final sourceCmd = req.sourceCommand >= 0 &&
+            req.sourceCommand < sourceBeatCommands.length
+        ? sourceBeatCommands[req.sourceCommand]
+        : EditCommand(req.tag, {
+            if (req.slot.isNotEmpty) 'slot': req.slot,
+            if (req.keyName.isNotEmpty)
+              (req.tag == 'charslot' ? 'name' : 'image'): req.keyName,
+          });
+    final next = [...beat.commands]
+      ..insert(insertAt, sourceCmd.withArgs(req.values));
+    _change(_withCommands(next), selected: insertAt);
+    _toast('已在当前分镜插入覆盖指令');
+  }
+
+  Future<void> _sceneActionAt(int si, String action) async {
+    if (si < 0 || si >= project.scenes.length) return;
+    final original = project;
+    final targetScene = project.scenes[si];
+    if (action == 'add' || action == 'rename') {
+      final name = await _title(
+        action == 'add' ? '新建幕' : '重命名幕',
+        action == 'add' ? '第 ${project.scenes.length + 1} 幕' : targetScene.title,
+      );
+      if (!mounted || name == null || !identical(original, project)) return;
+      if (action == 'add') {
+        _change(
+          project.copyWith(
+            scenes: [
+              ...project.scenes,
+              EditorScene(name, const [StoryBeat('分镜 1')]),
+            ],
+          ),
+          sceneIndex: project.scenes.length,
+          beatIndex: 0,
+          selected: -1,
+        );
+      } else {
+        _change(_withScene(targetScene.copyWith(title: name), si));
+      }
+      return;
+    }
+    final scenes = [...project.scenes];
+    if (action == 'delete') {
+      if (scenes.length == 1) return;
+      scenes.removeAt(si);
+      final nextScene = math.min(_scene == si ? si : _scene, scenes.length - 1);
+      _change(
+        project.copyWith(scenes: scenes),
+        sceneIndex: nextScene,
+        beatIndex: 0,
+        selected: -1,
+      );
+    } else if (action == 'duplicate') {
+      scenes.insert(
+        si + 1,
+        targetScene.copyWith(
+          title: '${targetScene.title} 副本'.characters.take(120).toString(),
+        ),
+      );
+      _change(
+        project.copyWith(scenes: scenes),
+        sceneIndex: si + 1,
+        beatIndex: 0,
+        selected: -1,
+      );
+    } else if (action == 'up' || action == 'down') {
+      final target = si + (action == 'up' ? -1 : 1);
+      if (target < 0 || target >= scenes.length) return;
+      scenes.insert(target, scenes.removeAt(si));
+      _change(project.copyWith(scenes: scenes), sceneIndex: target);
+    }
+  }
+
+  Future<void> _beatActionAt(int si, int bi, String action) async {
+    if (si < 0 || si >= project.scenes.length) return;
+    final targetScene = project.scenes[si];
+    if (bi < 0 || bi >= targetScene.beats.length) return;
+    final targetBeat = targetScene.beats[bi];
+    final beats = [...targetScene.beats];
+    if (action == 'add' || action == 'duplicate') {
+      final index = bi + 1;
+      beats.insert(
+        index,
+        action == 'add'
+            ? StoryBeat('分镜 ${beats.length + 1}')
+            : targetBeat.copyWith(
+                title: '${targetBeat.title} 副本'.characters.take(120).toString(),
+              ),
+      );
+      _change(
+        _withScene(targetScene.copyWith(beats: beats), si),
+        sceneIndex: si,
+        beatIndex: index,
+        selected: -1,
+      );
+    } else if (action == 'rename') {
+      final original = project;
+      final name = await _title('重命名分镜', targetBeat.title);
+      if (mounted && name != null && identical(original, project)) {
+        _change(
+          _withBeat(targetBeat.copyWith(title: name), sceneIndex: si, beatIndex: bi),
+        );
+      }
+    } else if (action == 'delete') {
+      if (beats.length == 1) return;
+      beats.removeAt(bi);
+      _change(
+        _withScene(targetScene.copyWith(beats: beats), si),
+        sceneIndex: si,
+        beatIndex: math.min(bi, beats.length - 1),
+        selected: -1,
+      );
+    } else if (action == 'up' || action == 'down') {
+      final target = bi + (action == 'up' ? -1 : 1);
+      if (target < 0 || target >= beats.length) return;
+      beats.insert(target, beats.removeAt(bi));
+      _change(
+        _withScene(targetScene.copyWith(beats: beats), si),
+        sceneIndex: si,
+        beatIndex: target,
+      );
+    }
+  }
+
+  void _addBeatToScene(int si) {
+    if (si < 0 || si >= project.scenes.length) return;
+    final targetScene = project.scenes[si];
+    final beats = [
+      ...targetScene.beats,
+      StoryBeat('分镜 ${targetScene.beats.length + 1}'),
+    ];
+    _change(
+      _withScene(targetScene.copyWith(beats: beats), si),
+      sceneIndex: si,
+      beatIndex: beats.length - 1,
+      selected: -1,
+    );
+  }
+
+  void _moveBeatTo(BeatRef from, int toScene, int toBeat) {
+    if (from.scene < 0 ||
+        from.scene >= project.scenes.length ||
+        toScene < 0 ||
+        toScene >= project.scenes.length) {
+      return;
+    }
+    final scenes = [
+      for (final s in project.scenes) s.copyWith(beats: [...s.beats]),
+    ];
+    final srcBeats = scenes[from.scene].beats;
+    if (from.beat < 0 || from.beat >= srcBeats.length) return;
+    if (from.scene != toScene && srcBeats.length <= 1) {
+      _toast('每一幕至少需要保留一个分镜');
+      return;
+    }
+    final moved = srcBeats.removeAt(from.beat);
+    final dstBeats = scenes[toScene].beats;
+    final insertAt = toBeat.clamp(0, dstBeats.length);
+    dstBeats.insert(insertAt, moved);
+    _change(
+      project.copyWith(scenes: scenes),
+      sceneIndex: toScene,
+      beatIndex: insertAt,
+      selected: -1,
+    );
+  }
+
+  void _duplicateBeats(List<BeatRef> refs) {
+    if (refs.isEmpty) return;
+    final scenes = [
+      for (final s in project.scenes) s.copyWith(beats: [...s.beats]),
+    ];
+    final sorted = [...refs]
+      ..sort((a, b) {
+        final s = b.scene.compareTo(a.scene);
+        return s != 0 ? s : b.beat.compareTo(a.beat);
+      });
+    for (final ref in sorted) {
+      if (ref.scene >= scenes.length) continue;
+      final list = scenes[ref.scene].beats;
+      if (ref.beat >= list.length) continue;
+      final orig = list[ref.beat];
+      list.insert(
+        ref.beat + 1,
+        orig.copyWith(
+          title: '${orig.title} 副本'.characters.take(120).toString(),
+        ),
+      );
+    }
+    _change(project.copyWith(scenes: scenes));
+    _toast('已复制 ${sorted.length} 个分镜');
+  }
+
+  void _deleteBeats(List<BeatRef> refs) {
+    if (refs.isEmpty) return;
+    final scenes = [
+      for (final s in project.scenes) s.copyWith(beats: [...s.beats]),
+    ];
+    final sorted = [...refs]
+      ..sort((a, b) {
+        final s = b.scene.compareTo(a.scene);
+        return s != 0 ? s : b.beat.compareTo(a.beat);
+      });
+    var deleted = 0;
+    for (final ref in sorted) {
+      if (ref.scene >= scenes.length) continue;
+      final list = scenes[ref.scene].beats;
+      if (list.length <= 1 || ref.beat >= list.length) continue;
+      list.removeAt(ref.beat);
+      deleted++;
+    }
+    if (deleted == 0) {
+      _toast('每一幕至少需要保留一个分镜');
+      return;
+    }
+    final nextScene = _scene.clamp(0, scenes.length - 1);
+    final nextBeat = _beat.clamp(0, scenes[nextScene].beats.length - 1);
+    _change(
+      project.copyWith(scenes: scenes),
+      sceneIndex: nextScene,
+      beatIndex: nextBeat,
+      selected: -1,
+    );
+    _toast('已删除 $deleted 个分镜');
+  }
+
+  Future<void> _markScene(int si) async {
+    if (si < 0 || si >= project.scenes.length) return;
+    final target = project.scenes[si];
+    final next = await showMarkerDialog(
+      context,
+      targetTitle: target.title,
+      initial: target.marker,
+    );
+    if (!mounted || next == null) return;
+    final marker = next.clear ? const EditorMarker() : (next.marker ?? const EditorMarker());
+    _change(_withScene(target.copyWith(marker: marker), si));
+  }
+
+  Future<void> _markBeat(int si, int bi) async {
+    if (si < 0 ||
+        si >= project.scenes.length ||
+        bi < 0 ||
+        bi >= project.scenes[si].beats.length) {
+      return;
+    }
+    final target = project.scenes[si].beats[bi];
+    final next = await showMarkerDialog(
+      context,
+      targetTitle: target.title,
+      initial: target.marker,
+    );
+    if (!mounted || next == null) return;
+    final marker = next.clear ? const EditorMarker() : (next.marker ?? const EditorMarker());
+    _change(
+      _withBeat(target.copyWith(marker: marker), sceneIndex: si, beatIndex: bi),
+    );
+  }
+
+  void _editScriptRow(ScriptRowRef row, {String? speaker, String? text}) {
+    if (row.sceneIndex >= project.scenes.length) return;
+    final s = project.scenes[row.sceneIndex];
+    if (row.beatIndex >= s.beats.length) return;
+    final b = s.beats[row.beatIndex];
+    if (row.commandIndex >= b.commands.length) return;
+    final cmd = b.commands[row.commandIndex];
+    final nextCmd = cmd.withArgs({
+      'name': ?speaker,
+      'text': ?text,
+    });
+    final nextCommands = [...b.commands]..[row.commandIndex] = nextCmd;
+    _change(
+      _withBeat(
+        b.copyWith(commands: nextCommands),
+        sceneIndex: row.sceneIndex,
+        beatIndex: row.beatIndex,
+      ),
+      typing: 'script:${row.sceneIndex}:${row.beatIndex}:${row.commandIndex}',
+    );
+  }
+
+  void _batchReplaceScriptSpeaker(List<ScriptRowRef> rows, String speaker) {
+    if (rows.isEmpty) return;
+    final scenes = [
+      for (final s in project.scenes)
+        s.copyWith(
+          beats: [
+            for (final b in s.beats) b.copyWith(commands: [...b.commands]),
+          ],
+        ),
+    ];
+    var changed = 0;
+    for (final row in rows) {
+      if (!row.isDialogue) continue;
+      if (row.sceneIndex >= scenes.length) continue;
+      final b = scenes[row.sceneIndex].beats[row.beatIndex];
+      if (row.commandIndex >= b.commands.length) continue;
+      b.commands[row.commandIndex] = b.commands[row.commandIndex].withArgs({
+        'name': speaker,
+      });
+      changed++;
+    }
+    if (changed == 0) {
+      _toast('所选行中没有可批量修改说话人的对白');
+      return;
+    }
+    _change(project.copyWith(scenes: scenes));
+    _toast('已批量替换 $changed 条对白的说话人');
+  }
+
+  Future<void> _exportScriptFormat(String format) async {
+    final content = switch (format) {
+      'csv' => exportScriptCsv(project),
+      'srt' => exportScriptSrt(project),
+      _ => exportScriptTxt(project),
+    };
+    try {
+      await widget.storage.exportFile(
+        project.title,
+        format,
+        Uint8List.fromList(utf8.encode(content)),
+      );
+      if (mounted) {
+        _toast('已导出 ${format.toUpperCase()} 台本');
+      }
+    } catch (_) {
+      _toast('导出失败，请检查存储空间后重试');
+    }
+  }
+
+  /// 全局搜索弹窗（P1-4：按标题/台词/角色/素材 key/标记过滤并直达）。
+  Future<void> _openGlobalSearch() async {
+    final controller = TextEditingController();
+    final hit = await showDialog<EditorSearchHit>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final hits = searchProjectContent(project, controller.text);
+          return AlertDialog(
+            title: const Text('全局搜索'),
+            content: SizedBox(
+              width: math.min(540, MediaQuery.sizeOf(context).width - 48),
+              height: math.min(420, MediaQuery.sizeOf(context).height - 180),
+              child: Column(
+                children: [
+                  TextField(
+                    key: const ValueKey('global-search-input'),
+                    controller: controller,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: '搜索幕、分镜、说话人、台词、素材 key 或标记备注…',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: controller.text.trim().isEmpty
+                        ? const Center(child: Text('输入关键词快速定位幕、分镜或指令'))
+                        : hits.isEmpty
+                        ? const Center(child: Text('没有找到匹配内容'))
+                        : ListView.builder(
+                            itemCount: hits.length,
+                            itemBuilder: (_, i) {
+                              final item = hits[i];
+                              return ListTile(
+                                dense: true,
+                                leading: Chip(
+                                  label: Text(item.kind),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                title: Text(
+                                  item.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text(
+                                  item.subtitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                onTap: () => Navigator.pop(dialog, item),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialog),
+                child: const Text('关闭'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+    if (!mounted || hit == null) return;
+    _navigateTo(
+      hit.sceneIndex,
+      hit.beatIndex,
+      commandIndex: hit.commandIndex,
+      workspace: _EditorWorkspace.stage,
+    );
+  }
+
+  /// 命令面板（P0-3：Ctrl+K 快捷执行所有编辑、切换与导出操作）。
+  Future<void> _openCommandPalette() async {
+    final actions = <({String label, String hint, VoidCallback run})>[
+      (label: '切换到演出台', hint: '工作区', run: () => setState(() => _workspace = _EditorWorkspace.stage)),
+      (label: '切换到编排台（故事板）', hint: '工作区', run: () => setState(() => _workspace = _EditorWorkspace.board)),
+      (label: '切换到剧本台（对白表格）', hint: '工作区', run: () => setState(() => _workspace = _EditorWorkspace.script)),
+      (label: '全局搜索', hint: '导航', run: _openGlobalSearch),
+      (label: '添加演出指令', hint: '编辑', run: _showCommandChooser),
+      (label: '新建分镜', hint: '结构', run: () => _beatAction('add')),
+      (label: '新建幕', hint: '结构', run: () => _sceneAction('add')),
+      (label: '全选当前分镜指令', hint: 'Ctrl+A', run: _selectAllCommands),
+      (label: '反选当前分镜指令', hint: '选择集', run: _invertCommandSelection),
+      (label: '复制选中指令', hint: 'Ctrl+C', run: () => _copySelectedCommands()),
+      (label: '剪切选中指令', hint: 'Ctrl+X', run: () => _copySelectedCommands(cut: true)),
+      (label: '粘贴指令到播放头后', hint: 'Ctrl+V', run: _pasteClipboardCommands),
+      (label: '快速副本（选中指令）', hint: 'Ctrl+D', run: _duplicateSelectedCommands),
+      (label: '删除选中指令', hint: 'Delete', run: _deleteSelectedCommands),
+      (label: '标记当前分镜', hint: '标记', run: () => _markBeat(_scene, _beat)),
+      (label: '导出 TXT 台本', hint: '台本', run: () => _exportScriptFormat('txt')),
+      (label: '导出 CSV 台本', hint: '台本', run: () => _exportScriptFormat('csv')),
+      (label: '导出 SRT 字幕', hint: '台本', run: () => _exportScriptFormat('srt')),
+      (label: '作品素材管理', hint: '素材', run: _assets),
+      (label: '作品校验检查', hint: '检查', run: _checkProjectIssues),
+    ];
+    final controller = TextEditingController();
+    final chosen = await showDialog<VoidCallback>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final q = controller.text.trim().toLowerCase();
+          final filtered = [
+            for (final a in actions)
+              if (q.isEmpty ||
+                  a.label.toLowerCase().contains(q) ||
+                  a.hint.toLowerCase().contains(q))
+                a,
+          ];
+          return AlertDialog(
+            title: const Text('命令面板'),
+            content: SizedBox(
+              width: math.min(460, MediaQuery.sizeOf(context).width - 48),
+              height: math.min(380, MediaQuery.sizeOf(context).height - 180),
+              child: Column(
+                children: [
+                  TextField(
+                    key: const ValueKey('command-palette-input'),
+                    controller: controller,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.terminal),
+                      hintText: '输入命令名称或快捷键…',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) {
+                        final item = filtered[i];
+                        return ListTile(
+                          dense: true,
+                          title: Text(item.label),
+                          trailing: Text(
+                            item.hint,
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                          onTap: () => Navigator.pop(dialog, item.run),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialog),
+                child: const Text('关闭'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+    if (!mounted || chosen == null) return;
+    chosen();
+  }
+
+  Future<void> _checkProjectIssues() async {
+    final issues = project.validateIssues();
+    final outcome = await _issues(
+      issues.isEmpty ? [const EditorIssue('没有发现结构问题。')] : issues,
+      title: '作品检查',
+    );
+    if (outcome.goto != null) _gotoIssue(outcome.goto!);
   }
 
   void _stepStop(int delta) {
@@ -1096,9 +2072,12 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
 
     return Shortcuts(
       shortcuts: <ShortcutActivator, Intent>{
-        const SingleActivator(LogicalKeyboardKey.space): const _TogglePlayIntent(),
-        const SingleActivator(LogicalKeyboardKey.arrowLeft): const _StepStopIntent(-1),
-        const SingleActivator(LogicalKeyboardKey.arrowRight): const _StepStopIntent(1),
+        const SingleActivator(LogicalKeyboardKey.space):
+            const _TogglePlayIntent(),
+        const SingleActivator(LogicalKeyboardKey.arrowLeft):
+            const _StepStopIntent(-1),
+        const SingleActivator(LogicalKeyboardKey.arrowRight):
+            const _StepStopIntent(1),
         const SingleActivator(
           LogicalKeyboardKey.arrowLeft,
           shift: true,
@@ -1107,28 +2086,138 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           LogicalKeyboardKey.arrowRight,
           shift: true,
         ): const _StepCommandIntent(1),
-        const SingleActivator(LogicalKeyboardKey.home): const _GotoIntent(true),
-        const SingleActivator(LogicalKeyboardKey.end): const _GotoIntent(false),
+        const SingleActivator(LogicalKeyboardKey.home):
+            const _GotoIntent(true),
+        const SingleActivator(LogicalKeyboardKey.end):
+            const _GotoIntent(false),
+        // P0-3：撤销/重做/剪贴板/副本/删除/全选/命令面板
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true):
+            const _UndoIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true):
+            const _UndoIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyY, control: true):
+            const _RedoIntent(),
+        const SingleActivator(
+          LogicalKeyboardKey.keyZ,
+          control: true,
+          shift: true,
+        ): const _RedoIntent(),
+        const SingleActivator(
+          LogicalKeyboardKey.keyZ,
+          meta: true,
+          shift: true,
+        ): const _RedoIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyC, control: true):
+            const _CopyCommandsIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyC, meta: true):
+            const _CopyCommandsIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyX, control: true):
+            const _CutCommandsIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyX, meta: true):
+            const _CutCommandsIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyV, control: true):
+            const _PasteCommandsIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyV, meta: true):
+            const _PasteCommandsIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyD, control: true):
+            const _DuplicateCommandsIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyD, meta: true):
+            const _DuplicateCommandsIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyA, control: true):
+            const _SelectAllCommandsIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyA, meta: true):
+            const _SelectAllCommandsIntent(),
+        const SingleActivator(LogicalKeyboardKey.delete):
+            const _DeleteCommandsIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            const _CommandPaletteIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+            const _CommandPaletteIntent(),
+        // P1-4：导航历史 Alt+← / Alt+→
+        const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true):
+            const _NavHistoryIntent(-1),
+        const SingleActivator(LogicalKeyboardKey.arrowRight, alt: true):
+            const _NavHistoryIntent(1),
       },
       child: Actions(
         actions: {
           _TogglePlayIntent: _GuardedAction<_TogglePlayIntent>(
-            blocked: focusInTextField,
+            blocked: () =>
+                focusInTextField() || _workspace != _EditorWorkspace.stage,
             handler: (_) => _togglePlay(),
           ),
           _StepStopIntent: _GuardedAction<_StepStopIntent>(
-            blocked: () => focusInTextField() || stageFocused(),
+            blocked: () =>
+                focusInTextField() ||
+                stageFocused() ||
+                _workspace != _EditorWorkspace.stage,
             handler: (intent) => _stepStop(intent.delta),
           ),
           _StepCommandIntent: _GuardedAction<_StepCommandIntent>(
-            blocked: () => focusInTextField() || stageFocused(),
+            blocked: () =>
+                focusInTextField() ||
+                stageFocused() ||
+                _workspace != _EditorWorkspace.stage,
             handler: (intent) => _stepCommand(intent.delta),
           ),
           _GotoIntent: _GuardedAction<_GotoIntent>(
-            blocked: focusInTextField,
+            blocked: () =>
+                focusInTextField() || _workspace != _EditorWorkspace.stage,
             handler: (intent) => intent.toStart
                 ? _selectCommand(0)
                 : _selectCommand(_beatLength - 1),
+          ),
+          _UndoIntent: _GuardedAction<_UndoIntent>(
+            blocked: focusInTextField,
+            handler: (_) {
+              if (!_busy && _undo.isNotEmpty) _history(redo: false);
+              return null;
+            },
+          ),
+          _RedoIntent: _GuardedAction<_RedoIntent>(
+            blocked: focusInTextField,
+            handler: (_) {
+              if (!_busy && _redo.isNotEmpty) _history(redo: true);
+              return null;
+            },
+          ),
+          _CopyCommandsIntent: _GuardedAction<_CopyCommandsIntent>(
+            blocked: () =>
+                focusInTextField() || _workspace != _EditorWorkspace.stage,
+            handler: (_) => _copySelectedCommands(),
+          ),
+          _CutCommandsIntent: _GuardedAction<_CutCommandsIntent>(
+            blocked: () =>
+                focusInTextField() || _workspace != _EditorWorkspace.stage,
+            handler: (_) => _copySelectedCommands(cut: true),
+          ),
+          _PasteCommandsIntent: _GuardedAction<_PasteCommandsIntent>(
+            blocked: () =>
+                focusInTextField() || _workspace != _EditorWorkspace.stage,
+            handler: (_) => _pasteClipboardCommands(),
+          ),
+          _DuplicateCommandsIntent: _GuardedAction<_DuplicateCommandsIntent>(
+            blocked: () =>
+                focusInTextField() || _workspace != _EditorWorkspace.stage,
+            handler: (_) => _duplicateSelectedCommands(),
+          ),
+          _DeleteCommandsIntent: _GuardedAction<_DeleteCommandsIntent>(
+            blocked: () =>
+                focusInTextField() || _workspace != _EditorWorkspace.stage,
+            handler: (_) => _deleteSelectedCommands(),
+          ),
+          _SelectAllCommandsIntent: _GuardedAction<_SelectAllCommandsIntent>(
+            blocked: () =>
+                focusInTextField() || _workspace != _EditorWorkspace.stage,
+            handler: (_) => _selectAllCommands(),
+          ),
+          _CommandPaletteIntent: _GuardedAction<_CommandPaletteIntent>(
+            blocked: () => _busy,
+            handler: (_) => _openCommandPalette(),
+          ),
+          _NavHistoryIntent: _GuardedAction<_NavHistoryIntent>(
+            blocked: focusInTextField,
+            handler: (intent) => _stepNavHistory(intent.delta),
           ),
         },
         child: Focus(
@@ -1145,6 +2234,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     builder: (context, size) {
       final wide = size.maxWidth >= 1100;
       final landscape = !wide && size.maxWidth >= 580 && size.maxHeight < 530;
+      final issues = project.validateIssues();
       final stage = EditorStage(
         project: project,
         scene: _scene,
@@ -1156,6 +2246,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         speed: _speed,
         onPlayhead: _onPlayhead,
         onPlaybackEnded: () => setState(() => _playing = false),
+        onSelectCommand: _selectCommand,
+        onInheritedDrag: _handleInheritedStageDrag,
         onMove: (index, values) {
           _change(
             _withCommands(
@@ -1171,10 +2263,150 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           allowExport: allowExport,
         ).then((outcome) => outcome.proceed),
       );
-      final transport = _transportBar();
+      final transport = _transportBar(compact: !wide && !landscape);
+      final structureTree = EditorStructureTree(
+        project: project,
+        activeScene: _scene,
+        activeBeat: _beat,
+        issues: issues,
+        onSelectBeat: (si, bi) => _navigateTo(
+          si,
+          bi,
+          commandIndex: -1,
+          workspace: _workspace == _EditorWorkspace.board
+              ? _EditorWorkspace.stage
+              : null,
+        ),
+        onSceneAction: _sceneActionAt,
+        onBeatAction: _beatActionAt,
+        onMarkScene: _markScene,
+        onMarkBeat: _markBeat,
+        onMoveBeat: _moveBeatTo,
+        onOpenSearch: _openGlobalSearch,
+      );
+
+      Widget centerContent;
+      if (_workspace == _EditorWorkspace.board) {
+        centerContent = EditorBoardView(
+          project: project,
+          activeScene: _scene,
+          activeBeat: _beat,
+          issues: issues,
+          compact: !wide && !landscape,
+          onOpenBeat: (si, bi) => _navigateTo(
+            si,
+            bi,
+            commandIndex: -1,
+            workspace: _EditorWorkspace.stage,
+          ),
+          onAddBeat: _addBeatToScene,
+          onInsertBeatAfter: (si, bi) => _beatActionAt(si, bi, 'add'),
+          onDuplicateBeats: _duplicateBeats,
+          onDeleteBeats: _deleteBeats,
+          onMoveBeat: _moveBeatTo,
+          onMarkBeat: _markBeat,
+        );
+      } else if (_workspace == _EditorWorkspace.script) {
+        centerContent = EditorScriptView(
+          project: project,
+          activeScene: _scene,
+          compact: !wide && !landscape,
+          formVersion: _formVersion,
+          onEditRow: _editScriptRow,
+          onBatchReplaceSpeaker: _batchReplaceScriptSpeaker,
+          onJumpToRow: (row) => _navigateTo(
+            row.sceneIndex,
+            row.beatIndex,
+            commandIndex: row.commandIndex,
+            workspace: _EditorWorkspace.stage,
+          ),
+          onExportScript: _exportScriptFormat,
+        );
+      } else if (wide) {
+        centerContent = Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Column(
+                children: [
+                  Flexible(
+                    flex: 5,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Center(child: stage),
+                    ),
+                  ),
+                  transport,
+                  const Divider(height: 1),
+                  Expanded(
+                    flex: 4,
+                    child: _commands(inlineInspector: false),
+                  ),
+                ],
+              ),
+            ),
+            const VerticalDivider(width: 1),
+            SizedBox(
+              width: 300,
+              child: ListView(
+                padding: const EdgeInsets.all(12),
+                children: [_buildInspectorWidget()],
+              ),
+            ),
+          ],
+        );
+      } else if (landscape) {
+        centerContent = Row(
+          children: [
+            Expanded(
+              child: Column(
+                children: [
+                  Expanded(child: Center(child: stage)),
+                  transport,
+                  _outline(vertical: false, showScene: false),
+                ],
+              ),
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(
+              child: Column(
+                children: [
+                  _sceneBar(),
+                  Expanded(child: _commands(inlineInspector: true)),
+                ],
+              ),
+            ),
+          ],
+        );
+      } else {
+        centerContent = ListView(
+          children: [
+            _sceneBar(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: stage,
+            ),
+            transport,
+            _outline(vertical: false, showScene: false),
+            const Divider(height: 1),
+            _commandHeader(),
+            if (_selectedCommands.length > 1) _batchBar(compact: true),
+            // 窄屏指令同样支持拖动重排（P0-6）。
+            ReorderableListView(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              onReorderItem: _reorderCommands,
+              children: _commandRows(inlineInspector: true),
+            ),
+          ],
+        );
+      }
+
       return Column(
         children: [
-          _toolbar(),
+          _toolbar(wide: wide, compact: !wide && !landscape),
+          if (wide) _breadcrumbBar(),
           if (_busy)
             const LinearProgressIndicator(minHeight: 2)
           else
@@ -1184,90 +2416,115 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(width: 215, child: _outline(vertical: true)),
+                      SizedBox(width: 228, child: structureTree),
                       const VerticalDivider(width: 1),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Flexible(
-                              flex: 5,
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Center(child: stage),
-                              ),
-                            ),
-                            transport,
-                            const Divider(height: 1),
-                            Expanded(
-                              flex: 4,
-                              child: _commands(inlineInspector: false),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const VerticalDivider(width: 1),
-                      SizedBox(
-                        width: 290,
-                        child: ListView(
-                          key: ValueKey((_scene, _beat, _command)),
-                          padding: const EdgeInsets.all(12),
-                          children: _inspector(),
-                        ),
-                      ),
+                      Expanded(child: centerContent),
                     ],
                   )
-                : landscape
-                ? Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Expanded(child: Center(child: stage)),
-                            transport,
-                            _outline(vertical: false, showScene: false),
-                          ],
-                        ),
-                      ),
-                      const VerticalDivider(width: 1),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            _sceneBar(),
-                            Expanded(child: _commands(inlineInspector: true)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  )
-                : ListView(
-                    children: [
-                      _sceneBar(),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: stage,
-                      ),
-                      transport,
-                      _outline(vertical: false, showScene: false),
-                      const Divider(height: 1),
-                      _commandHeader(),
-                      // 窄屏指令同样支持拖动重排（P0-6）。
-                      ReorderableListView(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        buildDefaultDragHandles: false,
-                        onReorderItem: _reorderCommands,
-                        children: _commandRows(inlineInspector: true),
-                      ),
-                    ],
-                  ),
+                : centerContent,
           ),
         ],
       );
     },
   );
 
-  /// 常驻传输条（P0-2）：句级导航 + 播放控制 + 循环/倍速 + 全屏试播入口。
-  Widget _transportBar() {
+  /// 桌面端顶部面包屑（P1-4：作品 / 幕 / 分镜 / 指令 逐级可点 + Alt+←/→ 历史按钮）。
+  Widget _breadcrumbBar() {
+    final scheme = Theme.of(context).colorScheme;
+    final style = Theme.of(context).textTheme.labelSmall;
+    return Container(
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        border: Border(top: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: '后退（Alt+←）',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+            iconSize: 16,
+            onPressed: _navBack.isEmpty ? null : () => _stepNavHistory(-1),
+            icon: const Icon(Icons.arrow_back),
+          ),
+          IconButton(
+            tooltip: '前进（Alt+→）',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+            iconSize: 16,
+            onPressed: _navForward.isEmpty ? null : () => _stepNavHistory(1),
+            icon: const Icon(Icons.arrow_forward),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  InkWell(
+                    onTap: () =>
+                        setState(() => _workspace = _EditorWorkspace.board),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Text(project.title, style: style),
+                    ),
+                  ),
+                  Text(' / ', style: style),
+                  InkWell(
+                    onTap: () => _navigateTo(
+                      _scene,
+                      0,
+                      commandIndex: -1,
+                      workspace: _EditorWorkspace.stage,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Text(scene.title, style: style),
+                    ),
+                  ),
+                  Text(' / ', style: style),
+                  InkWell(
+                    onTap: () => _navigateTo(
+                      _scene,
+                      _beat,
+                      commandIndex: -1,
+                      workspace: _EditorWorkspace.stage,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Text(beat.title, style: style),
+                    ),
+                  ),
+                  if (_command >= 0) ...[
+                    Text(' / ', style: style),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Text(
+                        '指令 ${_command + 1}',
+                        style: style?.copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          Text(
+            '共 ${project.beatCount} 镜 · 约 ${formatEstimatedDuration(project.estimatedSeconds)}',
+            style: style?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 常驻传输条（P0-2 & §4.2）：宽屏单行；窄屏紧凑双行避免位置标签截断。
+  Widget _transportBar({bool compact = false}) {
     final length = _beatLength;
     final compiled = _compiled;
     final range = compiled?.ranges[(_scene, _beat)];
@@ -1281,41 +2538,122 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         : stops.isEmpty
         ? '指令 ${_command + 1} / $length'
         : '指令 ${_command + 1} / $length · 第 $stopAt / ${stops.length} 句';
+    final firstBtn = IconButton(
+      tooltip: '分镜开头（Home）',
+      visualDensity: VisualDensity.compact,
+      onPressed: disabled ? null : () => _selectCommand(0),
+      icon: const Icon(Icons.first_page),
+    );
+    final prevBtn = IconButton(
+      tooltip: '上一句（←）',
+      visualDensity: VisualDensity.compact,
+      onPressed: disabled ? null : () => _stepStop(-1),
+      icon: const Icon(Icons.skip_previous),
+    );
+    final playBtn = IconButton(
+      tooltip: _playing ? '暂停（空格）' : '播放（空格）',
+      visualDensity: VisualDensity.compact,
+      onPressed: disabled ? null : _togglePlay,
+      icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
+    );
+    final nextBtn = IconButton(
+      tooltip: '下一句（→）',
+      visualDensity: VisualDensity.compact,
+      onPressed: disabled ? null : () => _stepStop(1),
+      icon: const Icon(Icons.skip_next),
+    );
+    final endBtn = IconButton(
+      tooltip: '分镜末态（End）',
+      visualDensity: VisualDensity.compact,
+      onPressed: disabled ? null : () => _selectCommand(length - 1),
+      icon: const Icon(Icons.last_page),
+    );
+    final loopBtn = IconButton(
+      tooltip: '循环本段',
+      visualDensity: VisualDensity.compact,
+      isSelected: _loop,
+      onPressed: () => setState(() => _loop = !_loop),
+      icon: const Icon(Icons.repeat),
+    );
+    final speedBtn = OutlinedButton(
+      onPressed: disabled
+          ? null
+          : () => setState(
+              () => _speed = _speed == 1 ? 2 : _speed == 2 ? 4 : 1,
+            ),
+      style: OutlinedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        minimumSize: const Size(40, 32),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+      ),
+      child: Text('$_speed×'),
+    );
+    final fullBtn = IconButton(
+      tooltip: '全屏试播（含音频，从当前分镜开始）',
+      visualDensity: VisualDensity.compact,
+      onPressed: _busy ? null : () => _preview(_PreviewMode.fromBeat),
+      icon: const Icon(Icons.fullscreen),
+    );
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(8, 2, 8, 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                firstBtn,
+                prevBtn,
+                playBtn,
+                nextBtn,
+                endBtn,
+                const Spacer(),
+                loopBtn,
+                speedBtn,
+                fullBtn,
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      position,
+                      style: Theme.of(context).textTheme.labelSmall,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (_command >= 0)
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        minimumSize: const Size(0, 26),
+                      ),
+                      onPressed: _openMobileInspectorSheet,
+                      icon: const Icon(Icons.tune, size: 15),
+                      label: const Text('属性抽屉'),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return SizedBox(
       height: 44,
       child: Row(
         children: [
           const SizedBox(width: 8),
-          IconButton(
-            tooltip: '分镜开头（Home）',
-            visualDensity: VisualDensity.compact,
-            onPressed: disabled ? null : () => _selectCommand(0),
-            icon: const Icon(Icons.first_page),
-          ),
-          IconButton(
-            tooltip: '上一句（←）',
-            visualDensity: VisualDensity.compact,
-            onPressed: disabled ? null : () => _stepStop(-1),
-            icon: const Icon(Icons.skip_previous),
-          ),
-          IconButton(
-            tooltip: _playing ? '暂停（空格）' : '播放（空格）',
-            visualDensity: VisualDensity.compact,
-            onPressed: disabled ? null : _togglePlay,
-            icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
-          ),
-          IconButton(
-            tooltip: '下一句（→）',
-            visualDensity: VisualDensity.compact,
-            onPressed: disabled ? null : () => _stepStop(1),
-            icon: const Icon(Icons.skip_next),
-          ),
-          IconButton(
-            tooltip: '分镜末态（End）',
-            visualDensity: VisualDensity.compact,
-            onPressed: disabled ? null : () => _selectCommand(length - 1),
-            icon: const Icon(Icons.last_page),
-          ),
+          firstBtn,
+          prevBtn,
+          playBtn,
+          nextBtn,
+          endBtn,
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1327,37 +2665,51 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
               ),
             ),
           ),
-          IconButton(
-            tooltip: '循环本段',
-            visualDensity: VisualDensity.compact,
-            isSelected: _loop,
-            onPressed: () => setState(() => _loop = !_loop),
-            icon: const Icon(Icons.repeat),
-          ),
+          loopBtn,
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: OutlinedButton(
-              onPressed: disabled
-                  ? null
-                  : () => setState(
-                      () => _speed = _speed == 1 ? 2 : _speed == 2 ? 4 : 1,
-                    ),
-              style: OutlinedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                minimumSize: const Size(40, 32),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-              ),
-              child: Text('$_speed×'),
-            ),
+            child: speedBtn,
           ),
-          IconButton(
-            tooltip: '全屏试播（含音频，从当前分镜开始）',
-            visualDensity: VisualDensity.compact,
-            onPressed: _busy ? null : () => _preview(_PreviewMode.fromBeat),
-            icon: const Icon(Icons.fullscreen),
-          ),
+          fullBtn,
           const SizedBox(width: 8),
         ],
+      ),
+    );
+  }
+
+  /// 移动端底部检查器抽屉（§4.2：peek / half / full 可拖拽抽屉）。
+  Future<void> _openMobileInspectorSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.55,
+        minChildSize: 0.3,
+        maxChildSize: 0.92,
+        builder: (_, scrollController) => Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
+          child: Column(
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  children: [_buildInspectorWidget()],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1448,124 +2800,240 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     );
   }
 
-  Widget _toolbar() => Row(
-    children: [
-      if (_failedSave != null)
-        IconButton(
-          tooltip: '保存失败，点击重试',
-          onPressed: _retrySave,
-          icon: const Icon(Icons.error_outline, color: Colors.red),
-        ),
-      IconButton(
-        tooltip: '本地作品',
-        onPressed: _busy ? null : _projects,
-        icon: const Icon(Icons.folder_open),
-      ),
-      Expanded(
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton(
-            onPressed: _busy
-                ? null
-                : () async {
-                    final original = project;
-                    final title = await _title('作品名称', original.title);
-                    if (mounted &&
-                        title != null &&
-                        identical(project, original) &&
-                        title != project.title) {
-                      _change(project.copyWith(title: title));
-                    }
-                  },
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  project.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+  Widget _toolbar({required bool wide, required bool compact}) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget tabButton(
+      _EditorWorkspace target,
+      String label,
+      IconData icon, {
+      bool compactTab = false,
+    }) {
+      final active = _workspace == target;
+      return InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => setState(() => _workspace = target),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: compactTab ? 7 : 10,
+            vertical: compactTab ? 5 : 6,
+          ),
+          decoration: BoxDecoration(
+            color: active
+                ? scheme.primaryContainer.withValues(alpha: .7)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: active ? scheme.primary : scheme.outlineVariant,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: compactTab ? 14 : 15,
+                color: active ? scheme.primary : scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 3),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: active ? scheme.primary : scheme.onSurface,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                 ),
-                Text(_status, style: Theme.of(context).textTheme.labelSmall),
-              ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        if (_failedSave != null)
+          IconButton(
+            tooltip: '保存失败，点击重试',
+            onPressed: _retrySave,
+            icon: const Icon(Icons.error_outline, color: Colors.red),
+          ),
+        IconButton(
+          tooltip: '本地作品',
+          visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
+          onPressed: _busy ? null : _projects,
+          icon: const Icon(Icons.folder_open),
+        ),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      final original = project;
+                      final title = await _title('作品名称', original.title);
+                      if (mounted &&
+                          title != null &&
+                          identical(project, original) &&
+                          title != project.title) {
+                        _change(project.copyWith(title: title));
+                      }
+                    },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    project.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(_status, style: Theme.of(context).textTheme.labelSmall),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-      IconButton(
-        tooltip: '撤销',
-        onPressed: _busy || _undo.isEmpty ? null : () => _history(redo: false),
-        icon: const Icon(Icons.undo),
-      ),
-      IconButton(
-        tooltip: '重做',
-        onPressed: _busy || _redo.isEmpty ? null : () => _history(redo: true),
-        icon: const Icon(Icons.redo),
-      ),
-      PopupMenuButton<_PreviewMode>(
-        tooltip: '全屏试播',
-        enabled: !_busy,
-        icon: const Icon(Icons.play_arrow),
-        onSelected: _preview,
-        itemBuilder: (_) => const [
-          PopupMenuItem(
-            value: _PreviewMode.beat,
-            child: Text('全屏：仅当前分镜'),
+        if (wide) ...[
+          tabButton(_EditorWorkspace.stage, '演出台', Icons.movie_creation_outlined),
+          const SizedBox(width: 6),
+          tabButton(_EditorWorkspace.board, '编排台', Icons.grid_view_outlined),
+          const SizedBox(width: 6),
+          tabButton(_EditorWorkspace.script, '剧本台', Icons.table_rows_outlined),
+          const SizedBox(width: 10),
+          IconButton(
+            tooltip: '全局搜索',
+            onPressed: _busy ? null : _openGlobalSearch,
+            icon: const Icon(Icons.search),
           ),
-          PopupMenuItem(
-            value: _PreviewMode.fromBeat,
-            child: Text('全屏：从当前分镜开始'),
+          IconButton(
+            tooltip: '命令面板（Ctrl+K）',
+            onPressed: _busy ? null : _openCommandPalette,
+            icon: const Icon(Icons.bolt),
           ),
-          PopupMenuItem(value: _PreviewMode.full, child: Text('全屏：从头播放')),
+        ] else ...[
+          // §4.2 移动端轻量化：仅保留演出台与分镜切换，不上桌面式剧本表格。
+          tabButton(
+            _EditorWorkspace.stage,
+            compact ? '演出' : '演出台',
+            Icons.movie_creation_outlined,
+            compactTab: compact,
+          ),
+          const SizedBox(width: 4),
+          tabButton(
+            _EditorWorkspace.board,
+            compact ? '分镜' : '分镜切换',
+            Icons.view_carousel_outlined,
+            compactTab: compact,
+          ),
+          if (!compact) ...[
+            const SizedBox(width: 4),
+            tabButton(_EditorWorkspace.script, '剧本台', Icons.table_rows_outlined),
+          ],
+          IconButton(
+            tooltip: '全局搜索',
+            visualDensity: VisualDensity.compact,
+            padding: compact ? EdgeInsets.zero : null,
+            constraints: compact
+                ? const BoxConstraints(minWidth: 32, minHeight: 32)
+                : null,
+            onPressed: _busy ? null : _openGlobalSearch,
+            icon: const Icon(Icons.search, size: 19),
+          ),
         ],
-      ),
-      PopupMenuButton<String>(
-        tooltip: '作品操作',
-        enabled: !_busy,
-        onSelected: (action) async {
-          switch (action) {
-            case 'play':
-              if (widget.onPlayProject != null) {
-                await widget.onPlayProject!(project);
-              }
-            case 'assets':
-              await _assets();
-            case 'export':
-              await _export(scriptOnly: false);
-            case 'duplicate':
-              await _duplicateProject();
-            case 'script':
-              await _export(scriptOnly: true);
-            case 'delete':
-              await _deleteProject();
-            case 'check':
-              final issues = project.validateIssues();
-              await _issues(
-                issues.isEmpty
-                    ? [const EditorIssue('没有发现结构问题。')]
-                    : issues,
-                title: '作品检查',
-              ).then((outcome) {
-                if (outcome.goto != null) _gotoIssue(outcome.goto!);
-              });
-          }
-        },
-        itemBuilder: (_) => [
-          PopupMenuItem(
-            value: 'play',
-            enabled: widget.onPlayProject != null,
-            child: const Text('播放作品'),
-          ),
-          const PopupMenuItem(value: 'assets', child: Text('作品素材管理')),
-          const PopupMenuItem(value: 'export', child: Text('导出作品（含上传素材）')),
-          const PopupMenuItem(value: 'script', child: Text('导出纯脚本')),
-          const PopupMenuItem(value: 'duplicate', child: Text('复制作品')),
-          const PopupMenuItem(value: 'check', child: Text('检查作品')),
-          const PopupMenuItem(value: 'delete', child: Text('删除作品')),
-        ],
-      ),
-    ],
-  );
+        IconButton(
+          tooltip: '撤销',
+          visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
+          padding: compact ? EdgeInsets.zero : null,
+          constraints: compact
+              ? const BoxConstraints(minWidth: 32, minHeight: 32)
+              : null,
+          onPressed: _busy || _undo.isEmpty ? null : () => _history(redo: false),
+          icon: const Icon(Icons.undo),
+        ),
+        IconButton(
+          tooltip: '重做',
+          visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
+          padding: compact ? EdgeInsets.zero : null,
+          constraints: compact
+              ? const BoxConstraints(minWidth: 32, minHeight: 32)
+              : null,
+          onPressed: _busy || _redo.isEmpty ? null : () => _history(redo: true),
+          icon: const Icon(Icons.redo),
+        ),
+        PopupMenuButton<_PreviewMode>(
+          tooltip: '全屏试播',
+          enabled: !_busy,
+          icon: const Icon(Icons.play_arrow),
+          onSelected: _preview,
+          itemBuilder: (_) => const [
+            PopupMenuItem(
+              value: _PreviewMode.beat,
+              child: Text('全屏：仅当前分镜'),
+            ),
+            PopupMenuItem(
+              value: _PreviewMode.fromBeat,
+              child: Text('全屏：从当前分镜开始'),
+            ),
+            PopupMenuItem(value: _PreviewMode.full, child: Text('全屏：从头播放')),
+          ],
+        ),
+        PopupMenuButton<String>(
+          tooltip: '作品操作',
+          enabled: !_busy,
+          onSelected: (action) async {
+            switch (action) {
+              case 'play':
+                if (widget.onPlayProject != null) {
+                  await widget.onPlayProject!(project);
+                }
+              case 'assets':
+                await _assets();
+              case 'export':
+                await _export(scriptOnly: false);
+              case 'duplicate':
+                await _duplicateProject();
+              case 'script':
+                await _export(scriptOnly: true);
+              case 'export_txt':
+                await _exportScriptFormat('txt');
+              case 'export_csv':
+                await _exportScriptFormat('csv');
+              case 'export_srt':
+                await _exportScriptFormat('srt');
+              case 'delete':
+                await _deleteProject();
+              case 'check':
+                final issues = project.validateIssues();
+                await _issues(
+                  issues.isEmpty
+                      ? [const EditorIssue('没有发现结构问题。')]
+                      : issues,
+                  title: '作品检查',
+                ).then((outcome) {
+                  if (outcome.goto != null) _gotoIssue(outcome.goto!);
+                });
+            }
+          },
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              value: 'play',
+              enabled: widget.onPlayProject != null,
+              child: const Text('播放作品'),
+            ),
+            const PopupMenuItem(value: 'assets', child: Text('作品素材管理')),
+            const PopupMenuItem(value: 'export', child: Text('导出作品（含上传素材）')),
+            const PopupMenuItem(value: 'script', child: Text('导出纯脚本')),
+            const PopupMenuItem(value: 'export_txt', child: Text('导出台本 TXT')),
+            const PopupMenuItem(value: 'export_csv', child: Text('导出台本 CSV')),
+            const PopupMenuItem(value: 'export_srt', child: Text('导出字幕 SRT')),
+            const PopupMenuItem(value: 'duplicate', child: Text('复制作品')),
+            const PopupMenuItem(value: 'check', child: Text('检查作品')),
+            const PopupMenuItem(value: 'delete', child: Text('删除作品')),
+          ],
+        ),
+      ],
+    );
+  }
 
   Widget _sceneBar() => Row(
     children: [
@@ -1663,45 +3131,208 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         : SizedBox(height: 52, child: list);
   }
 
-  Widget _commandHeader() => Row(
-    children: [
-      Expanded(
-        child: Padding(
-          padding: const EdgeInsets.only(left: 12),
-          child: Text(
-            beat.title,
-            style: Theme.of(context).textTheme.titleSmall,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+  Widget _commandHeader() {
+    final multiCount = _selectedCommands.length;
+    final hasClip = _sharedCommandClipboard.isNotEmpty;
+    return Row(
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    beat.title,
+                    style: Theme.of(context).textTheme.titleSmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    multiCount > 1
+                        ? '已选 $multiCount 条'
+                        : 'Shift 连选 · Ctrl 增减',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: multiCount > 1
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+        if (hasClip)
+          IconButton(
+            tooltip: '粘贴剪贴板（${_sharedCommandClipboard.length} 条，Ctrl+V）',
+            visualDensity: VisualDensity.compact,
+            onPressed: _pasteClipboardCommands,
+            icon: const Icon(Icons.content_paste, size: 18),
+          ),
+        PopupMenuButton<String>(
+          tooltip: '选择与批量',
+          icon: const Icon(Icons.checklist, size: 20),
+          onSelected: (action) {
+            switch (action) {
+              case 'all':
+                _selectAllCommands();
+              case 'invert':
+                _invertCommandSelection();
+              case 'copy':
+                _copySelectedCommands();
+              case 'paste':
+                _pasteClipboardCommands();
+              case 'clear':
+                _clearMultiSelection();
+            }
+          },
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              value: 'all',
+              enabled: beat.commands.isNotEmpty,
+              child: const Text('全选指令（Ctrl+A）'),
+            ),
+            PopupMenuItem(
+              value: 'invert',
+              enabled: beat.commands.isNotEmpty,
+              child: const Text('反选指令'),
+            ),
+            PopupMenuItem(
+              value: 'copy',
+              enabled: _selectedCommands.isNotEmpty || _command >= 0,
+              child: const Text('复制所选（Ctrl+C）'),
+            ),
+            PopupMenuItem(
+              value: 'paste',
+              enabled: _sharedCommandClipboard.isNotEmpty,
+              child: Text('粘贴到播放头后（${_sharedCommandClipboard.length}）'),
+            ),
+            if (_selectedCommands.length > 1)
+              const PopupMenuItem(value: 'clear', child: Text('取消多选')),
+          ],
+        ),
+        IconButton(
+          tooltip: '添加分镜',
+          onPressed: () => _beatAction('add'),
+          icon: const Icon(Icons.post_add),
+        ),
+        PopupMenuButton<String>(
+          tooltip: '分镜操作',
+          onSelected: _beatAction,
+          itemBuilder: (_) => [
+            const PopupMenuItem(value: 'rename', child: Text('重命名分镜')),
+            const PopupMenuItem(value: 'duplicate', child: Text('复制分镜')),
+            const PopupMenuItem(value: 'mark', child: Text('标记与备注')),
+            ..._reorderMenu(_beat, scene.beats.length),
+            PopupMenuItem(
+              value: 'delete',
+              enabled: scene.beats.length > 1,
+              child: const Text('删除分镜'),
+            ),
+          ],
+        ),
+        IconButton(
+          tooltip: '添加演出指令',
+          onPressed: () => _showCommandChooser(),
+          icon: const Icon(Icons.add),
+        ),
+      ],
+    );
+  }
+
+  /// P0-3 多选批量操作条（桌面端含批量改说话人；移动端仅轻量复制/删除/取消）。
+  Widget _batchBar({bool compact = false}) {
+    final scheme = Theme.of(context).colorScheme;
+    final count = _selectedCommands.length;
+    return Container(
+      key: const ValueKey('editor-batch-bar'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer.withValues(alpha: .35),
+        border: Border(
+          top: BorderSide(color: scheme.primary.withValues(alpha: .4)),
+          bottom: BorderSide(color: scheme.outlineVariant),
+        ),
       ),
-      IconButton(
-        tooltip: '添加分镜',
-        onPressed: () => _beatAction('add'),
-        icon: const Icon(Icons.post_add),
-      ),
-      PopupMenuButton<String>(
-        tooltip: '分镜操作',
-        onSelected: _beatAction,
-        itemBuilder: (_) => [
-          const PopupMenuItem(value: 'rename', child: Text('重命名分镜')),
-          const PopupMenuItem(value: 'duplicate', child: Text('复制分镜')),
-          ..._reorderMenu(_beat, scene.beats.length),
-          PopupMenuItem(
-            value: 'delete',
-            enabled: scene.beats.length > 1,
-            child: const Text('删除分镜'),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            '已选 $count 条',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: scheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (!compact) ...[
+            SizedBox(
+              width: 150,
+              child: TextField(
+                key: const ValueKey('batch-speaker-input'),
+                controller: _batchSpeakerController,
+                decoration: const InputDecoration(
+                  hintText: '批量修改说话人…',
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: (v) => _applyBatchSpeaker(v),
+              ),
+            ),
+            FilledButton.tonal(
+              onPressed: () =>
+                  _applyBatchSpeaker(_batchSpeakerController.text),
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+              ),
+              child: const Text('应用'),
+            ),
+          ],
+          OutlinedButton.icon(
+            onPressed: _copySelectedCommands,
+            style: OutlinedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+            ),
+            icon: const Icon(Icons.copy, size: 15),
+            label: const Text('复制'),
+          ),
+          OutlinedButton.icon(
+            onPressed: _duplicateSelectedCommands,
+            style: OutlinedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+            ),
+            icon: const Icon(Icons.copy_all, size: 15),
+            label: const Text('创建副本'),
+          ),
+          OutlinedButton.icon(
+            onPressed: _deleteSelectedCommands,
+            style: OutlinedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              foregroundColor: scheme.error,
+            ),
+            icon: const Icon(Icons.delete_outline, size: 15),
+            label: const Text('删除'),
+          ),
+          TextButton(
+            onPressed: _clearMultiSelection,
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            child: const Text('取消选择'),
           ),
         ],
       ),
-      IconButton(
-        tooltip: '添加演出指令',
-        onPressed: () => _showCommandChooser(),
-        icon: const Icon(Icons.add),
-      ),
-    ],
-  );
+    );
+  }
 
   void _reorderCommands(int oldIndex, int newIndex) {
     // material_ui 的 onReorderItem 已按「移除旧项后的位置」调整 newIndex，
@@ -1709,7 +3340,10 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     final commands = [...beat.commands];
     final moved = commands.removeAt(oldIndex);
     commands.insert(newIndex.clamp(0, commands.length), moved);
-    _change(_withCommands(commands), selected: newIndex.clamp(0, commands.length - 1));
+    _change(
+      _withCommands(commands),
+      selected: newIndex.clamp(0, commands.length - 1),
+    );
   }
 
   String _commandSummary(EditCommand entry) {
@@ -1729,7 +3363,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       'charslot' => '人物：${value('name')}（${value('slot')}）',
       'playmusic' => '播放音乐：${value('key')}',
       'playsound' => '播放音效：${value('key')}',
-      'delay' => '等待：${value('duration')} 秒',
+      'delay' => '等待：${value('time').isEmpty ? value('duration') : value('time')} 秒',
       'bgeffect' || 'effect' => '特效：${value('name')}',
       _ => entry.tag,
     };
@@ -1738,6 +3372,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   Widget _commands({required bool inlineInspector}) => Column(
     children: [
       _commandHeader(),
+      if (_selectedCommands.length > 1) _batchBar(compact: inlineInspector),
       Expanded(
         // 窄屏与宽屏统一支持拖动重排（P0-6 窄屏拖动修复）。
         child: ReorderableListView(
@@ -1749,175 +3384,158 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     ],
   );
 
+  Future<void> _showCommandContextMenu(int index, Offset globalPosition) async {
+    if (!_selectedCommands.contains(index)) {
+      _selectCommand(index);
+    }
+    final action = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPosition.dx,
+        globalPosition.dy,
+        globalPosition.dx + 1,
+        globalPosition.dy + 1,
+      ),
+      items: [
+        const PopupMenuItem(value: 'copy', child: Text('复制（Ctrl+C）')),
+        const PopupMenuItem(value: 'cut', child: Text('剪切（Ctrl+X）')),
+        PopupMenuItem(
+          value: 'paste',
+          enabled: _sharedCommandClipboard.isNotEmpty,
+          child: const Text('粘贴到此处后（Ctrl+V）'),
+        ),
+        const PopupMenuItem(value: 'duplicate', child: Text('创建副本（Ctrl+D）')),
+        const PopupMenuItem(value: 'insert', child: Text('在此之后插入指令')),
+        const PopupMenuItem(value: 'toggle_multi', child: Text('加入/移出多选')),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'delete', child: Text('删除（Delete）')),
+      ],
+    );
+    if (action == null) return;
+    switch (action) {
+      case 'copy':
+        _copySelectedCommands();
+      case 'cut':
+        _copySelectedCommands(cut: true);
+      case 'paste':
+        _pasteClipboardCommands();
+      case 'duplicate':
+        _duplicateSelectedCommands();
+      case 'insert':
+        await _showCommandChooser(insertAt: index + 1);
+      case 'toggle_multi':
+        _toggleMultiCommand(index);
+      case 'delete':
+        _deleteSelectedCommands();
+    }
+  }
+
   /// 窄屏指令行与内联检查器合并为单个可重排 item，
   /// 避免检查器成为独立拖动单位导致索引错位。
-  List<Widget> _commandRows({required bool inlineInspector}) => [
-    if (beat.commands.isEmpty)
-      const ListTile(
-        key: ValueKey('empty-command'),
-        title: Text('暂无演出指令'),
-        leading: Icon(Icons.movie_outlined),
-      ),
-    for (final (i, entry) in beat.commands.indexed)
-      Column(
-        // 行身份按位置而非指令对象标识：每次输入都会创建新的指令对象，
-        // 用 ObjectKey(entry) 会让内联检查器随整行被替换，输入一次即丢焦点。
-        key: ValueKey('command-$i'),
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ListTile(
-            dense: true,
-            selected: i == _command,
-            leading: ReorderableDragStartListener(
-              index: i,
-              child: Icon(
-                Icons.drag_handle,
-                color: Theme.of(context).colorScheme.onSurfaceVariant
-                    .withValues(alpha: .55),
-              ),
-            ),
-            title: Text(editorFields[entry.tag]?.$1 ?? '原始指令'),
-            subtitle: Text(
-              entry.raw ?? _commandSummary(entry),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            onTap: () => _selectCommand(i),
-            trailing: PopupMenuButton<String>(
-              tooltip: '指令操作 ${i + 1}',
-              onSelected: (action) => _commandAction(i, action),
-              itemBuilder: (_) => [
-                const PopupMenuItem(value: 'duplicate', child: Text('复制指令')),
-                const PopupMenuItem(value: 'insert', child: Text('在此之后插入')),
-                ..._reorderMenu(i, beat.commands.length),
-                const PopupMenuItem(value: 'delete', child: Text('删除指令')),
-              ],
-            ),
-          ),
-          if (inlineInspector && i == _command)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: _inspector(),
-              ),
-            ),
-        ],
-      ),
-  ];
-
-  List<Widget> _inspector() {
-    final current = command;
-    if (current == null) {
-      return const [ListTile(title: Text('指令属性'), subtitle: Text('未选中指令'))];
-    }
-    final definition = editorFields[current.tag];
-    if (definition == null || current.raw != null) {
-      return [
-        Text(
-          definition?.$1 ?? '高级指令',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          key: ValueKey((_formVersion, 'source')),
-          initialValue: current.source,
-          minLines: 5,
-          maxLines: 12,
-          keyboardType: TextInputType.multiline,
-          decoration: const InputDecoration(
-            labelText: '脚本源码',
-            helperText: '编辑后会保留为单条指令；格式错误时不会覆盖当前内容。',
-            border: OutlineInputBorder(),
-          ),
-          onChanged: (source) {
-            try {
-              final parsed = StoryScript.parse(source).commands;
-              if (parsed.length != 1) return;
-              final commands = [...beat.commands];
-              commands[_command] = EditCommand.fromScript(parsed.single);
-              _change(_withCommands(commands), typing: 'source');
-            } on FormatException {
-              // 输入中的半成品等待用户继续编辑。
-            }
-          },
-        ),
-      ];
-    }
+  List<Widget> _commandRows({required bool inlineInspector}) {
+    final scheme = Theme.of(context).colorScheme;
+    final multiMode = _selectedCommands.length > 1;
     return [
-      Text(definition.$1, style: Theme.of(context).textTheme.titleMedium),
-      for (final field in definition.$2)
-        Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: _field(field, current),
+      if (beat.commands.isEmpty)
+        const ListTile(
+          key: ValueKey('empty-command'),
+          title: Text('暂无演出指令'),
+          leading: Icon(Icons.movie_outlined),
+        ),
+      for (final (i, entry) in beat.commands.indexed)
+        Column(
+          // 行身份按位置而非指令对象标识：每次输入都会创建新的指令对象，
+          // 用 ObjectKey(entry) 会让内联检查器随整行被替换，输入一次即丢焦点。
+          key: ValueKey('command-$i'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            GestureDetector(
+              onSecondaryTapDown: (d) =>
+                  _showCommandContextMenu(i, d.globalPosition),
+              child: Material(
+                color: _selectedCommands.contains(i) && i != _command
+                    ? scheme.primaryContainer.withValues(alpha: .28)
+                    : Colors.transparent,
+                child: ListTile(
+                  dense: true,
+                  selected: i == _command,
+                  leading: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (multiMode)
+                        Checkbox(
+                          visualDensity: VisualDensity.compact,
+                          value: _selectedCommands.contains(i),
+                          onChanged: (_) => _toggleMultiCommand(i),
+                        ),
+                      ReorderableDragStartListener(
+                        index: i,
+                        child: Icon(
+                          Icons.drag_handle,
+                          color: scheme.onSurfaceVariant.withValues(alpha: .55),
+                        ),
+                      ),
+                    ],
+                  ),
+                  title: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onLongPress: () => _toggleMultiCommand(i),
+                    child: Text(editorFields[entry.tag]?.$1 ?? '原始指令'),
+                  ),
+                  subtitle: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onLongPress: () => _toggleMultiCommand(i),
+                    child: Text(
+                      entry.raw ?? _commandSummary(entry),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  onTap: () => _onTapCommandRow(i),
+                  trailing: PopupMenuButton<String>(
+                    tooltip: '指令操作 ${i + 1}',
+                    onSelected: (action) => _commandAction(i, action),
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(value: 'duplicate', child: Text('复制指令')),
+                      const PopupMenuItem(value: 'insert', child: Text('在此之后插入')),
+                      ..._reorderMenu(i, beat.commands.length),
+                      const PopupMenuItem(value: 'delete', child: Text('删除指令')),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (inlineInspector && i == _command)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: _buildInspectorWidget(),
+              ),
+          ],
         ),
     ];
   }
 
-  Widget _field(EditorField field, EditCommand current) {
-    final value = current.args[field.key] ?? field.initial;
-    final key = ValueKey((_formVersion, field.key));
-    if (field.type == FieldType.toggle) {
-      return SwitchListTile(
-        key: key,
-        contentPadding: EdgeInsets.zero,
-        title: Text(field.label),
-        value: value == 'true' || value == '1',
-        onChanged: (v) => _updateCommand({field.key: '$v'}),
-      );
-    }
-    if (field.type == FieldType.choice) {
-      return DropdownButtonFormField<String>(
-        key: key,
-        isExpanded: true,
-        initialValue: field.options.containsKey(value) ? value : null,
-        decoration: InputDecoration(labelText: field.label),
-        items: [
-          for (final item in field.options.entries)
-            DropdownMenuItem(value: item.key, child: Text(item.value)),
-        ],
-        onChanged: (v) {
-          if (v != null) _updateCommand({field.key: v});
-        },
-      );
-    }
-    if (isMediaField(field.type)) {
-      return OutlinedButton.icon(
-        key: key,
-        onPressed: () => _pick(field),
-        icon: Icon(
-          field.type == FieldType.fx
-              ? Icons.auto_awesome
-              : Icons.perm_media_outlined,
-        ),
-        label: Text(
-          value.isEmpty
-              ? field.label
-              : '${field.label}：${project.assets[value]?.name ?? value}',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-      );
-    }
-    return Focus(
-      key: key,
-      onFocusChange: (focused) {
-        if (!focused && _typing == field.key) _typing = null;
+  Widget _buildInspectorWidget() {
+    return EditorInspector(
+      project: project,
+      commands: beat.commands,
+      activeIndex: _command,
+      selectedIndices: _selectedCommands,
+      formVersion: _formVersion,
+      onUpdateCommand: (values, {String? typing}) =>
+          _updateCommand(values, typing: typing),
+      onUpdateMany: (indices, values) => _updateManyCommands(indices, values),
+      onReplaceSource: (updated) {
+        if (_command < 0 || _command >= beat.commands.length) return;
+        final next = [...beat.commands];
+        next[_command] = updated;
+        _change(_withCommands(next), selected: _command, typing: 'source');
       },
-      child: TextFormField(
-        initialValue: value,
-        minLines: field.type == FieldType.multiline ? 3 : 1,
-        maxLines: field.type == FieldType.multiline ? 6 : 1,
-        keyboardType: field.type == FieldType.number
-            ? const TextInputType.numberWithOptions(decimal: true, signed: true)
-            : TextInputType.text,
-        decoration: InputDecoration(
-          labelText: field.label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-        onChanged: (v) => _updateCommand({field.key: v}, typing: field.key),
-      ),
+      onPickMedia: _pick,
+      onFocusTypingEnd: (fieldKey) {
+        if (_typing == fieldKey) _typing = null;
+      },
+      onResetCommand: _resetCurrentCommand,
     );
   }
 }

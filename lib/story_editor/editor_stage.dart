@@ -12,12 +12,33 @@ import 'editor_project.dart';
 
 typedef _Handle = ({
   int index,
+  int sourceScene,
+  int sourceBeat,
+  int sourceCommand,
+  bool inherited,
+  String tag,
+  String label,
+  String keyName,
   Offset anchor,
   Offset position,
   bool yUp,
+  double? width,
+  double? fontSize,
   void Function(Offset) update,
+  void Function(double width, double fontSize)? updateSubtitleBox,
 });
 
+/// 舞台继承对象覆盖请求（当前分镜拖动继承自前序分镜的对象时触发）。
+typedef StageInheritedRequest = ({
+  String tag,
+  String label,
+  String keyName,
+  String slot,
+  int sourceScene,
+  int sourceBeat,
+  int sourceCommand,
+  Map<String, String> values,
+});
 /// 编辑器监视器：以「播放头」语义渲染舞台——
 /// 选中第 n 条指令时重放到该指令执行后的状态（P0-1）；
 /// [selected] 为 -1 时保持分镜末态。
@@ -38,6 +59,8 @@ class EditorStage extends StatefulWidget {
     this.speed = 1,
     this.onPlayhead,
     this.onPlaybackEnded,
+    this.onSelectCommand,
+    this.onInheritedDrag,
   });
 
   final EditorProject project;
@@ -66,6 +89,11 @@ class EditorStage extends StatefulWidget {
   /// 非循环播放自然结束（播放到分镜末）时回调，页面复位播放按钮。
   final void Function()? onPlaybackEnded;
 
+  /// 点击舞台未选中对象或左上角对象列表时选中对应指令。
+  final void Function(int index)? onSelectCommand;
+
+  /// 拖动继承自前序分镜的对象时通知页面弹出二选一（跳到来源/在当前分镜插入覆盖）。
+  final Future<void> Function(StageInheritedRequest request)? onInheritedDrag;
   @override
   State<EditorStage> createState() => _EditorStageState();
 }
@@ -85,6 +113,17 @@ class _EditorStageState extends State<EditorStage> {
   bool _loading = true;
   _Handle? _drag;
   Offset _point = Offset.zero;
+  Offset _dragOrigin = Offset.zero;
+  double? _dragWidth;
+  double? _dragFontSize;
+  String? _dragBubble;
+  double? _snapGuideX;
+  double? _snapGuideY;
+  int? _hoveredHandle;
+  double _zoom = 1.0;
+  Offset _pan = Offset.zero;
+  bool _spaceDown = false;
+  bool _showObjects = false;
   late final FocusNode _focusNode;
 
   /// 播放推进同步给页面的播放头，避免页面重建被误判为用户 seek。
@@ -471,14 +510,28 @@ class _EditorStageState extends State<EditorStage> {
 
   List<_Handle> _handles(PreparedStage stage) {
     final state = stage.engine.state;
-    final commands =
-        widget.project.scenes[widget.scene].beats[widget.beat].commands;
     final handles = <_Handle>[];
     final seen = <String>{};
     var clearedSlots = false;
-    for (var i = commands.length - 1; i >= 0; i--) {
-      final command = commands[i];
+
+    // 从当前分镜倒序扫描到开头，包含继承自前序分镜但仍在舞台上显示的对象。
+    final ordered = <(int s, int b, int c, EditCommand cmd)>[];
+    for (var s = 0; s <= widget.scene; s++) {
+      final scene = widget.project.scenes[s];
+      for (var b = 0; b < scene.beats.length; b++) {
+        if (s == widget.scene && b > widget.beat) break;
+        final cmds = scene.beats[b].commands;
+        for (var c = 0; c < cmds.length; c++) {
+          ordered.add((s, b, c, cmds[c]));
+        }
+      }
+    }
+
+    for (var k = ordered.length - 1; k >= 0; k--) {
+      final (s, b, c, command) = ordered[k];
       if (command.raw != null) continue;
+      final inherited = s != widget.scene || b != widget.beat;
+      final localIndex = inherited ? -(k + 1) : c;
       switch (command.tag) {
         case 'background':
         case 'image':
@@ -491,14 +544,24 @@ class _EditorStageState extends State<EditorStage> {
               ? const Offset(690, 360)
               : const Offset(590, 360);
           handles.add((
-            index: i,
+            index: localIndex,
+            sourceScene: s,
+            sourceBeat: b,
+            sourceCommand: c,
+            inherited: inherited,
+            tag: command.tag,
+            label: editorFields[command.tag]!.$1,
+            keyName: command.value('image'),
             anchor: origin + Offset(layer.x, -layer.y),
             position: Offset(layer.x, layer.y),
             yUp: true,
+            width: null,
+            fontSize: null,
             update: (p) {
               layer.x = p.dx;
               layer.y = p.dy;
             },
+            updateSubtitleBox: null,
           ));
         case 'charslot':
           final slot = _slot(command.value('slot'));
@@ -520,28 +583,56 @@ class _EditorStageState extends State<EditorStage> {
           };
           final y =
               720 - (art?.size.height ?? 440) / 2 - (art?.position.dy ?? 0);
+          final slotLabel = switch (slot) {
+            'l' => '左',
+            'r' => '右',
+            _ => '中',
+          };
           handles.add((
-            index: i,
+            index: localIndex,
+            sourceScene: s,
+            sourceBeat: b,
+            sourceCommand: c,
+            inherited: inherited,
+            tag: 'charslot',
+            label: '立绘（$slotLabel）',
+            keyName: '$slot:${node.name}',
             anchor: Offset(x + node.actionX, y - node.actionY),
             position: Offset(node.actionX, node.actionY),
             yUp: true,
+            width: null,
+            fontSize: null,
             update: (p) {
               node.actionX = p.dx;
               node.actionY = p.dy;
             },
+            updateSubtitleBox: null,
           ));
         case 'subtitle':
           if (!seen.add(command.tag)) continue;
           final subtitle = state.subtitle;
           if (subtitle == null || command.value('text').isEmpty) continue;
           handles.add((
-            index: i,
+            index: localIndex,
+            sourceScene: s,
+            sourceBeat: b,
+            sourceCommand: c,
+            inherited: inherited,
+            tag: 'subtitle',
+            label: '舞台文字',
+            keyName: command.value('text'),
             anchor: Offset(subtitle.x, subtitle.y),
             position: Offset(subtitle.x, subtitle.y),
             yUp: false,
+            width: subtitle.width,
+            fontSize: subtitle.size,
             update: (p) {
               subtitle.x = p.dx;
               subtitle.y = p.dy;
+            },
+            updateSubtitleBox: (w, fs) {
+              subtitle.width = w;
+              subtitle.size = fs;
             },
           ));
       }
@@ -552,12 +643,16 @@ class _EditorStageState extends State<EditorStage> {
   String _format(double value) => value.toStringAsFixed(1);
 
   void _nudge(KeyEvent event) {
+    if (event.logicalKey == LogicalKeyboardKey.space) {
+      final down = event is KeyDownEvent || event is KeyRepeatEvent;
+      if (_spaceDown != down) setState(() => _spaceDown = down);
+      return;
+    }
     if (event is! KeyDownEvent || widget.selected < 0) return;
-    final command = widget
-        .project
-        .scenes[widget.scene]
-        .beats[widget.beat]
-        .commands[widget.selected];
+    final commands =
+        widget.project.scenes[widget.scene].beats[widget.beat].commands;
+    if (widget.selected >= commands.length) return;
+    final command = commands[widget.selected];
     final step = HardwareKeyboard.instance.isShiftPressed ? 10.0 : 1.0;
     final key = event.logicalKey;
     var dx = 0.0;
@@ -574,47 +669,338 @@ class _EditorStageState extends State<EditorStage> {
       widget.onMove(widget.selected, {
         'posto': '${_format(x + dx)},${_format(y + dy)}',
       });
-    } else {
+    } else if (command.tag == 'background' ||
+        command.tag == 'image' ||
+        command.tag == 'subtitle') {
       final x = double.tryParse(command.value('x')) ?? 0;
       final y = double.tryParse(command.value('y')) ?? 0;
+      final nextY = command.tag == 'subtitle' ? y - dy : y + dy;
       widget.onMove(widget.selected, {
         'x': _format(x + dx),
-        'y': _format(y + dy),
+        'y': _format(nextY),
       });
     }
   }
 
-  Widget _outline(_Handle handle, Size size, double scale) => Positioned(
-    left: (handle.anchor.dx * scale - 30).clamp(
-      0.0,
-      math.max(0.0, size.width - 60),
-    ),
-    top: (handle.anchor.dy * scale - 30).clamp(
-      0.0,
-      math.max(0.0, size.height - 60),
-    ),
-    child: IgnorePointer(
-      child: Container(
-        width: 60,
-        height: 60,
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: Theme.of(context).colorScheme.primary,
-            width: 2,
+  /// 计算吸附后的逻辑坐标及辅助线（舞台中心线、三分线、安全框与同台其他对象对齐，阈值 6px；Alt 临时关闭）。
+  (Offset snapped, double? guideX, double? guideY) _applySnap(
+    _Handle drag,
+    Offset raw,
+    List<_Handle> allHandles,
+  ) {
+    if (HardwareKeyboard.instance.isAltPressed) return (raw, null, null);
+    const threshold = 6.0;
+    final anchorOffset = drag.anchor - Offset(
+      drag.position.dx,
+      drag.yUp ? -drag.position.dy : drag.position.dy,
+    );
+    var stageX = anchorOffset.dx + raw.dx;
+    var stageY = anchorOffset.dy + (drag.yUp ? -raw.dy : raw.dy);
+
+    final candidatesX = <double>[
+      640.0,
+      1280.0 / 3,
+      2560.0 / 3,
+      64.0,
+      1216.0,
+      for (final other in allHandles)
+        if (other.index != drag.index) other.anchor.dx,
+    ];
+    final candidatesY = <double>[
+      360.0,
+      240.0,
+      480.0,
+      36.0,
+      684.0,
+      for (final other in allHandles)
+        if (other.index != drag.index) other.anchor.dy,
+    ];
+
+    double? hitX;
+    var bestDx = threshold + 1;
+    for (final c in candidatesX) {
+      final d = (stageX - c).abs();
+      if (d <= threshold && d < bestDx) {
+        bestDx = d;
+        hitX = c;
+      }
+    }
+    double? hitY;
+    var bestDy = threshold + 1;
+    for (final c in candidatesY) {
+      final d = (stageY - c).abs();
+      if (d <= threshold && d < bestDy) {
+        bestDy = d;
+        hitY = c;
+      }
+    }
+
+    var sx = raw.dx;
+    var sy = raw.dy;
+    if (hitX != null) sx = hitX - anchorOffset.dx;
+    if (hitY != null) {
+      final deltaY = hitY - anchorOffset.dy;
+      sy = drag.yUp ? -deltaY : deltaY;
+    }
+    return (Offset(sx, sy), hitX, hitY);
+  }
+
+  void _finishDrag(_Handle drag) {
+    final x = _format(_point.dx);
+    final y = _format(_point.dy);
+    final values = drag.tag == 'charslot'
+        ? {'posto': '$x,$y'}
+        : {'x': x, 'y': y};
+    if (drag.inherited) {
+      // 先复原本地预览坐标，再让页面决定跳转到来源还是在当前分镜插入覆盖。
+      drag.update(drag.position);
+      final parts = drag.keyName.split(':');
+      final slot = drag.tag == 'charslot' ? parts.first : '';
+      final keyName = drag.tag == 'charslot' && parts.length > 1
+          ? parts.sublist(1).join(':')
+          : drag.keyName;
+      widget.onInheritedDrag?.call((
+        tag: drag.tag,
+        label: drag.label,
+        keyName: keyName,
+        slot: slot,
+        sourceScene: drag.sourceScene,
+        sourceBeat: drag.sourceBeat,
+        sourceCommand: drag.sourceCommand,
+        values: values,
+      ));
+      return;
+    }
+    widget.onMove(drag.index, values);
+  }
+
+  Widget _outline(_Handle handle, Size size, double scale, bool selected) {
+    final hovered = _hoveredHandle == handle.index;
+    final primary = Theme.of(context).colorScheme.primary;
+    // 舞台文字（subtitle）具备 width/size，按真实排版区域绘制变换框；立绘/背景/CG 仅绘制定位框。
+    if (handle.tag == 'subtitle' && handle.width != null) {
+      final w = (handle.width! * scale).clamp(48.0, size.width).toDouble();
+      final h = ((handle.fontSize ?? 36) * 2.2 * scale)
+          .clamp(32.0, size.height)
+          .toDouble();
+      final left = (handle.anchor.dx * scale)
+          .clamp(0.0, math.max(0.0, size.width - w))
+          .toDouble();
+      final top = (handle.anchor.dy * scale)
+          .clamp(0.0, math.max(0.0, size.height - h))
+          .toDouble();
+      return Positioned(
+        left: left,
+        top: top,
+        width: w,
+        height: h,
+        child: IgnorePointer(
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: selected
+                    ? primary
+                    : hovered
+                    ? primary.withValues(alpha: 0.65)
+                    : Colors.white.withValues(alpha: 0.18),
+                width: selected ? 2 : 1,
+              ),
+              borderRadius: BorderRadius.circular(4),
+            ),
           ),
-          borderRadius: BorderRadius.circular(6),
+        ),
+      );
+    }
+    return Positioned(
+      left: (handle.anchor.dx * scale - 30).clamp(
+        0.0,
+        math.max(0.0, size.width - 60),
+      ),
+      top: (handle.anchor.dy * scale - 30).clamp(
+        0.0,
+        math.max(0.0, size.height - 60),
+      ),
+      child: IgnorePointer(
+        child: Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: selected
+                  ? primary
+                  : hovered
+                  ? primary.withValues(alpha: 0.65)
+                  : Colors.white.withValues(alpha: 0.16),
+              width: selected ? 2 : 1,
+            ),
+            borderRadius: BorderRadius.circular(6),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
-  Widget _handle(_Handle handle, Size size, double scale) {
+  /// 仅对选中中的舞台文字（subtitle）提供右边缘调宽、右下角调字号的变换手柄（P0-4）。
+  List<Widget> _subtitleTransformHandles(
+    _Handle handle,
+    Size size,
+    double scale,
+  ) {
+    if (handle.tag != 'subtitle' ||
+        handle.inherited ||
+        handle.width == null ||
+        handle.updateSubtitleBox == null) {
+      return const [];
+    }
+    final width = _drag?.index == handle.index && _dragWidth != null
+        ? _dragWidth!
+        : handle.width!;
+    final fontSize = _drag?.index == handle.index && _dragFontSize != null
+        ? _dragFontSize!
+        : (handle.fontSize ?? 36.0);
+    final boxW = (width * scale).clamp(48.0, size.width).toDouble();
+    final boxH = (fontSize * 2.2 * scale).clamp(32.0, size.height).toDouble();
+    final left = (handle.anchor.dx * scale)
+        .clamp(0.0, math.max(0.0, size.width - boxW))
+        .toDouble();
+    final top = (handle.anchor.dy * scale)
+        .clamp(0.0, math.max(0.0, size.height - boxH))
+        .toDouble();
+    final primary = Theme.of(context).colorScheme.primary;
+    return [
+      // 右边缘：调宽度
+      Positioned(
+        key: ValueKey(('subtitle-width', handle.index)),
+        left: (left + boxW - 8).clamp(0.0, math.max(0.0, size.width - 16)),
+        top: (top + boxH / 2 - 12).clamp(0.0, math.max(0.0, size.height - 24)),
+        child: Semantics(
+          label: '调整文字宽度',
+          child: MouseRegion(
+            cursor: SystemMouseCursors.resizeLeftRight,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanStart: (_) {
+                setState(() {
+                  _drag = handle;
+                  _dragWidth = width;
+                  _dragFontSize = fontSize;
+                  _dragBubble = '宽 ${_format(width)}';
+                });
+              },
+              onPanUpdate: (d) {
+                final nextW = ((_dragWidth ?? width) + d.delta.dx / scale)
+                    .clamp(120.0, 1280.0 - handle.anchor.dx);
+                setState(() {
+                  _dragWidth = nextW;
+                  _dragBubble = '宽 ${_format(nextW)}';
+                  handle.updateSubtitleBox!(nextW, _dragFontSize ?? fontSize);
+                });
+              },
+              onPanEnd: (_) {
+                final w = _dragWidth ?? width;
+                setState(() {
+                  _drag = null;
+                  _dragWidth = null;
+                  _dragFontSize = null;
+                  _dragBubble = null;
+                });
+                widget.onMove(handle.index, {'width': _format(w)});
+              },
+              child: Container(
+                width: 16,
+                height: 24,
+                alignment: Alignment.center,
+                child: Container(
+                  width: 6,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: primary,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: Colors.white, width: 1),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      // 右下角：调字号
+      Positioned(
+        key: ValueKey(('subtitle-size', handle.index)),
+        left: (left + boxW - 8).clamp(0.0, math.max(0.0, size.width - 16)),
+        top: (top + boxH - 8).clamp(0.0, math.max(0.0, size.height - 16)),
+        child: Semantics(
+          label: '调整文字字号',
+          child: MouseRegion(
+            cursor: SystemMouseCursors.resizeUpLeftDownRight,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanStart: (_) {
+                setState(() {
+                  _drag = handle;
+                  _dragWidth = width;
+                  _dragFontSize = fontSize;
+                  _dragBubble = '字号 ${fontSize.round()}';
+                });
+              },
+              onPanUpdate: (d) {
+                final delta = (d.delta.dx + d.delta.dy) * 0.25 / scale;
+                final nextSize = ((_dragFontSize ?? fontSize) + delta).clamp(
+                  14.0,
+                  96.0,
+                );
+                setState(() {
+                  _dragFontSize = nextSize;
+                  _dragBubble = '字号 ${nextSize.round()}';
+                  handle.updateSubtitleBox!(_dragWidth ?? width, nextSize);
+                });
+              },
+              onPanEnd: (_) {
+                final fs = _dragFontSize ?? fontSize;
+                setState(() {
+                  _drag = null;
+                  _dragWidth = null;
+                  _dragFontSize = null;
+                  _dragBubble = null;
+                });
+                widget.onMove(handle.index, {'size': _format(fs)});
+              },
+              child: Container(
+                width: 16,
+                height: 16,
+                alignment: Alignment.center,
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: primary,
+                    border: Border.all(color: Colors.white, width: 1.5),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  Widget _handle(
+    _Handle handle,
+    List<_Handle> allHandles,
+    Size size,
+    double scale,
+  ) {
     final index = handle.index;
-    final command =
-        widget.project.scenes[widget.scene].beats[widget.beat].commands[index];
-    final tag = command.tag;
-    final label = editorFields[tag]!.$1;
-    final selected = widget.selected == index || _drag?.index == index;
+    final tag = handle.tag;
+    final label = handle.label;
+    final selected =
+        (!handle.inherited && widget.selected == index) ||
+        _drag?.index == index;
+    final hovered = _hoveredHandle == index;
+    // P0-4：默认只显示选中对象的手柄；未选中对象保留可点击命中区并在 hover 时显形。
+    final showGrip = selected || hovered;
     return Positioned(
       key: ValueKey(('drag', index)),
       left: (handle.anchor.dx * scale - 22).clamp(
@@ -626,30 +1012,62 @@ class _EditorStageState extends State<EditorStage> {
         math.max(0.0, size.height - 44),
       ),
       child: Semantics(
-        label: '拖动$label',
+        label: handle.inherited ? '拖动继承对象$label' : '拖动$label',
         child: MouseRegion(
           cursor: SystemMouseCursors.move,
+          onEnter: (_) => setState(() => _hoveredHandle = index),
+          onExit: (_) {
+            if (_hoveredHandle == index) setState(() => _hoveredHandle = null);
+          },
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
+            onTap: () {
+              _focusNode.requestFocus();
+              if (!handle.inherited) widget.onSelectCommand?.call(index);
+            },
             onPanStart: (_) {
               _drag = handle;
               _point = handle.position;
+              _dragOrigin = handle.position;
+              setState(() {
+                _dragBubble = 'X ${_format(_point.dx)}  Y ${_format(_point.dy)}';
+              });
             },
             onPanUpdate: (d) {
               final drag = _drag;
               if (drag == null) return;
-              _point +=
+              var raw =
+                  _point +
                   Offset(d.delta.dx, drag.yUp ? -d.delta.dy : d.delta.dy) /
-                  scale;
+                      scale;
+              // Shift 锁定单轴（水平或垂直）。
+              if (HardwareKeyboard.instance.isShiftPressed) {
+                final diff = raw - _dragOrigin;
+                if (diff.dx.abs() >= diff.dy.abs()) {
+                  raw = Offset(raw.dx, _dragOrigin.dy);
+                } else {
+                  raw = Offset(_dragOrigin.dx, raw.dy);
+                }
+              }
               final min = drag.yUp ? -1.0 : 0.0;
-              _point = Offset(
-                _point.dx.clamp(
-                  min * 1280,
-                  tag == 'subtitle' ? 1279.0 : 1280.0,
-                ),
-                _point.dy.clamp(min * 720, 720.0),
+              raw = Offset(
+                raw.dx.clamp(min * 1280, tag == 'subtitle' ? 1279.0 : 1280.0),
+                raw.dy.clamp(min * 720, 720.0),
               );
-              setState(() => drag.update(_point));
+              final (snapped, guideX, guideY) = _applySnap(
+                drag,
+                raw,
+                allHandles,
+              );
+              _point = snapped;
+              setState(() {
+                _snapGuideX = guideX;
+                _snapGuideY = guideY;
+                _dragBubble =
+                    'X ${_format(_point.dx)}  Y ${_format(_point.dy)}'
+                    '${drag.inherited ? ' · 继承' : ''}';
+                drag.update(_point);
+              });
             },
             onPanCancel: () {
               final drag = _drag;
@@ -657,32 +1075,46 @@ class _EditorStageState extends State<EditorStage> {
                 setState(() {
                   drag.update(drag.position);
                   _drag = null;
+                  _snapGuideX = null;
+                  _snapGuideY = null;
+                  _dragBubble = null;
                 });
               }
             },
             onPanEnd: (_) {
               final drag = _drag;
               if (drag == null) return;
-              _drag = null;
-              final x = _format(_point.dx), y = _format(_point.dy);
-              widget.onMove(
-                index,
-                tag == 'charslot' ? {'posto': '$x,$y'} : {'x': x, 'y': y},
-              );
+              setState(() {
+                _drag = null;
+                _snapGuideX = null;
+                _snapGuideY = null;
+                _dragBubble = null;
+              });
+              _finishDrag(drag);
             },
             child: SizedBox.square(
               dimension: 44,
               child: Center(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? Theme.of(context).colorScheme.primary
-                        : Colors.black54,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Padding(
-                    padding: EdgeInsets.all(3),
-                    child: Icon(Icons.open_with, color: Colors.white, size: 16),
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 120),
+                  opacity: showGrip ? 1.0 : 0.0,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: handle.inherited
+                          ? const Color(0xCCDFC080)
+                          : selected
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.black54,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.all(3),
+                      child: Icon(
+                        Icons.open_with,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -693,43 +1125,370 @@ class _EditorStageState extends State<EditorStage> {
     );
   }
 
+  void _setZoom(double next) {
+    final clamped = next.clamp(0.5, 2.0);
+    setState(() {
+      _zoom = clamped;
+      if ((clamped - 1.0).abs() < 0.01) _pan = Offset.zero;
+    });
+  }
+
+  void _resetViewport() {
+    setState(() {
+      _zoom = 1.0;
+      _pan = Offset.zero;
+    });
+  }
+
+  Widget _hudOverlay(List<_Handle> handles) {
+    final scheme = Theme.of(context).colorScheme;
+    final zoomPct = '${(_zoom * 100).round()}%';
+    return Stack(
+      children: [
+        // 左上角：舞台对象列表浮层按钮（P0-4）
+        if (handles.isNotEmpty)
+          Positioned(
+            top: 6,
+            left: 6,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Material(
+                  color: const Color(0xCC111518),
+                  borderRadius: BorderRadius.circular(6),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () => setState(() => _showObjects = !_showObjects),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.layers_outlined,
+                            size: 14,
+                            color: Color(0xFFE8EDF0),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '对象 ${handles.length}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFFE8EDF0),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (_showObjects)
+                  Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    constraints: const BoxConstraints(
+                      maxWidth: 210,
+                      maxHeight: 160,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xE6171C20),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFF354048)),
+                    ),
+                    child: ListView(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      children: [
+                        for (final h in handles)
+                          InkWell(
+                            onTap: () {
+                              if (!h.inherited) {
+                                widget.onSelectCommand?.call(h.index);
+                              } else {
+                                final parts = h.keyName.split(':');
+                                final slot = h.tag == 'charslot'
+                                    ? parts.first
+                                    : '';
+                                final keyName =
+                                    h.tag == 'charslot' && parts.length > 1
+                                    ? parts.sublist(1).join(':')
+                                    : h.keyName;
+                                widget.onInheritedDrag?.call((
+                                  tag: h.tag,
+                                  label: h.label,
+                                  keyName: keyName,
+                                  slot: slot,
+                                  sourceScene: h.sourceScene,
+                                  sourceBeat: h.sourceBeat,
+                                  sourceCommand: h.sourceCommand,
+                                  values: h.tag == 'charslot'
+                                      ? {
+                                          'posto':
+                                              '${_format(h.position.dx)},${_format(h.position.dy)}',
+                                        }
+                                      : {
+                                          'x': _format(h.position.dx),
+                                          'y': _format(h.position.dy),
+                                        },
+                                ));
+                              }
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 5,
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      color: h.inherited
+                                          ? const Color(0xFFDFC080)
+                                          : h.index == widget.selected
+                                          ? scheme.primary
+                                          : const Color(0xFF83939F),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      h.inherited ? '${h.label}（继承）' : h.label,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: h.index == widget.selected
+                                            ? scheme.primary
+                                            : const Color(0xFFE8EDF0),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        // 右下角：50%–200% 缩放与适配控件（P0-4）
+        Positioned(
+          right: 6,
+          bottom: 6,
+          child: Material(
+            color: const Color(0xCC111518),
+            borderRadius: BorderRadius.circular(6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: '缩小舞台',
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(
+                    minWidth: 26,
+                    minHeight: 26,
+                  ),
+                  padding: EdgeInsets.zero,
+                  iconSize: 14,
+                  color: const Color(0xFFE8EDF0),
+                  onPressed: _zoom > 0.5
+                      ? () => _setZoom(_zoom - 0.25)
+                      : null,
+                  icon: const Icon(Icons.remove),
+                ),
+                InkWell(
+                  onTap: _resetViewport,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      zoomPct,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFFE8EDF0),
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '放大舞台',
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(
+                    minWidth: 26,
+                    minHeight: 26,
+                  ),
+                  padding: EdgeInsets.zero,
+                  iconSize: 14,
+                  color: const Color(0xFFE8EDF0),
+                  onPressed: _zoom < 2.0
+                      ? () => _setZoom(_zoom + 0.25)
+                      : null,
+                  icon: const Icon(Icons.add),
+                ),
+                if (_zoom != 1.0 || _pan != Offset.zero)
+                  IconButton(
+                    tooltip: '适配窗口（双击舞台）',
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(
+                      minWidth: 26,
+                      minHeight: 26,
+                    ),
+                    padding: EdgeInsets.zero,
+                    iconSize: 14,
+                    color: const Color(0xFFA5C7D5),
+                    onPressed: _resetViewport,
+                    icon: const Icon(Icons.fit_screen),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        // 拖动数值气泡
+        if (_dragBubble != null)
+          Positioned(
+            top: 8,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: IgnorePointer(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xE6111518),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: scheme.primary),
+                  ),
+                  child: Text(
+                    _dragBubble!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFFE8EDF0),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
-      final scale = math.min(box.maxWidth / 1280, box.maxHeight / 720);
-      if (scale <= 0 || !scale.isFinite) return const SizedBox.shrink();
+      final baseScale = math.min(box.maxWidth / 1280, box.maxHeight / 720);
+      if (baseScale <= 0 || !baseScale.isFinite) return const SizedBox.shrink();
+      final viewport = Size(1280 * baseScale, 720 * baseScale);
+      final scale = baseScale * _zoom;
       final size = Size(1280 * scale, 720 * scale);
       final stage = _stage;
       final warnings = [?_error, ...?stage?.engine.warnings];
+      final handles = stage != null && !_loading
+          ? _handles(stage)
+          : const <_Handle>[];
       return KeyboardListener(
         focusNode: _focusNode,
         onKeyEvent: _nudge,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _focusNode.requestFocus,
-          child: SizedBox.fromSize(
-            size: size,
-            child: ClipRect(
-              child: ColoredBox(
-                color: const Color(0xff181c1f),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (stage != null)
-                      IgnorePointer(
-                        child: StoryStage(
-                          engine: stage.engine,
-                          catalog: stage.catalog,
-                          textures: stage.textures,
+        child: SizedBox.fromSize(
+          size: viewport,
+          child: ClipRect(
+            child: ColoredBox(
+              color: const Color(0xff181c1f),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _focusNode.requestFocus,
+                      onDoubleTap: _resetViewport,
+                      onPanUpdate: _spaceDown || _zoom > 1.0
+                          ? (d) => setState(() => _pan += d.delta)
+                          : null,
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                    Center(
+                      child: Transform.translate(
+                        offset: _pan,
+                        child: OverflowBox(
+                          maxWidth: size.width,
+                          maxHeight: size.height,
+                          child: SizedBox.fromSize(
+                            size: size,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (stage != null)
+                                  IgnorePointer(
+                                    child: StoryStage(
+                                      engine: stage.engine,
+                                      catalog: stage.catalog,
+                                      textures: stage.textures,
+                                    ),
+                                  ),
+                                // 吸附参考线
+                                if (_snapGuideX != null)
+                                  Positioned(
+                                    left: (_snapGuideX! * scale)
+                                        .clamp(0.0, size.width - 1),
+                                    top: 0,
+                                    bottom: 0,
+                                    child: IgnorePointer(
+                                      child: Container(
+                                        width: 1,
+                                        color: const Color(0xCC56B6C2),
+                                      ),
+                                    ),
+                                  ),
+                                if (_snapGuideY != null)
+                                  Positioned(
+                                    top: (_snapGuideY! * scale)
+                                        .clamp(0.0, size.height - 1),
+                                    left: 0,
+                                    right: 0,
+                                    child: IgnorePointer(
+                                      child: Container(
+                                        height: 1,
+                                        color: const Color(0xCC56B6C2),
+                                      ),
+                                    ),
+                                  ),
+                                for (final handle in handles)
+                                  _outline(
+                                    handle,
+                                    size,
+                                    scale,
+                                    !handle.inherited &&
+                                        handle.index == widget.selected,
+                                  ),
+                                for (final handle in handles)
+                                  if (!handle.inherited &&
+                                      handle.index == widget.selected)
+                                    ..._subtitleTransformHandles(
+                                      handle,
+                                      size,
+                                      scale,
+                                    ),
+                                for (final handle in handles)
+                                  _handle(handle, handles, size, scale),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    if (stage != null && !_loading)
-                      for (final handle in _handles(stage))
-                        if (handle.index == widget.selected)
-                          _outline(handle, size, scale),
-                    if (stage != null && !_loading)
-                      for (final handle in _handles(stage))
-                        _handle(handle, size, scale),
+                    ),
+                    _hudOverlay(handles),
                     if (_loading)
                       const Align(
                         alignment: Alignment.topCenter,
@@ -751,7 +1510,6 @@ class _EditorStageState extends State<EditorStage> {
               ),
             ),
           ),
-        ),
       );
     },
   );

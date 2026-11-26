@@ -205,7 +205,7 @@
     <div class="meta">
       <span class="chip">分析对象 feat/story-editer @ 43944e7</span>
       <span class="chip">范围 代码现状 + v0.2 设计文档 + 引擎能力</span>
-      <span class="chip">2026-11-26（已对齐代码边界与分期微调；一期落地状态见 §07）</span>
+      <span class="chip">2026-11-26（已对齐代码边界与分期微调；一/二期落地状态见 §07）</span>
       <span class="chip">产品 / 交互 / 功能路线</span>
     </div>
     <div class="hero-stats">
@@ -1005,6 +1005,54 @@
       <p class="small"><b>审查闭环：</b>验收前经一轮独立 review，四个问题（播放读旧脚本台词、窄屏输入一次丢焦、常驻播放遇选项卡住、同名分镜校验丢「前往」）与两个证据缺口（&lt;150ms 未实测、subtitle 不在轻量更新范围）均核实属实并修复，补 8 个回归用例（含字幕清空/撤销恢复、全部分支禁用、500 指令真实定位基准）；复审三处实现细节（定位/播放统一最新脚本、全禁用分支处理、基准点击目标防假通过）已同步修正。</p>
       <p class="small"><b>一期明确未纳入（按上文分期）：</b>四工作区与 D1 布局自定义、P0-3 选择集/剪贴板、P0-4 舞台缩放吸附与「未选中淡轮廓」、P0-5 检查器滑杆——顺延第二期及后续；窄屏传输条三键收口与检查器底部抽屉属 §4.2 移动端形态，随二期轻量化处理；常驻监视器的分支点选交互按反馈评估（当前由全屏试播承担）。</p>
 
+      <h3>第二期落地状态（2026-11-26）</h3>
+      <div class="callout">
+        <p><b>第二期「批量编辑与结构浏览」已实现并完成验收验证。</b>在保持 JSON v1 存档与引擎向后兼容的前提下，于 <code>lib/story_editor/</code> 新增 <code>editor_inspector.dart</code>、<code>editor_structure.dart</code>、<code>editor_board.dart</code>、<code>editor_script.dart</code> 并升级 <code>editor_project.dart</code>、<code>editor_stage.dart</code>、<code>story_editor_page.dart</code>；验收以 release Web 构建 + Playwright 双视口（1600×1000 / 390×844，0 控制台报错）+ <code>dart analyze</code> 0 issues + 42 个 <code>story_editor</code> 单测全量回归完成，逐项证据（含 12 张截图）见 <a href="ArkArchive-第二期批量编辑与结构浏览验证报告.html">《第二期批量编辑与结构浏览验证报告》</a>。</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:15%">范围条目</th><th style="width:57%">落地内容</th><th>验证结论</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>P0-3 选择集与批量</b></td>
+              <td>指令选择升级为多选集合：单击、Shift 连选、Ctrl/⌘ 增减、全选/反选与移动端长按多选；多选显示批量操作条（已选 N 条、批量改说话人、复制、删除、取消选择）并联动右侧「批量属性」混合值编辑；剪贴板支持跨分镜/跨幕 <code>Ctrl+C / X / V</code> 粘贴到播放头后；补齐 <code>Ctrl+Z / Y</code>、<code>Ctrl+D</code>、<code>Delete</code>、右键上下文菜单与 <code>Ctrl+K</code> 命令面板。</td>
+              <td><code>Ctrl+A</code> 全选 5 条联动批量条与混合值检查器；跨分镜复制粘贴与一次撤销均通过单测与真机验证。</td>
+            </tr>
+            <tr>
+              <td><b>P0-4 舞台操作升级</b></td>
+              <td>视图支持 50%–200% 缩放 HUD、放大/空格拖拽平移与双击适配；默认只显示选中对象手柄，未选中呈淡轮廓并在 hover 时显形；仅 <code>subtitle</code>（舞台文字）提供调宽/调字号变换框，立绘/背景/CG 仅移动框；支持 6 px 中心线/三分线/安全框/同台对象边缘吸附（<code>Alt</code> 临时关闭）、<code>Shift</code> 单轴锁定、拖动数值气泡与左上角对象列表浮层；拖动继承自前序分镜的对象弹「跳到来源指令 / 在当前分镜插入覆盖指令」二选一确认框。</td>
+              <td>宽屏 125% 缩放、对象列表浮层、<code>subtitle</code> 变换框与继承对象拖动二选一弹窗均在 Web Release 可视化通过。</td>
+            </tr>
+            <tr>
+              <td><b>P0-5 检查器高频控件</b></td>
+              <td>抽离 <code>editor_inspector.dart</code>：按「内容 / 布局 / 时间与音频 / 高级」分组且高级默认收起；坐标支持横向拖拽 scrub + 居中/重置；时长/淡入淡出/延迟支持 0–5 s 滑杆；音量支持 0–1 滑杆 + dB 显示 + 静音/1.0 复位；<code>blocker</code> 遮罩提供 5 种预设色板与 RGBA 滑杆；枚举 ≤4 项用分段按钮；媒体字段展示缩略图与 PRTS/本地来源徽标；支持单项与整条指令重置；多选时对不同值显示「多个值」占位。</td>
+              <td>遮罩预设色板、RGBA 滑杆、音量/时间滑杆与多选混合值统一写入均通过单测与截图核验，且兼容一期测试字段顺序。</td>
+            </tr>
+            <tr>
+              <td><b>P1-1 编排台（故事板）</b></td>
+              <td>新增 <code>editor_board.dart</code>：桌面端按幕分组卡片墙，按分镜视觉签名缓存末态缩略图，展示首句、指令数、估算时长、警告徽标、标记色与含音频/特效/分支角标；支持小/中/大卡缩放、全部/有警告/有标记筛选、同幕及跨幕拖拽重排、多选批量复制/删除、每幕末尾「＋ 新建分镜」与双击回演出台；底部汇总总幕数、分镜数与估算时长。</td>
+              <td>宽屏编排台卡片墙、缩放/筛选与双击定位均通过单测与截图验证；移动端自动降级为轻分镜切换。</td>
+            </tr>
+            <tr>
+              <td><b>P1-4 结构树 / 搜索 / 标记</b></td>
+              <td>新增 <code>editor_structure.dart</code> 并升级 <code>editor_project.dart</code>（兼容 JSON v1 的 <code>EditorMarker</code> 与 <code>EditorPosition</code>）：左栏常驻「作品 → 幕 → 分镜」三级折叠树，显示指令数、估时、警告数与标记圆点，支持拖拽重排与右键/溢出菜单；顶部提供逐级可点面包屑、<code>Alt+←/→</code> 导航历史、全局搜索弹窗（标题/台词/角色/素材/标记直达）及重开恢复上次位置。</td>
+              <td>结构树展开/折叠、标记色点、面包屑、<code>Alt+←/→</code>、全局搜索直达与位置持久化均通过验证。</td>
+            </tr>
+            <tr>
+              <td><b>P1-6 剧本台（对白表格）</b></td>
+              <td>新增 <code>editor_script.dart</code> 与台本导出器：桌面端对白/字幕表格支持全选/单选复选框、位置（幕/分镜与标记色）、说话人及台词行内编辑、关键词搜索、仅当前幕筛选、批量替换说话人、双击跳回演出台，以及导出 TXT / CSV（UTF-8 BOM）/ SRT。</td>
+              <td>行内编辑、筛选、批量改说话人与 TXT/CSV/SRT 导出内容均通过单测与宽屏截图核验。</td>
+            </tr>
+            <tr>
+              <td><b>§4.2 移动端轻量化</b></td>
+              <td>窄屏（390×844）顶栏仅保留「演出 / 分镜」双视图（不上桌面剧本表格）；传输条收口为双行紧凑布局，完整展示位置标签无截断（同步解决一期遗留）；新增底部「属性抽屉」（<code>DraggableScrollableSheet</code>）与横向滑动轻分镜切换（单击卡片直回演出台）。</td>
+              <td>390×844 下演出台、属性抽屉与轻分镜切换均无溢出、无截断，0 控制台报错。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small"><b>二期明确未纳入 / 留待后续迭代：</b>舞台拖拽框选多对象（同时移动多个舞台元素）与检查器音量独立试听按钮未在本轮最小完整闭环展开；常驻素材箱（P1-3）、D1 面板拖拽改宽与布局自定义，以及第三期能力（P1-2 状态泳道与固化状态、P1-5 分层保存与自动快照、P2-1 分支图、P2-2 Web 只读包/MP4、P2-4 跨作品素材库）留待后续批次。本轮实机构建仅覆盖 Web Release，Windows / Android / iOS 原生端真机包待后续补测。</p>
+
       <h3>P0 · 体验基建与性能止血（约 2–3 周，低风险）</h3>
       <div class="prio p0">
         <div class="num">P0-1</div>
@@ -1189,15 +1237,19 @@
           <thead><tr><th style="width:24%">方向</th><th style="width:42%">文件 / 组件</th><th>改动性质</th></tr></thead>
           <tbody>
             <tr><td>播放头 / 选中即预览</td><td><code>lib/story_editor/editor_stage.dart</code>（<code>_rebuild</code>、<code>_handles</code>）；<code>story_editor_page.dart</code>（<code>_change</code>、<code>_selectBeat</code>）</td><td>计算 <code>end = 分镜起点 + 选中 + 1</code>；播放头状态上提</td></tr>
+            <tr><td>舞台缩放 / 吸附 / 继承处理</td><td><code>lib/story_editor/editor_stage.dart</code>（缩放 HUD、吸附线、<code>subtitle</code> 变换框、继承对象回调，已落地）</td><td>50%–200% 缩放平移、6 px 吸附、选中手柄、继承二选一</td></tr>
             <tr><td>停靠监视器 / 传输条</td><td><code>story_editor_page.dart</code>（<code>_preview</code>）；<code>story_player/ui/story_player.dart</code>（<code>stopPoints</code>、<code>seekToCommand</code>、<code>PlaySpeed</code>）</td><td>Dialog 改为可停靠/全屏；复用句级导航</td></tr>
-            <tr><td>多选 / 批量</td><td><code>story_editor_page.dart</code>（<code>_command</code>、<code>_inspector</code>、<code>_commandRows</code>、<code>_commandAction</code>）</td><td>单值 → 集合；检查器混合值</td></tr>
-            <tr><td>剪贴板</td><td><code>EditCommand.source</code> 已可序列化；<code>StoryScript.parse</code> 可还原</td><td>系统剪贴板 + 内部序列 buffer</td></tr>
-            <tr><td>快捷键 / 命令面板</td><td><code>story_editor_page.dart</code> 的 <code>KeyboardListener</code>（已有 <code>_nudge</code>）</td><td>补 <code>Shortcuts/Actions</code> 与命令搜索</td></tr>
-            <tr><td>窄屏拖动</td><td><code>_commandRows</code> 的 <code>inlineInspector</code> 分支</td><td>包 <code>ReorderableListView</code> + <code>DragStartListener</code></td></tr>
-            <tr><td>作品排序 / 导入去重</td><td><code>_projects</code> 的 <code>.reversed</code>；工具栏 <code>PopupMenu</code> 的 <code>import</code></td><td>删 <code>reversed</code>；导入只留作品页</td></tr>
-            <tr><td>校验定位</td><td><code>EditorProject.validate()</code> 返回 <code>List&lt;String&gt;</code>；<code>_issues</code></td><td>改为带位置的结构化问题对象</td></tr>
-            <tr><td>素材箱 / 拖拽</td><td><code>editor_materials.dart</code>（<code>EditorMaterialPicker</code>）；新增 <code>editor_bin.dart</code></td><td>拆出可复用素材网格与拖拽源</td></tr>
-            <tr><td>故事板</td><td>新增 <code>editor_board.dart</code>；引擎 <code>rebuildBefore</code> 出缩略图</td><td>新视图 + 缩略图缓存</td></tr>
+            <tr><td>多选 / 批量</td><td><code>story_editor_page.dart</code>（<code>_selectedCommands</code>、<code>_batchBar</code>、<code>_commandRows</code>）；<code>editor_inspector.dart</code>（已落地）</td><td>单值 → 集合；批量条 + 检查器混合值 + 快捷键</td></tr>
+            <tr><td>剪贴板</td><td><code>story_editor_page.dart</code>（<code>_sharedCommandClipboard</code>）；<code>EditCommand</code>（已落地）</td><td>跨分镜/跨幕剪贴板（Ctrl+C/X/V、Ctrl+D）</td></tr>
+            <tr><td>快捷键 / 命令面板</td><td><code>story_editor_page.dart</code>（<code>Shortcuts/Actions</code>、<code>_openCommandPalette</code>，已落地）</td><td>补齐编辑快捷键、<code>Ctrl+K</code> 命令面板与 <code>Alt+←/→</code> 导航历史</td></tr>
+            <tr><td>检查器高频控件</td><td>新增 <code>editor_inspector.dart</code>（已落地）</td><td>分组折叠、scrub/滑杆、遮罩色板、枚举分段、单项/整条重置</td></tr>
+            <tr><td>结构树 / 搜索 / 标记</td><td>新增 <code>editor_structure.dart</code>；<code>editor_project.dart</code>（<code>EditorMarker</code>、<code>EditorPosition</code>，已落地）</td><td>三级折叠树、全局搜索、面包屑、标记与位置恢复</td></tr>
+            <tr><td>剧本台 / 台本导出</td><td>新增 <code>editor_script.dart</code>；<code>editor_project.dart</code>（<code>exportScriptTxt/Csv/Srt</code>，已落地）</td><td>桌面端对白表格、批量改说话人、TXT/CSV/SRT 导出</td></tr>
+            <tr><td>窄屏拖动与轻量化</td><td><code>story_editor_page.dart</code>（<code>_transportBar(compact:)</code>、<code>_openMobileInspectorSheet</code>）；<code>editor_board.dart</code>（已落地）</td><td>窄屏拖动、双行紧凑传输条、底部属性抽屉、轻分镜切换</td></tr>
+            <tr><td>作品排序 / 导入去重</td><td><code>story_editor_page.dart</code>（<code>_projects</code>、工具栏菜单，已落地）</td><td>最新作品在前；导入收敛至「我的作品」</td></tr>
+            <tr><td>校验定位</td><td><code>editor_project.dart</code>（<code>EditorIssue</code>、<code>validateIssues</code>，已落地）</td><td>带幕/分镜/指令位置的结构化问题对象与「前往」直达</td></tr>
+            <tr><td>素材箱 / 拖拽</td><td><code>editor_materials.dart</code>（<code>EditorMaterialPicker</code>）；待新增 <code>editor_bin.dart</code></td><td>拆出可复用素材网格与拖拽源（留待后续）</td></tr>
+            <tr><td>故事板（编排台）</td><td>新增 <code>editor_board.dart</code>（已落地）</td><td>桌面卡片墙 + 视觉签名缩略图缓存 + 跨幕拖拽 + 移动端轻切换</td></tr>
             <tr><td>状态泳道</td><td>新增 <code>editor_lanes.dart</code>；静态扫描 <code>scenes/beats/commands</code></td><td>只读区间 → 点击跳转 → 固化</td></tr>
             <tr><td>分支图</td><td>新增 <code>editor_branch_graph.dart</code>；解析 <code>decision/warp/label/predicate</code></td><td>只读图优先，可视化编辑后置</td></tr>
             <tr><td>分层保存 / 快照</td><td><code>editor_platform_io.dart</code>（<code>save</code>、<code>_root</code>）</td><td>P0 拖动/输入期写盘节流；P1 结构/素材分离与快照轮转</td></tr>
