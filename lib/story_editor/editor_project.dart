@@ -118,6 +118,21 @@ class EditCommand {
   }
 }
 
+/// 校验问题；locatable 为 true 时携带可跳转的 (幕, 分镜, 指令) 位置。
+class EditorIssue {
+  const EditorIssue(
+    this.message, {
+    this.sceneIndex = -1,
+    this.beatIndex = -1,
+    this.commandIndex = -1,
+  });
+
+  final String message;
+  final int sceneIndex, beatIndex, commandIndex;
+
+  bool get locatable => sceneIndex >= 0 && beatIndex >= 0 && commandIndex >= 0;
+}
+
 class StoryBeat {
   const StoryBeat(this.title, [this.commands = const []]);
   final String title;
@@ -175,14 +190,30 @@ class EditorProject {
 
   EditorProject touch() => copyWith(updatedAt: DateTime.now());
 
-  List<String> validate() {
+  /// 校验作品并返回带位置的问题列表，供编辑器「前往」定位使用。
+  List<EditorIssue> validateIssues() {
     final CompiledProject compiled;
     try {
       compiled = compile();
     } on FormatException catch (e) {
-      return [e.message.toString()];
+      return [EditorIssue(e.message.toString())];
     }
-    final issues = <String>[];
+    // compile() 按 幕 → 分镜 → 指令 顺序展开，这里同步生成地址映射。
+    final addresses = <(int, int, int)>[];
+    for (final (s, scene) in scenes.indexed) {
+      for (final (b, beat) in scene.beats.indexed) {
+        for (var i = 0; i < beat.commands.length; i++) {
+          addresses.add((s, b, i));
+        }
+      }
+    }
+    assert(addresses.length == compiled.script.commands.length);
+    EditorIssue issue(int index, String message) {
+      final (s, b, c) = addresses[index];
+      return EditorIssue(message, sceneIndex: s, beatIndex: b, commandIndex: c);
+    }
+
+    final issues = <EditorIssue>[];
     final labels = {
       for (final c in compiled.script.commands)
         if (c.tag == 'label') c.value('name'),
@@ -190,7 +221,7 @@ class EditorProject {
     for (final (i, command) in compiled.script.commands.indexed) {
       final place = compiled.locations[i];
       if (command.tag == 'warp' && !labels.contains(command.value('name'))) {
-        issues.add('$place：跳转目标不存在：${command.value('name')}');
+        issues.add(issue(i, '$place：跳转目标不存在：${command.value('name')}'));
       }
       for (final field
           in editorFields[command.tag]?.$2 ?? const <EditorField>[]) {
@@ -199,39 +230,51 @@ class EditorProject {
           if (field.key == 'key' &&
               (field.type == FieldType.music ||
                   field.type == FieldType.sound)) {
-            issues.add('$place：未选择${field.label}');
+            issues.add(issue(i, '$place：未选择${field.label}'));
           }
           continue;
         }
         if (field.isAsset && value.startsWith('local_')) {
           final asset = assets[value];
           if (asset == null) {
-            issues.add('$place：本地素材缺失：$value');
+            issues.add(issue(i, '$place：本地素材缺失：$value'));
           } else if (field.isImage != asset.isImage) {
-            issues.add('$place：素材类型与${field.label}不符');
+            issues.add(issue(i, '$place：素材类型与${field.label}不符'));
           }
         }
         if (field.key == 'posfrom' || field.key == 'posto') {
           final point = value.split(',').map(double.tryParse).toList();
           if (point.length != 2 || point.any((n) => n == null || !n.isFinite)) {
-            issues.add('$place：${field.label}应为两个数字，以逗号分隔');
+            issues.add(issue(i, '$place：${field.label}应为两个数字，以逗号分隔'));
           } else if (point[0]!.abs() > 1280 || point[1]!.abs() > 720) {
-            issues.add('$place：${field.label}超出舞台范围');
+            issues.add(issue(i, '$place：${field.label}超出舞台范围'));
           }
         }
         if (field.type != FieldType.number) continue;
         final n = double.tryParse(value);
         if (n == null || !n.isFinite) {
-          issues.add('$place：${field.label}不是有效数字');
+          issues.add(issue(i, '$place：${field.label}不是有效数字'));
         } else if ((field.key == 'x' || field.key == 'y') &&
             (n.abs() > (field.key == 'x' ? 1280 : 720) ||
                 (command.tag == 'subtitle' && n < 0))) {
-          issues.add('$place：${field.label}超出舞台范围');
+          issues.add(issue(i, '$place：${field.label}超出舞台范围'));
         }
       }
     }
-    return issues.toSet().toList();
+    // 按消息 + 位置去重并保持顺序：同名分镜会产生相同消息但不同地址，
+    // 仅按消息去重会丢掉前一个问题的「前往」定位。
+    return [
+      for (final entry in {
+        for (final item in issues)
+          '${item.sceneIndex}:${item.beatIndex}:${item.commandIndex}'
+              '\u0001${item.message}': item,
+      }.values)
+        entry,
+    ];
   }
+
+  List<String> validate() =>
+      [for (final item in validateIssues()) item.message];
 
   CompiledProject compile() {
     final source = StringBuffer();

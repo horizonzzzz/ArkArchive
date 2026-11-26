@@ -64,7 +64,7 @@ void main() {
         final item = find.text(label).last;
         await tester.ensureVisible(item);
         await tester.tap(item);
-        if (tooltip == '试播') {
+        if (tooltip == '全屏试播') {
           await tester.pump(const Duration(seconds: 1));
         } else {
           await tester.pumpAndSettle();
@@ -93,7 +93,7 @@ void main() {
         dialogue,
       );
 
-      await select('试播', '从头播放');
+      await select('全屏试播', '全屏：从头播放');
       final stage = tester.widget<StoryStage>(
         find.descendant(
           of: find.byType(Dialog),
@@ -109,7 +109,10 @@ void main() {
 
       await select('作品操作', '导出作品（含上传素材）');
       expect(storage.exported, isNotNull);
-      await select('作品操作', '导入作品');
+      // 导入入口统一到「我的作品」对话框（P0-6）。
+      await tester.tap(find.byTooltip('本地作品'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('导入'));
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pumpAndSettle();
       expect(storage.projects, hasLength(2));

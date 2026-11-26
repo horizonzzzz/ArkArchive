@@ -62,6 +62,71 @@ void main() {
     expect(issues, contains(contains('本地素材缺失')));
   });
 
+  test('validateIssues 携带可前往定位的 (幕/分镜/指令)', () {
+    final project = EditorProject.create('定位作品').copyWith(
+      scenes: [
+        const EditorScene('第一幕', [
+          StoryBeat('分镜 1', [
+            EditCommand('dialogue', {'name': '阿米娅', 'text': '开场'}),
+          ]),
+          StoryBeat('分镜 2', [
+            EditCommand('dialogue', {'name': '陈', 'text': '过场'}),
+            EditCommand('subtitle', {'text': '越界', 'y': '-10'}),
+          ]),
+        ]),
+        const EditorScene('第二幕', [
+          StoryBeat('分镜 3', [
+            EditCommand('warp', {'name': '不存在'}),
+          ]),
+        ]),
+      ],
+    );
+
+    final issues = project.validateIssues();
+    final outOfRange = issues.singleWhere(
+      (issue) => issue.message.contains('超出舞台范围'),
+    );
+    expect(outOfRange.locatable, isTrue);
+    expect(outOfRange.sceneIndex, 0);
+    expect(outOfRange.beatIndex, 1);
+    expect(outOfRange.commandIndex, 1);
+
+    final brokenWarp = issues.singleWhere(
+      (issue) => issue.message.contains('跳转目标不存在'),
+    );
+    expect(brokenWarp.locatable, isTrue);
+    expect(brokenWarp.sceneIndex, 1);
+    expect(brokenWarp.beatIndex, 0);
+    expect(brokenWarp.commandIndex, 0);
+
+    // validate() 与结构化结果保持一致的消息。
+    expect(
+      project.validate(),
+      equals([for (final issue in issues) issue.message]),
+    );
+  });
+
+  test('同名分镜的相同校验问题都保留，位置互不覆盖', () {
+    final project = EditorProject.create('同名分镜').copyWith(
+      scenes: [
+        const EditorScene('第一幕', [
+          StoryBeat('分镜 2', [
+            EditCommand('subtitle', {'text': '越界', 'y': '-10'}),
+          ]),
+          StoryBeat('分镜 2', [
+            EditCommand('subtitle', {'text': '越界', 'y': '-10'}),
+          ]),
+        ]),
+      ],
+    );
+
+    final issues = project.validateIssues();
+    // 两个分镜同名且消息相同：按消息去重会丢掉前一个的「前往」地址。
+    expect(issues, hasLength(2));
+    expect(issues[0].beatIndex, 0);
+    expect(issues[1].beatIndex, 1);
+  });
+
   test('assets reject invalid type, dimensions and digest changes', () {
     expect(
       () => EditorAsset.create('story.exe', Uint8List.fromList([1])),

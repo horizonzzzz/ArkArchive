@@ -18,6 +18,41 @@ enum _PreviewMode { beat, fromBeat, full }
 
 typedef _Selection = (EditorProject, int, int, int);
 
+// —— 传输控制快捷键（P0-2）：disabled 时事件继续冒泡给文本框/舞台 ——
+
+class _TogglePlayIntent extends Intent {
+  const _TogglePlayIntent();
+}
+
+class _StepStopIntent extends Intent {
+  const _StepStopIntent(this.delta);
+  final int delta;
+}
+
+class _StepCommandIntent extends Intent {
+  const _StepCommandIntent(this.delta);
+  final int delta;
+}
+
+class _GotoIntent extends Intent {
+  const _GotoIntent(this.toStart);
+  final bool toStart;
+}
+
+/// 快捷键动作：被焦点场景屏蔽时不消费按键，交给文本框编辑或舞台微调。
+class _GuardedAction<T extends Intent> extends Action<T> {
+  _GuardedAction({required this.blocked, required this.handler});
+
+  final bool Function() blocked;
+  final Object? Function(T intent) handler;
+
+  @override
+  bool isEnabled(T intent) => !blocked();
+
+  @override
+  Object? invoke(T intent) => handler(intent);
+}
+
 class StoryEditorPage extends StatefulWidget {
   const StoryEditorPage({
     super.key,
@@ -49,6 +84,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   bool _busy = false;
   String? _typing;
   bool _loaded = false;
+  bool _playing = false, _loop = false;
+  int _speed = 1;
   late final _resources = EditorPreviewResources(widget.store);
 
   EditorProject get project => _project!;
@@ -56,6 +93,23 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   StoryBeat get beat => scene.beats[_beat];
   EditCommand? get command => _command < 0 ? null : beat.commands[_command];
   _Selection get _selection => (project, _scene, _beat, _command);
+
+  /// 编译缓存：播放头/停顿点计算高频使用，避免每次点击重新解析全脚本。
+  EditorProject? _compiledProject;
+  CompiledProject? _compiledCache;
+  CompiledProject? get _compiled {
+    final current = _project;
+    if (current == null) return null;
+    if (!identical(_compiledProject, current)) {
+      _compiledProject = current;
+      try {
+        _compiledCache = current.compile();
+      } on FormatException {
+        _compiledCache = null;
+      }
+    }
+    return _compiledCache;
+  }
 
   @override
   void initState() {
@@ -116,6 +170,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     _command = value.$4;
     _formVersion++;
     _typing = null;
+    _playing = false;
   }
 
   void _change(
@@ -169,7 +224,13 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       try {
         await storage.save(snapshot);
         if (mounted && identical(_project, snapshot)) {
-          setState(() => _status = '已自动保存');
+          final now = DateTime.now();
+          setState(
+            () => _status =
+                '已保存 '
+                '${now.hour.toString().padLeft(2, '0')}:'
+                '${now.minute.toString().padLeft(2, '0')}',
+          );
         }
       } catch (e) {
         if (mounted && identical(_project, snapshot)) {
@@ -245,7 +306,9 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
               : ListView(
                   shrinkWrap: true,
                   children: [
-                    for (final draft in _drafts.values.toList().reversed)
+                    for (final draft
+                        in _drafts.values.toList()
+                          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
                       ListTile(
                         selected: draft.id == project.id,
                         leading: const Icon(Icons.auto_stories_outlined),
@@ -388,18 +451,22 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   Future<void> _export({required bool scriptOnly}) async {
     try {
       final current = project;
-      final issues = current.validate();
+      final issues = current.validateIssues();
       if (issues.isNotEmpty) {
-        final proceed = await _issues(issues, title: '作品检查', allowExport: true);
-        if (!mounted || !proceed) return;
+        final outcome = await _issues(issues, title: '作品检查', allowExport: true);
+        if (!mounted || !outcome.proceed) return;
+        if (outcome.goto != null) {
+          _gotoIssue(outcome.goto!);
+          return;
+        }
       }
       if (scriptOnly && current.assets.isNotEmpty) {
         final proceed = await _issues(
-          ['纯脚本不包含上传素材。跨设备使用请导出作品文件。'],
+          [const EditorIssue('纯脚本不包含上传素材。跨设备使用请导出作品文件。')],
           title: '导出脚本',
           allowExport: true,
         );
-        if (!mounted || !proceed) return;
+        if (!mounted || !proceed.proceed) return;
       }
       final bytes = scriptOnly
           ? utf8.encode(current.compile().source)
@@ -414,42 +481,74 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     }
   }
 
-  Future<bool> _issues(
-    List<String> issues, {
+  /// 校验/警告对话框：可定位问题提供「前往」，返回是否继续导出与跳转目标。
+  Future<({bool proceed, EditorIssue? goto})> _issues(
+    List<EditorIssue> issues, {
     String title = '提示',
     bool allowExport = false,
-  }) async =>
-      await showDialog<bool>(
-        context: context,
-        builder: (dialog) => AlertDialog(
-          title: Text(title),
-          content: SizedBox(
-            width: math.min(460, MediaQuery.sizeOf(context).width - 48),
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                for (final issue in issues)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(issue),
-                  ),
-              ],
-            ),
+  }) async {
+    EditorIssue? goto;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: math.min(460, MediaQuery.sizeOf(context).width - 48),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final issue in issues)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(issue.message),
+                  trailing: issue.locatable
+                      ? TextButton(
+                          onPressed: () {
+                            goto = issue;
+                            Navigator.pop(dialog, true);
+                          },
+                          child: const Text('前往'),
+                        )
+                      : null,
+                ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialog, false),
-              child: Text(allowExport ? '返回编辑' : '关闭'),
-            ),
-            if (allowExport)
-              FilledButton(
-                onPressed: () => Navigator.pop(dialog, true),
-                child: const Text('仍然导出'),
-              ),
-          ],
         ),
-      ) ??
-      false;
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: Text(allowExport ? '返回编辑' : '关闭'),
+          ),
+          if (allowExport)
+            FilledButton(
+              onPressed: () => Navigator.pop(dialog, true),
+              child: const Text('仍然导出'),
+            ),
+        ],
+      ),
+    );
+    return (proceed: proceed ?? false, goto: goto);
+  }
+
+  /// 校验「前往」：切到问题所在分镜并选中问题指令（P0-6 校验定位）。
+  void _gotoIssue(EditorIssue issue) {
+    if (!issue.locatable ||
+        issue.sceneIndex >= project.scenes.length ||
+        issue.beatIndex >= project.scenes[issue.sceneIndex].beats.length) {
+      return;
+    }
+    final commands =
+        project.scenes[issue.sceneIndex].beats[issue.beatIndex].commands;
+    setState(() {
+      _scene = issue.sceneIndex;
+      _beat = issue.beatIndex;
+      _command = issue.commandIndex.clamp(-1, commands.length - 1);
+      _playing = false;
+      _typing = null;
+      _formVersion++;
+    });
+  }
 
   EditorProject _withScene(EditorScene next) =>
       project.copyWith(scenes: [...project.scenes]..[_scene] = next);
@@ -462,8 +561,72 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     _scene = sceneIndex ?? _scene;
     _beat = index;
     _command = -1;
+    _playing = false;
     _typing = null;
     _formVersion++;
+  });
+
+  // —— 播放头与传输控制（P0-1 / P0-2）——
+
+  /// 分镜内停顿点（对白/旁白/选项）的全局指令索引，与引擎口径一致。
+  List<int> _stopIndexes() {
+    final compiled = _compiled;
+    if (compiled == null) return const [];
+    final range = compiled.ranges[(_scene, _beat)];
+    if (range == null) return const [];
+    final stops = <int>[];
+    for (var i = range.$1; i < range.$2; i++) {
+      final command = compiled.script.commands[i];
+      final isStop = switch (command.tag) {
+        'dialogue' || 'aside' || 'multiline' || 'endtip' => command.text.isNotEmpty,
+        'decision' => command.value('options').isNotEmpty,
+        _ => false,
+      };
+      if (isStop) stops.add(i);
+    }
+    return stops;
+  }
+
+  int get _beatLength => beat.commands.length;
+
+  void _selectCommand(int index) {
+    if (_beatLength == 0) return;
+    setState(() {
+      _command = index.clamp(-1, _beatLength - 1);
+      _typing = null;
+      _formVersion++;
+    });
+  }
+
+  void _stepStop(int delta) {
+    final compiled = _compiled;
+    if (compiled == null || _beatLength == 0) return;
+    final range = compiled.ranges[(_scene, _beat)]!;
+    final stops = _stopIndexes();
+    // 未选中时视为分镜起点之前：上一句回第一条指令，下一句到第一句。
+    final currentGlobal =
+        _command < 0 ? range.$1 - 1 : range.$1 + _command;
+    final Iterable<int> candidates = delta < 0
+        ? stops.where((s) => s < currentGlobal)
+        : stops.where((s) => s > currentGlobal);
+    final target = candidates.isEmpty
+        ? (delta < 0 ? range.$1 : range.$2 - 1)
+        : (delta < 0 ? candidates.last : candidates.first);
+    _selectCommand(target - range.$1);
+  }
+
+  void _stepCommand(int delta) =>
+      _selectCommand(_command < 0 && delta > 0 ? 0 : _command + delta);
+
+  void _togglePlay() {
+    if (_beatLength == 0 || _busy) return;
+    setState(() => _playing = !_playing);
+  }
+
+  void _onPlayhead(int index) => setState(() {
+    if (index >= 0 && index < _beatLength) {
+      _command = index;
+    }
   });
 
   Future<void> _sceneAction(String action) async {
@@ -695,7 +858,12 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       );
       if (!mounted) return;
       if (!reached) throw StateError('无法从当前分镜开始播放');
-      final warnings = {...current.validate(), ...stage.engine.warnings};
+      final warnings = {
+        ...[
+          for (final issue in current.validateIssues()) issue.message,
+          ...stage.engine.warnings,
+        ],
+      };
       var autoPlay = true;
       var stopped = false;
       Future<void> runAutoPlay() async {
@@ -775,7 +943,9 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
                             IconButton(
                               tooltip: '预览提示（${issues.length}）',
                               icon: const Icon(Icons.warning_amber),
-                              onPressed: () => _issues(issues),
+                              onPressed: () => _issues(
+                            [for (final issue in issues) EditorIssue(issue)],
+                          ),
                             ),
                           IconButton(
                             tooltip: '退出试播',
@@ -902,109 +1072,293 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           ? _emptyState()
           : const Center(child: CircularProgressIndicator());
     }
-    return LayoutBuilder(
-      builder: (context, size) {
-        final wide = size.maxWidth >= 1100;
-        final landscape = !wide && size.maxWidth >= 580 && size.maxHeight < 530;
-        final stage = EditorStage(
-          project: project,
-          scene: _scene,
-          beat: _beat,
-          selected: _command,
-          resources: _resources,
-          onMove: (index, values) {
-            _change(
-              _withCommands(
-                [...beat.commands]
-                  ..[index] = beat.commands[index].withArgs(values),
-              ),
-              selected: index,
-            );
-          },
-          onIssues: _issues,
-        );
-        return Column(
-          children: [
-            _toolbar(),
-            if (_busy)
-              const LinearProgressIndicator(minHeight: 2)
-            else
-              const Divider(height: 2),
-            Expanded(
-              child: wide
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(width: 215, child: _outline(vertical: true)),
-                        const VerticalDivider(width: 1),
-                        Expanded(
-                          child: Column(
-                            children: [
-                              Flexible(
-                                flex: 5,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Center(child: stage),
-                                ),
-                              ),
-                              const Divider(height: 1),
-                              Expanded(
-                                flex: 4,
-                                child: _commands(inlineInspector: false),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const VerticalDivider(width: 1),
-                        SizedBox(
-                          width: 290,
-                          child: ListView(
-                            key: ValueKey((_scene, _beat, _command)),
-                            padding: const EdgeInsets.all(12),
-                            children: _inspector(),
-                          ),
-                        ),
-                      ],
-                    )
-                  : landscape
-                  ? Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            children: [
-                              Expanded(child: Center(child: stage)),
-                              _outline(vertical: false, showScene: false),
-                            ],
-                          ),
-                        ),
-                        const VerticalDivider(width: 1),
-                        Expanded(
-                          child: Column(
-                            children: [
-                              _sceneBar(),
-                              Expanded(child: _commands(inlineInspector: true)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    )
-                  : ListView(
-                      children: [
-                        _sceneBar(),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: stage,
-                        ),
-                        _outline(vertical: false, showScene: false),
-                        const Divider(height: 1),
-                        _commandHeader(),
-                        ..._commandRows(inlineInspector: true),
-                      ],
-                    ),
-            ),
-          ],
-        );
+    // 播放头快捷键的默认焦点。文本框聚焦时方向键/空格交还给文本编辑
+    //（Action.isEnabled=false 时快捷键系统继续向上冒泡）；舞台聚焦时方向键让位微调。
+    bool focusInTextField() {
+      final focus = FocusManager.instance.primaryFocus;
+      if (focus == null) return false;
+      var found = false;
+      focus.context?.visitAncestorElements((element) {
+        final widget = element.widget;
+        if (widget is EditableText ||
+            widget is TextField ||
+            widget is TextFormField) {
+          found = true;
+          return false;
+        }
+        return true;
+      });
+      return found;
+    }
+
+    bool stageFocused() =>
+        FocusManager.instance.primaryFocus?.debugLabel == '剧情舞台';
+
+    return Shortcuts(
+      shortcuts: <ShortcutActivator, Intent>{
+        const SingleActivator(LogicalKeyboardKey.space): const _TogglePlayIntent(),
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): const _StepStopIntent(-1),
+        const SingleActivator(LogicalKeyboardKey.arrowRight): const _StepStopIntent(1),
+        const SingleActivator(
+          LogicalKeyboardKey.arrowLeft,
+          shift: true,
+        ): const _StepCommandIntent(-1),
+        const SingleActivator(
+          LogicalKeyboardKey.arrowRight,
+          shift: true,
+        ): const _StepCommandIntent(1),
+        const SingleActivator(LogicalKeyboardKey.home): const _GotoIntent(true),
+        const SingleActivator(LogicalKeyboardKey.end): const _GotoIntent(false),
       },
+      child: Actions(
+        actions: {
+          _TogglePlayIntent: _GuardedAction<_TogglePlayIntent>(
+            blocked: focusInTextField,
+            handler: (_) => _togglePlay(),
+          ),
+          _StepStopIntent: _GuardedAction<_StepStopIntent>(
+            blocked: () => focusInTextField() || stageFocused(),
+            handler: (intent) => _stepStop(intent.delta),
+          ),
+          _StepCommandIntent: _GuardedAction<_StepCommandIntent>(
+            blocked: () => focusInTextField() || stageFocused(),
+            handler: (intent) => _stepCommand(intent.delta),
+          ),
+          _GotoIntent: _GuardedAction<_GotoIntent>(
+            blocked: focusInTextField,
+            handler: (intent) => intent.toStart
+                ? _selectCommand(0)
+                : _selectCommand(_beatLength - 1),
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          skipTraversal: true,
+          debugLabel: '编辑器快捷键',
+          child: _editorBody(),
+        ),
+      ),
+    );
+  }
+
+  Widget _editorBody() => LayoutBuilder(
+    builder: (context, size) {
+      final wide = size.maxWidth >= 1100;
+      final landscape = !wide && size.maxWidth >= 580 && size.maxHeight < 530;
+      final stage = EditorStage(
+        project: project,
+        scene: _scene,
+        beat: _beat,
+        selected: _command,
+        resources: _resources,
+        playing: _playing,
+        loop: _loop,
+        speed: _speed,
+        onPlayhead: _onPlayhead,
+        onPlaybackEnded: () => setState(() => _playing = false),
+        onMove: (index, values) {
+          _change(
+            _withCommands(
+              [...beat.commands]
+                ..[index] = beat.commands[index].withArgs(values),
+            ),
+            selected: index,
+          );
+        },
+        onIssues: (messages, {title = '提示', allowExport = false}) => _issues(
+          [for (final message in messages) EditorIssue(message)],
+          title: title,
+          allowExport: allowExport,
+        ).then((outcome) => outcome.proceed),
+      );
+      final transport = _transportBar();
+      return Column(
+        children: [
+          _toolbar(),
+          if (_busy)
+            const LinearProgressIndicator(minHeight: 2)
+          else
+            const Divider(height: 2),
+          Expanded(
+            child: wide
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(width: 215, child: _outline(vertical: true)),
+                      const VerticalDivider(width: 1),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Flexible(
+                              flex: 5,
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Center(child: stage),
+                              ),
+                            ),
+                            transport,
+                            const Divider(height: 1),
+                            Expanded(
+                              flex: 4,
+                              child: _commands(inlineInspector: false),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const VerticalDivider(width: 1),
+                      SizedBox(
+                        width: 290,
+                        child: ListView(
+                          key: ValueKey((_scene, _beat, _command)),
+                          padding: const EdgeInsets.all(12),
+                          children: _inspector(),
+                        ),
+                      ),
+                    ],
+                  )
+                : landscape
+                ? Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Expanded(child: Center(child: stage)),
+                            transport,
+                            _outline(vertical: false, showScene: false),
+                          ],
+                        ),
+                      ),
+                      const VerticalDivider(width: 1),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            _sceneBar(),
+                            Expanded(child: _commands(inlineInspector: true)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  )
+                : ListView(
+                    children: [
+                      _sceneBar(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: stage,
+                      ),
+                      transport,
+                      _outline(vertical: false, showScene: false),
+                      const Divider(height: 1),
+                      _commandHeader(),
+                      // 窄屏指令同样支持拖动重排（P0-6）。
+                      ReorderableListView(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        buildDefaultDragHandles: false,
+                        onReorderItem: _reorderCommands,
+                        children: _commandRows(inlineInspector: true),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      );
+    },
+  );
+
+  /// 常驻传输条（P0-2）：句级导航 + 播放控制 + 循环/倍速 + 全屏试播入口。
+  Widget _transportBar() {
+    final length = _beatLength;
+    final compiled = _compiled;
+    final range = compiled?.ranges[(_scene, _beat)];
+    final disabled = _busy || length == 0 || range == null;
+    final stops = _stopIndexes();
+    final stopAt = _command < 0 || stops.isEmpty || range == null
+        ? 0
+        : stops.where((s) => s <= range.$1 + _command).length;
+    final position = _command < 0
+        ? '分镜末态 · $length 条指令'
+        : stops.isEmpty
+        ? '指令 ${_command + 1} / $length'
+        : '指令 ${_command + 1} / $length · 第 $stopAt / ${stops.length} 句';
+    return SizedBox(
+      height: 44,
+      child: Row(
+        children: [
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: '分镜开头（Home）',
+            visualDensity: VisualDensity.compact,
+            onPressed: disabled ? null : () => _selectCommand(0),
+            icon: const Icon(Icons.first_page),
+          ),
+          IconButton(
+            tooltip: '上一句（←）',
+            visualDensity: VisualDensity.compact,
+            onPressed: disabled ? null : () => _stepStop(-1),
+            icon: const Icon(Icons.skip_previous),
+          ),
+          IconButton(
+            tooltip: _playing ? '暂停（空格）' : '播放（空格）',
+            visualDensity: VisualDensity.compact,
+            onPressed: disabled ? null : _togglePlay,
+            icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
+          ),
+          IconButton(
+            tooltip: '下一句（→）',
+            visualDensity: VisualDensity.compact,
+            onPressed: disabled ? null : () => _stepStop(1),
+            icon: const Icon(Icons.skip_next),
+          ),
+          IconButton(
+            tooltip: '分镜末态（End）',
+            visualDensity: VisualDensity.compact,
+            onPressed: disabled ? null : () => _selectCommand(length - 1),
+            icon: const Icon(Icons.last_page),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                position,
+                style: Theme.of(context).textTheme.labelSmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: '循环本段',
+            visualDensity: VisualDensity.compact,
+            isSelected: _loop,
+            onPressed: () => setState(() => _loop = !_loop),
+            icon: const Icon(Icons.repeat),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: OutlinedButton(
+              onPressed: disabled
+                  ? null
+                  : () => setState(
+                      () => _speed = _speed == 1 ? 2 : _speed == 2 ? 4 : 1,
+                    ),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                minimumSize: const Size(40, 32),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              child: Text('$_speed×'),
+            ),
+          ),
+          IconButton(
+            tooltip: '全屏试播（含音频，从当前分镜开始）',
+            visualDensity: VisualDensity.compact,
+            onPressed: _busy ? null : () => _preview(_PreviewMode.fromBeat),
+            icon: const Icon(Icons.fullscreen),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
     );
   }
 
@@ -1149,14 +1503,20 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         icon: const Icon(Icons.redo),
       ),
       PopupMenuButton<_PreviewMode>(
-        tooltip: '试播',
+        tooltip: '全屏试播',
         enabled: !_busy,
         icon: const Icon(Icons.play_arrow),
         onSelected: _preview,
         itemBuilder: (_) => const [
-          PopupMenuItem(value: _PreviewMode.beat, child: Text('仅当前分镜')),
-          PopupMenuItem(value: _PreviewMode.fromBeat, child: Text('从当前分镜开始')),
-          PopupMenuItem(value: _PreviewMode.full, child: Text('从头播放')),
+          PopupMenuItem(
+            value: _PreviewMode.beat,
+            child: Text('全屏：仅当前分镜'),
+          ),
+          PopupMenuItem(
+            value: _PreviewMode.fromBeat,
+            child: Text('全屏：从当前分镜开始'),
+          ),
+          PopupMenuItem(value: _PreviewMode.full, child: Text('全屏：从头播放')),
         ],
       ),
       PopupMenuButton<String>(
@@ -1164,8 +1524,6 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         enabled: !_busy,
         onSelected: (action) async {
           switch (action) {
-            case 'import':
-              await _import();
             case 'play':
               if (widget.onPlayProject != null) {
                 await widget.onPlayProject!(project);
@@ -1181,26 +1539,29 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
             case 'delete':
               await _deleteProject();
             case 'check':
-              final issues = project.validate();
+              final issues = project.validateIssues();
               await _issues(
-                issues.isEmpty ? ['没有发现结构问题。'] : issues,
+                issues.isEmpty
+                    ? [const EditorIssue('没有发现结构问题。')]
+                    : issues,
                 title: '作品检查',
-              );
+              ).then((outcome) {
+                if (outcome.goto != null) _gotoIssue(outcome.goto!);
+              });
           }
         },
         itemBuilder: (_) => [
-          PopupMenuItem(value: 'import', child: Text('导入作品')),
           PopupMenuItem(
             value: 'play',
             enabled: widget.onPlayProject != null,
             child: const Text('播放作品'),
           ),
-          PopupMenuItem(value: 'assets', child: Text('作品素材管理')),
-          PopupMenuItem(value: 'export', child: Text('导出作品（含上传素材）')),
-          PopupMenuItem(value: 'script', child: Text('导出纯脚本')),
-          PopupMenuItem(value: 'duplicate', child: Text('复制作品')),
-          PopupMenuItem(value: 'check', child: Text('检查作品')),
-          PopupMenuItem(value: 'delete', child: Text('删除作品')),
+          const PopupMenuItem(value: 'assets', child: Text('作品素材管理')),
+          const PopupMenuItem(value: 'export', child: Text('导出作品（含上传素材）')),
+          const PopupMenuItem(value: 'script', child: Text('导出纯脚本')),
+          const PopupMenuItem(value: 'duplicate', child: Text('复制作品')),
+          const PopupMenuItem(value: 'check', child: Text('检查作品')),
+          const PopupMenuItem(value: 'delete', child: Text('删除作品')),
         ],
       ),
     ],
@@ -1343,11 +1704,12 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   );
 
   void _reorderCommands(int oldIndex, int newIndex) {
-    if (newIndex > oldIndex) newIndex--;
+    // material_ui 的 onReorderItem 已按「移除旧项后的位置」调整 newIndex，
+    // 直接按新位置插入即可。
     final commands = [...beat.commands];
     final moved = commands.removeAt(oldIndex);
-    commands.insert(newIndex, moved);
-    _change(_withCommands(commands), selected: newIndex);
+    commands.insert(newIndex.clamp(0, commands.length), moved);
+    _change(_withCommands(commands), selected: newIndex.clamp(0, commands.length - 1));
   }
 
   String _commandSummary(EditCommand entry) {
@@ -1377,17 +1739,18 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     children: [
       _commandHeader(),
       Expanded(
-        child: inlineInspector
-            ? ListView(children: _commandRows(inlineInspector: true))
-            : ReorderableListView(
-                buildDefaultDragHandles: false,
-                onReorderItem: _reorderCommands,
-                children: _commandRows(inlineInspector: false),
-              ),
+        // 窄屏与宽屏统一支持拖动重排（P0-6 窄屏拖动修复）。
+        child: ReorderableListView(
+          buildDefaultDragHandles: false,
+          onReorderItem: _reorderCommands,
+          children: _commandRows(inlineInspector: inlineInspector),
+        ),
       ),
     ],
   );
 
+  /// 窄屏指令行与内联检查器合并为单个可重排 item，
+  /// 避免检查器成为独立拖动单位导致索引错位。
   List<Widget> _commandRows({required bool inlineInspector}) => [
     if (beat.commands.isEmpty)
       const ListTile(
@@ -1395,56 +1758,52 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         title: Text('暂无演出指令'),
         leading: Icon(Icons.movie_outlined),
       ),
-    for (final (i, entry) in beat.commands.indexed) ...[
-      ListTile(
-        key: ObjectKey(entry),
-        dense: true,
-        selected: i == _command,
-        leading: inlineInspector
-            ? Icon(
+    for (final (i, entry) in beat.commands.indexed)
+      Column(
+        // 行身份按位置而非指令对象标识：每次输入都会创建新的指令对象，
+        // 用 ObjectKey(entry) 会让内联检查器随整行被替换，输入一次即丢焦点。
+        key: ValueKey('command-$i'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListTile(
+            dense: true,
+            selected: i == _command,
+            leading: ReorderableDragStartListener(
+              index: i,
+              child: Icon(
                 Icons.drag_handle,
                 color: Theme.of(context).colorScheme.onSurfaceVariant
                     .withValues(alpha: .55),
-              )
-            : ReorderableDragStartListener(
-                index: i,
-                child: Icon(
-                  Icons.drag_handle,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant
-                      .withValues(alpha: .55),
-                ),
               ),
-        title: Text(editorFields[entry.tag]?.$1 ?? '原始指令'),
-        subtitle: Text(
-          entry.raw ?? _commandSummary(entry),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        onTap: () => setState(() {
-          _command = _command == i ? -1 : i;
-          _formVersion++;
-          _typing = null;
-        }),
-        trailing: PopupMenuButton<String>(
-          tooltip: '指令操作 ${i + 1}',
-          onSelected: (action) => _commandAction(i, action),
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'duplicate', child: Text('复制指令')),
-            const PopupMenuItem(value: 'insert', child: Text('在此之后插入')),
-            ..._reorderMenu(i, beat.commands.length),
-            const PopupMenuItem(value: 'delete', child: Text('删除指令')),
-          ],
-        ),
-      ),
-      if (inlineInspector && i == _command)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: _inspector(),
+            ),
+            title: Text(editorFields[entry.tag]?.$1 ?? '原始指令'),
+            subtitle: Text(
+              entry.raw ?? _commandSummary(entry),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            onTap: () => _selectCommand(i),
+            trailing: PopupMenuButton<String>(
+              tooltip: '指令操作 ${i + 1}',
+              onSelected: (action) => _commandAction(i, action),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'duplicate', child: Text('复制指令')),
+                const PopupMenuItem(value: 'insert', child: Text('在此之后插入')),
+                ..._reorderMenu(i, beat.commands.length),
+                const PopupMenuItem(value: 'delete', child: Text('删除指令')),
+              ],
+            ),
           ),
-        ),
-    ],
+          if (inlineInspector && i == _command)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: _inspector(),
+              ),
+            ),
+        ],
+      ),
   ];
 
   List<Widget> _inspector() {
