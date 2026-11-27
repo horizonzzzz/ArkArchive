@@ -1,15 +1,21 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:arknights_story_player/story_editor/editor_board.dart';
 import 'package:arknights_story_player/story_editor/editor_platform.dart';
+import 'package:arknights_story_player/story_editor/editor_preview.dart';
 import 'package:arknights_story_player/story_editor/editor_project.dart';
 import 'package:arknights_story_player/story_editor/story_editor_page.dart';
 import 'package:arknights_story_player/story_player/data/asset_store.dart';
+
+import 'story_export_test.dart' show MemoryCache;
 
 class _MemoryStorage extends EditorStorage {
   final Map<String, EditorProject> projects = {};
@@ -127,6 +133,7 @@ Future<_MemoryStorage> _pumpEditor(
   WidgetTester tester,
   EditorProject project, {
   Size size = const Size(1440, 900),
+  AssetStore? store,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -134,7 +141,7 @@ Future<_MemoryStorage> _pumpEditor(
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
-        body: StoryEditorPage(storage: storage, store: AssetStore()),
+        body: StoryEditorPage(storage: storage, store: store ?? AssetStore()),
       ),
     ),
   );
@@ -769,6 +776,153 @@ void main() {
 
       // 首屏即可见全貌汇总（幕数 / 分镜数 / 总估时）。
       expect(find.textContaining('共 5 幕 · 300 个分镜'), findsOneWidget);
+    });
+
+    testWidgets('编排台加载并去重缓存 PRTS 背景、CG 与立绘缩略图', (tester) async {
+      final png = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=',
+      );
+      final requests = <String, int>{};
+      final store = AssetStore(
+        cache: MemoryCache(),
+        client: MockClient((request) async {
+          final path = request.url.path;
+          requests[path] = (requests[path] ?? 0) + 1;
+          if (path.endsWith('/story_variables.json') ||
+              path.endsWith('/background.json')) {
+            return http.Response('{}', 200);
+          }
+          if (path.endsWith('/character.json')) {
+            return http.Response(
+              jsonEncode({
+                'char_002_amiya': {
+                  'size': {'x': 512, 'y': 512},
+                  'pos': {'x': 0, 'y': 0},
+                  'array': [
+                    {'image': 'char_002_amiya_1'},
+                  ],
+                },
+              }),
+              200,
+            );
+          }
+          if (path.endsWith('.png')) {
+            return http.Response.bytes(
+              png,
+              200,
+              headers: {'content-type': 'image/png'},
+            );
+          }
+          return http.Response('not found', 404);
+        }),
+      );
+      final project = EditorProject(
+        id: '55555555555555555555555555555555',
+        title: 'PRTS 缩略图验证',
+        updatedAt: DateTime.utc(2026, 11, 27, 10, 0),
+        scenes: [
+          EditorScene('第一幕', [
+            StoryBeat('分镜 1', [
+              EditCommand('background', {'image': 'bg_room'}),
+              EditCommand('charslot', {'slot': 'l', 'name': 'char_002_amiya'}),
+              EditCommand('dialogue', {'name': '阿米娅', 'text': '背景与立绘'}),
+            ]),
+            StoryBeat('分镜 2', [
+              EditCommand('image', {'image': 'cg_event'}),
+              EditCommand('dialogue', {'name': '阿米娅', 'text': '叠加 CG'}),
+            ]),
+            StoryBeat('分镜 3', [
+              EditCommand('image', {'fadetime': '0'}),
+              EditCommand('charslot', {'slot': 'l', 'name': 'char_empty'}),
+              EditCommand('dialogue', {'name': '阿米娅', 'text': '清场回背景'}),
+            ]),
+          ]),
+        ],
+      );
+
+      await _pumpEditor(tester, _phase2Project());
+      await tester.tap(find.text('编排台'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<EditorBoardView>(find.byType(EditorBoardView)).resources,
+        isNotNull,
+      );
+
+      final resources = EditorPreviewResources(store);
+      addTearDown(resources.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EditorBoardView(
+              project: project,
+              activeScene: 0,
+              activeBeat: 0,
+              issues: const [],
+              compact: false,
+              resources: resources,
+              onOpenBeat: (_, _) {},
+              onAddBeat: (_) {},
+              onInsertBeatAfter: (_, _) {},
+              onDuplicateBeats: (_) {},
+              onDeleteBeats: (_) {},
+              onMoveBeat: (_, _, _) {},
+              onMarkBeat: (_, _) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+
+      Finder cardImages(int beat) => find.descendant(
+        of: find.byKey(ValueKey(('board-card', 0, beat))),
+        matching: find.byType(Image),
+      );
+      expect(cardImages(0), findsNWidgets(2));
+      expect(cardImages(1), findsNWidgets(3));
+      expect(cardImages(2), findsOneWidget);
+
+      expect(requests['/assets/avg/background/bg_room.png'], 1);
+      expect(requests['/assets/avg/images/cg_event.png'], 1);
+      expect(requests['/assets/avg/characters/char_002_amiya_1.png'], 1);
+    });
+
+    testWidgets('编排台拖动右侧滚动条只滚动，不触发框选或选中', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await _pumpEditor(tester, _boardBenchmarkProject());
+        await tester.tap(find.text('编排台'));
+        await tester.pumpAndSettle();
+
+        final board = find.byType(EditorBoardView);
+        final scrollView = find.descendant(
+          of: board,
+          matching: find.byType(CustomScrollView),
+        );
+        final scrollable = tester.state<ScrollableState>(
+          find.descendant(of: scrollView, matching: find.byType(Scrollable)),
+        );
+        expect(scrollable.position.maxScrollExtent, greaterThan(0));
+
+        final rect = tester.getRect(scrollView);
+        final scrollbarPoint = Offset(rect.right - 6, rect.top + 10);
+        final drag = await tester.startGesture(
+          scrollbarPoint,
+          kind: PointerDeviceKind.mouse,
+        );
+        await drag.moveBy(const Offset(0, 180));
+        await tester.pump();
+        expect(find.byKey(const ValueKey('board-marquee')), findsNothing);
+        await drag.up();
+        await tester.pumpAndSettle();
+
+        expect(scrollable.position.pixels, greaterThan(0));
+        expect(find.byKey(const ValueKey('board-marquee')), findsNothing);
+        expect(find.textContaining('已选'), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
   });
 

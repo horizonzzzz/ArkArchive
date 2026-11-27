@@ -1,9 +1,11 @@
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../app/archive_widgets.dart';
 
+import 'editor_preview.dart';
 import 'editor_project.dart';
 
 /// 编排台卡片缩放档位（P1-1）。
@@ -19,15 +21,23 @@ typedef BeatRef = ({int scene, int beat});
 class _BeatVisualSummary {
   const _BeatVisualSummary({
     required this.backgroundKey,
-    required this.characterCount,
+    required this.cgKey,
+    required this.characters,
+    required this.focusedSlots,
     required this.headline,
     required this.blockerAlpha,
+    required this.blockerColor,
   });
 
   final String backgroundKey;
-  final int characterCount;
+  final String cgKey;
+  final Map<String, String> characters;
+  final Set<String> focusedSlots;
   final String headline;
   final double blockerAlpha;
+  final Color blockerColor;
+
+  int get characterCount => characters.length;
 }
 
 /// 编排台：故事板卡片墙（P1-1 / F1）与移动端轻分镜切换（§4.2）。
@@ -39,6 +49,7 @@ class EditorBoardView extends StatefulWidget {
     required this.activeBeat,
     required this.issues,
     required this.compact,
+    this.resources,
     required this.onOpenBeat,
     required this.onAddBeat,
     required this.onInsertBeatAfter,
@@ -53,6 +64,7 @@ class EditorBoardView extends StatefulWidget {
   final int activeBeat;
   final List<EditorIssue> issues;
   final bool compact;
+  final EditorPreviewResources? resources;
   final void Function(int scene, int beat) onOpenBeat;
   final void Function(int scene) onAddBeat;
   final void Function(int scene, int beat) onInsertBeatAfter;
@@ -71,12 +83,36 @@ class _EditorBoardViewState extends State<EditorBoardView> {
   final Set<BeatRef> _selected = {};
   EditorProject? _visualProject;
   List<List<_BeatVisualSummary>> _visualSummaries = const [];
+  static String _normalizeSlot(String raw) => switch (raw.trim().toLowerCase()) {
+    'l' || 'left' => 'l',
+    'm' || 'middle' || 'center' => 'm',
+    'r' || 'right' => 'r',
+    _ => '',
+  };
+
+  static Set<String> _parseFocusSlots(String raw) {
+    final value = raw.trim().toLowerCase();
+    if (value.isEmpty || value == 'all') return const {'l', 'm', 'r'};
+    return {
+      for (final part in value.split(','))
+        if (_normalizeSlot(part).isNotEmpty) _normalizeSlot(part),
+    };
+  }
+
+  static String _firstGroupImage(String group) => group
+      .split('/')
+      .map((s) => s.trim())
+      .firstWhere((s) => s.isNotEmpty, orElse: () => '');
+
   List<List<_BeatVisualSummary>> _visualsForProject() {
     if (identical(_visualProject, widget.project)) return _visualSummaries;
 
-    String backgroundKey = '';
-    final characters = <String>{};
-    double blockerAlpha = 0;
+    var backgroundKey = '';
+    var cgKey = '';
+    var characters = const <String, String>{};
+    var focusedSlots = const <String>{'l', 'm', 'r'};
+    var blockerAlpha = 0.0;
+    var blockerColor = Colors.black;
     final scenes = <List<_BeatVisualSummary>>[];
     for (final scene in widget.project.scenes) {
       final summaries = <_BeatVisualSummary>[];
@@ -85,24 +121,80 @@ class _EditorBoardViewState extends State<EditorBoardView> {
         for (final command in beat.commands) {
           switch (command.tag) {
             case 'background':
+              backgroundKey = command.value('image').trim();
             case 'image':
-              final image = command.value('image');
-              if (image.isNotEmpty) backgroundKey = image;
+              cgKey = command.value('image').trim();
+            case 'largebg' || 'gridbg' || 'verticalbg':
+              backgroundKey = _firstGroupImage(command.value('imagegroup'));
+            case 'largeimg':
+              final raw = command.value('cggroup').isNotEmpty
+                  ? command.value('cggroup')
+                  : command.value('imagegroup');
+              cgKey = _firstGroupImage(raw);
             case 'charslot':
-              final slot = command.value('slot');
-              final name = command.value('name');
-              if (slot.isEmpty && name.isEmpty) {
-                characters.clear();
-              } else if (slot.isNotEmpty) {
-                if (name.isEmpty) {
-                  characters.remove(slot);
-                } else {
-                  characters.add(slot);
+              final rawSlot = command.value('slot').trim();
+              final name = command.value('name').trim();
+              if (rawSlot.isEmpty && name.isEmpty) {
+                if (characters.isNotEmpty) characters = const {};
+              } else {
+                final slot = _normalizeSlot(rawSlot);
+                if (slot.isNotEmpty) {
+                  focusedSlots = _parseFocusSlots(command.value('focus'));
+                  if (name == 'char_empty') {
+                    if (characters.containsKey(slot)) {
+                      characters = Map.unmodifiable(
+                        {...characters}..remove(slot),
+                      );
+                    }
+                  } else if (name.isNotEmpty && characters[slot] != name) {
+                    characters = Map.unmodifiable({...characters, slot: name});
+                  }
                 }
               }
+            case 'character':
+              final first = command.value('name').trim();
+              final second = command.value('name2').trim();
+              if (first.isEmpty && second.isEmpty) {
+                if (characters.isNotEmpty) characters = const {};
+              } else {
+                final next = <String, String>{...characters};
+                if (second.isEmpty) {
+                  next.removeWhere((k, _) => k != 'm');
+                  if (first.isEmpty) {
+                    next.remove('m');
+                  } else {
+                    next['m'] = first;
+                  }
+                } else {
+                  next.remove('m');
+                  next['l'] = first;
+                  next['r'] = second;
+                }
+                final focus = int.tryParse(command.value('focus')) ?? 0;
+                focusedSlots = switch (focus) {
+                  1 => second.isEmpty ? const {'m'} : const {'l'},
+                  2 => const {'r'},
+                  3 => const <String>{},
+                  _ => const {'l', 'm', 'r'},
+                };
+                characters = Map.unmodifiable(next);
+              }
             case 'blocker':
-              blockerAlpha =
-                  double.tryParse(command.value('a')) ?? blockerAlpha;
+              blockerAlpha = command.args.containsKey('a')
+                  ? (double.tryParse(command.value('a')) ?? 1.0)
+                        .clamp(0.0, 1.0)
+                  : 1.0;
+              double channel(String key, double fallback) =>
+                  command.args.containsKey(key)
+                  ? (double.tryParse(command.value(key)) ?? fallback)
+                        .clamp(0.0, 1.0)
+                  : fallback;
+              blockerColor = Color.from(
+                alpha: 1.0,
+                red: channel('r', 0),
+                green: channel('g', 0),
+                blue: channel('b', 0),
+              );
             case 'subtitle':
               if (headline.isEmpty) headline = command.value('text');
           }
@@ -110,9 +202,12 @@ class _EditorBoardViewState extends State<EditorBoardView> {
         summaries.add(
           _BeatVisualSummary(
             backgroundKey: backgroundKey,
-            characterCount: characters.length,
+            cgKey: cgKey,
+            characters: characters,
+            focusedSlots: focusedSlots,
             headline: headline,
             blockerAlpha: blockerAlpha.clamp(0.0, 0.85),
+            blockerColor: blockerColor,
           ),
         );
       }
@@ -147,6 +242,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
   }
 
   final GlobalKey _boardAreaKey = GlobalKey();
+  final GlobalKey _scrollbarKey = GlobalKey();
   int? _marqueePointer;
   Offset? _marqueeOrigin;
   Offset? _marqueeCurrent;
@@ -231,12 +327,57 @@ class _EditorBoardViewState extends State<EditorBoardView> {
     }
   }
 
+  bool _isOnScrollbar(Offset globalPosition) {
+    if (!_scroll.hasClients || _scroll.position.maxScrollExtent <= 0) {
+      return false;
+    }
+    final root = _scrollbarKey.currentContext?.findRenderObject();
+    if (root == null) return false;
+    RenderCustomPaint? target;
+    void findPainter(RenderObject node) {
+      if (target != null) return;
+      if (node is RenderCustomPaint &&
+          node.foregroundPainter is ScrollbarPainter) {
+        target = node;
+        return;
+      }
+      node.visitChildren(findPainter);
+    }
+
+    findPainter(root);
+    final box = target;
+    if (box == null || !box.hasSize) return false;
+    final local = box.globalToLocal(globalPosition);
+    if (local.dx >= box.size.width - _padding) return true;
+    final painter = box.foregroundPainter! as ScrollbarPainter;
+    return painter.hitTestInteractive(
+      local,
+      PointerDeviceKind.mouse,
+      forHover: true,
+    );
+  }
+
+  void _cancelMarquee() {
+    if (_marqueePointer == null) return;
+    final base = _marqueeBase;
+    final hadMarquee = _marquee != null;
+    _resetMarqueeTracking();
+    if (!hadMarquee) return;
+    setState(() {
+      _marquee = null;
+      _selected
+        ..clear()
+        ..addAll(base);
+    });
+  }
+
   void _onBoardPointerDown(PointerDownEvent event) {
     if (_marqueePointer != null) return;
     // 仅鼠标左键框选；触摸/触控笔不在框选范围（触控笔在默认 dragDevices
     // 内，同时框选会与列表滚动冲突，且 §4.2 移动端本就无多选）。
     if (event.kind != PointerDeviceKind.mouse) return;
     if ((event.buttons & kPrimaryButton) == 0) return;
+    if (_isOnScrollbar(event.position)) return;
     if (_intersections(Rect.fromPoints(event.position, event.position))
         .isNotEmpty) {
       return;
@@ -248,6 +389,21 @@ class _EditorBoardViewState extends State<EditorBoardView> {
     // 始终保存框选前的完整选择：取消框选时恢复原选择，
     // Ctrl 追加与否在选区同步时再决定。
     _marqueeBase = {..._selected};
+  }
+
+  void _onBoardPointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent) _cancelMarquee();
+  }
+
+  bool _onBoardScrollNotification(ScrollNotification notification) {
+    if (_marqueePointer == null) return false;
+    if (notification is ScrollStartNotification ||
+        (notification is ScrollUpdateNotification &&
+            (notification.dragDetails != null ||
+                (notification.scrollDelta?.abs() ?? 0) > 0))) {
+      _cancelMarquee();
+    }
+    return false;
   }
 
   void _onBoardPointerMove(PointerMoveEvent event) {
@@ -387,6 +543,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
                 width: 200,
                 child: _BeatCard(
                   project: widget.project,
+                  resources: widget.resources,
                   visual: _visuals[si][bi],
                   sceneIndex: si,
                   beatIndex: bi,
@@ -497,48 +654,63 @@ class _EditorBoardViewState extends State<EditorBoardView> {
             ],
           ),
         ),
-        // 按幕分组的卡片墙；Listener 支撑框选（鼠标空白处拖出矩形）。
+        // 按幕分组的卡片墙；Scrollbar 置于框选 Listener 外层，避免右侧滚动条拖动触发框选。
         Expanded(
-          child: Listener(
-            onPointerDown: _onBoardPointerDown,
-            onPointerMove: _onBoardPointerMove,
-            onPointerUp: _onBoardPointerUp,
-            onPointerCancel: _onBoardPointerCancel,
-            child: Stack(
-              key: _boardAreaKey,
-              fit: StackFit.expand,
-              children: [
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    _gridWidth = (constraints.maxWidth - 2 * _padding).clamp(
-                      0.0,
-                      double.infinity,
-                    );
-                    _visible = [
-                      for (final (si, scene) in widget.project.scenes.indexed)
-                        [
-                          for (final (bi, _) in scene.beats.indexed)
-                            if (_matchesFilter(si, bi)) bi,
-                        ],
-                    ];
-                    return CustomScrollView(
-                      controller: _scroll,
-                      slivers: [
-                        SliverPadding(
-                          padding: const EdgeInsets.all(_padding),
-                          sliver: SliverMainAxisGroup(
+          child: Scrollbar(
+            key: _scrollbarKey,
+            controller: _scroll,
+            thumbVisibility: true,
+            child: Listener(
+              onPointerDown: _onBoardPointerDown,
+              onPointerMove: _onBoardPointerMove,
+              onPointerUp: _onBoardPointerUp,
+              onPointerCancel: _onBoardPointerCancel,
+              onPointerSignal: _onBoardPointerSignal,
+              child: Stack(
+                key: _boardAreaKey,
+                fit: StackFit.expand,
+                children: [
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      _gridWidth = (constraints.maxWidth - 2 * _padding).clamp(
+                        0.0,
+                        double.infinity,
+                      );
+                      _visible = [
+                        for (final (si, scene) in widget.project.scenes.indexed)
+                          [
+                            for (final (bi, _) in scene.beats.indexed)
+                              if (_matchesFilter(si, bi)) bi,
+                          ],
+                      ];
+                      return ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(
+                          context,
+                        ).copyWith(scrollbars: false),
+                        child: NotificationListener<ScrollNotification>(
+                          onNotification: _onBoardScrollNotification,
+                          child: CustomScrollView(
+                            controller: _scroll,
                             slivers: [
-                              for (final (si, visible) in _visible.indexed)
-                                _buildSceneSection(context, si, visible),
+                              SliverPadding(
+                                padding: const EdgeInsets.all(_padding),
+                                sliver: SliverMainAxisGroup(
+                                  slivers: [
+                                    for (final (si, visible)
+                                        in _visible.indexed)
+                                      _buildSceneSection(context, si, visible),
+                                  ],
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                      ],
-                    );
-                  },
-                ),
-                if (_marquee != null) _marqueeOverlay(),
-              ],
+                      );
+                    },
+                  ),
+                  if (_marquee != null) _marqueeOverlay(),
+                ],
+              ),
             ),
           ),
         ),
@@ -690,6 +862,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
       height: _height,
       child: _BeatCard(
         project: widget.project,
+        resources: widget.resources,
         visual: _visuals[sceneIndex][beatIndex],
         sceneIndex: sceneIndex,
         beatIndex: beatIndex,
@@ -750,6 +923,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
 class _BeatCard extends StatelessWidget {
   const _BeatCard({
     required this.project,
+    required this.resources,
     required this.visual,
     required this.sceneIndex,
     required this.beatIndex,
@@ -764,6 +938,7 @@ class _BeatCard extends StatelessWidget {
   });
 
   final EditorProject project;
+  final EditorPreviewResources? resources;
   final _BeatVisualSummary visual;
   final int sceneIndex;
   final int beatIndex;
@@ -779,8 +954,11 @@ class _BeatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final beat = project.scenes[sceneIndex].beats[beatIndex];
-
-    final bgAsset = project.assets[visual.backgroundKey];
+    final hasSceneVisual =
+        visual.backgroundKey.isNotEmpty || visual.cgKey.isNotEmpty;
+    final sceneLabel = visual.cgKey.isNotEmpty
+        ? visual.cgKey
+        : visual.backgroundKey;
     final scheme = Theme.of(context).colorScheme;
     final markerColor = Color(
       editorMarkerColors[beat.marker.color] ?? 0xFFA5C7D5,
@@ -808,35 +986,55 @@ class _BeatCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 16:9 缩略图区域（带签名缓存）
+            // 16:9 缩略图区域（降采样并按资源键缓存复用）
             Expanded(
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (bgAsset != null && bgAsset.isImage)
-                    Image.memory(
-                      bgAsset.bytes,
-                      fit: BoxFit.cover,
-                      cacheWidth: 480,
-                    )
-                  else
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            const Color(0xFF17202A),
-                            visual.backgroundKey.isEmpty
-                                ? const Color(0xFF222B33)
-                                : const Color(0xFF233845),
-                          ],
-                        ),
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          const Color(0xFF17202A),
+                          !hasSceneVisual
+                              ? const Color(0xFF222B33)
+                              : const Color(0xFF233845),
+                        ],
                       ),
                     ),
+                  ),
+                  if (visual.backgroundKey.isNotEmpty)
+                    _BoardThumbnail(
+                      keyName: visual.backgroundKey,
+                      cg: false,
+                      isCharacter: false,
+                      localAsset: project.assets[visual.backgroundKey],
+                      resources: resources,
+                      story: project.derivedFrom,
+                      fit: BoxFit.cover,
+                    ),
+                  if (visual.cgKey.isNotEmpty)
+                    _BoardThumbnail(
+                      keyName: visual.cgKey,
+                      cg: true,
+                      isCharacter: false,
+                      localAsset: project.assets[visual.cgKey],
+                      resources: resources,
+                      story: project.derivedFrom,
+                      fit: BoxFit.cover,
+                    ),
+                  for (final slot in const ['l', 'm', 'r'])
+                    if (visual.characters[slot] case final charKey?)
+                      _buildCharacterThumbnail(
+                        slot,
+                        charKey,
+                        focused: visual.focusedSlots.contains(slot),
+                      ),
                   if (visual.blockerAlpha > 0)
                     Container(
-                      color: Colors.black.withValues(
+                      color: visual.blockerColor.withValues(
                         alpha: visual.blockerAlpha,
                       ),
                     ),
@@ -856,9 +1054,9 @@ class _BeatCard extends StatelessWidget {
                       ),
                       child: Text(
                         visual.headline.isEmpty
-                            ? (visual.backgroundKey.isEmpty
+                            ? (sceneLabel.isEmpty
                                   ? '空分镜'
-                                  : '场景：${visual.backgroundKey}')
+                                  : '场景：$sceneLabel')
                             : visual.headline,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1006,6 +1204,39 @@ class _BeatCard extends StatelessWidget {
     );
   }
 
+  Widget _buildCharacterThumbnail(
+    String slot,
+    String keyName, {
+    required bool focused,
+  }) {
+    final alignment = switch (slot) {
+      'l' => const Alignment(-0.62, 1.0),
+      'r' => const Alignment(0.62, 1.0),
+      _ => Alignment.bottomCenter,
+    };
+    Widget child = Align(
+      alignment: alignment,
+      child: FractionallySizedBox(
+        widthFactor: 0.54,
+        heightFactor: 0.96,
+        child: _BoardThumbnail(
+          keyName: keyName,
+          cg: false,
+          isCharacter: true,
+          localAsset: project.assets[keyName],
+          resources: resources,
+          story: project.derivedFrom,
+          fit: BoxFit.contain,
+          alignment: Alignment.bottomCenter,
+        ),
+      ),
+    );
+    if (!focused) {
+      child = Opacity(opacity: 0.72, child: child);
+    }
+    return child;
+  }
+
   Widget _miniBadge(String text, Color bg) {
     return Container(
       margin: const EdgeInsets.only(left: 3),
@@ -1022,6 +1253,108 @@ class _BeatCard extends StatelessWidget {
           fontWeight: FontWeight.w700,
         ),
       ),
+    );
+  }
+}
+
+class _BoardThumbnail extends StatefulWidget {
+  const _BoardThumbnail({
+    required this.keyName,
+    required this.cg,
+    required this.isCharacter,
+    required this.localAsset,
+    required this.resources,
+    required this.story,
+    required this.fit,
+    this.alignment = Alignment.center,
+  });
+
+  final String keyName;
+  final bool cg;
+  final bool isCharacter;
+  final EditorAsset? localAsset;
+  final EditorPreviewResources? resources;
+  final String? story;
+  final BoxFit fit;
+  final Alignment alignment;
+
+  @override
+  State<_BoardThumbnail> createState() => _BoardThumbnailState();
+}
+
+class _BoardThumbnailState extends State<_BoardThumbnail> {
+  ImageProvider? _provider;
+  int _loadToken = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(_BoardThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.keyName != widget.keyName ||
+        oldWidget.cg != widget.cg ||
+        oldWidget.isCharacter != widget.isCharacter ||
+        oldWidget.localAsset != widget.localAsset ||
+        oldWidget.resources != widget.resources ||
+        oldWidget.story != widget.story) {
+      _resolve();
+    }
+  }
+
+  void _resolve() {
+    final token = ++_loadToken;
+    final local = widget.localAsset;
+    if (local != null && local.isImage) {
+      _provider = ResizeImage.resizeIfNeeded(
+        widget.isCharacter ? 240 : 480,
+        null,
+        MemoryImage(local.bytes),
+      );
+      return;
+    }
+    final resources = widget.resources;
+    if (resources == null) {
+      _provider = null;
+      return;
+    }
+    final cached = resources.peekThumbnail(
+      widget.keyName,
+      cg: widget.cg,
+      isCharacter: widget.isCharacter,
+    );
+    if (cached != null) {
+      _provider = cached;
+      return;
+    }
+    _provider = null;
+    resources
+        .loadThumbnail(
+          widget.keyName,
+          cg: widget.cg,
+          isCharacter: widget.isCharacter,
+          story: widget.story,
+        )
+        .then((provider) {
+          if (!mounted || token != _loadToken || provider == null) return;
+          setState(() => _provider = provider);
+        });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = _provider;
+    if (provider == null) return const SizedBox.shrink();
+    return Image(
+      image: provider,
+      fit: widget.fit,
+      alignment: widget.alignment,
+      filterQuality: FilterQuality.low,
+      gaplessPlayback: true,
+      errorBuilder: (_, _, _) => const SizedBox.shrink(),
     );
   }
 }

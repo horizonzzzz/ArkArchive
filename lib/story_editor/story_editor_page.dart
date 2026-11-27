@@ -2345,6 +2345,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           activeBeat: _beat,
           issues: issues,
           compact: !wide && !landscape,
+          resources: _resources,
           onOpenBeat: (si, bi) => _navigateTo(
             si,
             bi,

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
+import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 
 import '../story_player/data/asset_store.dart';
@@ -85,10 +86,88 @@ class EditorPreviewResources {
   final AssetStore store;
   final _textures = <Uri, Future<ui.Image>>{};
   final _assets = <String, Future<FxAsset>>{};
+  final _thumbnailValues =
+      <({String key, bool cg, bool isCharacter}), ImageProvider?>{};
+  final _pendingThumbnails =
+      <({String key, bool cg, bool isCharacter}), Future<ImageProvider?>>{};
+  static const _maxThumbnails = 64;
+  static final _defaultCatalog = MediaCatalog(
+    variables: const {},
+    characters: const {},
+    backgroundPpu: const {},
+  );
   Future<MediaCatalog>? _catalog;
   Future<List<String>>? _effects;
   Future<List<String>>? _cgImages;
   bool _closed = false;
+
+  void _rememberThumbnail(
+    ({String key, bool cg, bool isCharacter}) cacheKey,
+    ImageProvider? provider,
+  ) {
+    _thumbnailValues.remove(cacheKey);
+    while (_thumbnailValues.length >= _maxThumbnails) {
+      _thumbnailValues.remove(_thumbnailValues.keys.first);
+    }
+    _thumbnailValues[cacheKey] = provider;
+  }
+
+  /// 同步命中编排台缩略图缓存；未命中返回 null，由调用方按需异步加载。
+  ImageProvider? peekThumbnail(
+    String key, {
+    bool cg = false,
+    bool isCharacter = false,
+  }) {
+    final normalized = key.trim().toLowerCase();
+    if (normalized.isEmpty) return null;
+    final cacheKey = (key: normalized, cg: cg, isCharacter: isCharacter);
+    if (!_thumbnailValues.containsKey(cacheKey)) return null;
+    final value = _thumbnailValues.remove(cacheKey);
+    _thumbnailValues[cacheKey] = value;
+    return value;
+  }
+
+  /// 加载并解码降采样后的缩略图 Provider，同键值在当前会话内去重并限制缓存上限。
+  Future<ImageProvider?> loadThumbnail(
+    String key, {
+    bool cg = false,
+    bool isCharacter = false,
+    String? story,
+  }) {
+    final raw = key.trim();
+    final normalized = raw.toLowerCase();
+    if (_closed || normalized.isEmpty) return Future.value(null);
+    final cacheKey = (key: normalized, cg: cg, isCharacter: isCharacter);
+    if (_thumbnailValues.containsKey(cacheKey)) {
+      return Future.value(peekThumbnail(key, cg: cg, isCharacter: isCharacter));
+    }
+    return _pendingThumbnails.putIfAbsent(cacheKey, () async {
+      try {
+        Uri? uri;
+        if (isCharacter) {
+          final catalog = await prts();
+          uri = catalog.character(raw)?.body;
+        } else {
+          uri = _defaultCatalog.image(raw, cg: cg);
+        }
+        if (uri == null || _closed) return null;
+        final data = await store.loadTransient(uri, story: story);
+        if (_closed || data.isEmpty) return null;
+        final provider = ResizeImage.resizeIfNeeded(
+          isCharacter ? 240 : 480,
+          null,
+          MemoryImage(data),
+        );
+        _rememberThumbnail(cacheKey, provider);
+        return provider;
+      } catch (_) {
+        if (!_closed) _rememberThumbnail(cacheKey, null);
+        return null;
+      } finally {
+        _pendingThumbnails.remove(cacheKey);
+      }
+    });
+  }
 
   Future<MediaCatalog> prts() async {
     final pending = _catalog ??= MediaCatalog.load(store, transient: true);
@@ -234,7 +313,8 @@ class EditorPreviewResources {
     final catalog = EditorCatalog(base, project.assets);
     final local = {for (final a in project.assets.values) a.uri: a};
     Future<Uint8List> bytes(Uri u) async =>
-        local[u]?.bytes ?? await store.loadTransient(u);
+        local[u]?.bytes ??
+        await store.loadTransient(u, story: project.derivedFrom);
     final textures = <Uri, ui.Image>{};
     final imageRefs = <Uri, Set<String>>{};
     catalog.collect(
@@ -336,6 +416,8 @@ class EditorPreviewResources {
 
   void dispose() {
     _closed = true;
+    _thumbnailValues.clear();
+    _pendingThumbnails.clear();
     for (final pending in _textures.values) {
       unawaited(
         pending.then(
