@@ -3,6 +3,18 @@ import 'package:arknights_story_player/story_player/script.dart';
 import 'package:arknights_story_player/story_player/runtime/story_engine.dart';
 
 void main() {
+  testWidgets('静止引擎停用 ticker，播放时按需启用', (tester) async {
+    final engine = StoryEngine(
+      StoryScript.parse('[name="甲"]甲乙'),
+      typingInterval: const Duration(milliseconds: 80),
+    );
+    addTearDown(engine.dispose);
+    expect(engine.hasActiveTicker, isFalse);
+    await engine.start();
+    expect(engine.hasActiveTicker, isTrue);
+    await engine.setPaused(true);
+    expect(engine.hasActiveTicker, isFalse);
+  });
   test('播放设置作用于手动和普通自动速度', () {
     final engine = StoryEngine(
       StoryScript.parse('对白'),

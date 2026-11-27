@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:typed_data';
 
@@ -14,21 +15,45 @@ String _blob(Uint8List bytes, String mime) => web.URL.createObjectURL(
 class EditorStorage {
   static const _prefix = 'story-editor-v1';
   Future<web.Cache>? _cache;
+  Future<web.Cache>? _assetCache;
+  final _savedAssetKeys = <String>{};
   Future<web.Cache> get _drafts =>
       _cache ??= web.window.caches.open(_prefix).toDart;
+  Future<web.Cache> get _assets =>
+      _assetCache ??= web.window.caches.open('$_prefix-assets').toDart;
   String _key(String id) => 'https://editor.invalid/$_prefix/$id';
+  String _positionKey(String id) => '${_key(id)}/position';
+  String _assetKey(String id, String key) =>
+      'https://editor.invalid/$_prefix-assets/$id/$key';
+
+  Future<Uint8List?> _loadAsset(String key) async {
+    final parts = key.split('/');
+    if (parts.length != 2 ||
+        !RegExp(r'^[a-f0-9]{32}$').hasMatch(parts.first) ||
+        !RegExp(r'^local_[a-f0-9]{64}$').hasMatch(parts.last)) {
+      return null;
+    }
+    final response = await (await _assets)
+        .match(_assetKey(parts.first, parts.last).toJS)
+        .toDart;
+    if (response == null) return null;
+    return (await response.arrayBuffer().toDart).toDart.asUint8List();
+  }
 
   Future<List<EditorProject>> list() async {
     final cache = await _drafts;
     final result = <(EditorProject, int)>[];
     for (final request in (await cache.keys().toDart).toDart) {
+      if (request.url.endsWith('/position')) continue;
       final response = await cache.match(request).toDart;
       if (response == null) continue;
       try {
         final bytes = (await response.arrayBuffer().toDart).toDart
             .asUint8List();
         result.add((
-          EditorProject.decode(bytes),
+          await _restorePosition(
+            await EditorProject.decodeDraft(bytes, _loadAsset),
+          ),
           int.tryParse(response.headers.get('X-Edited-At') ?? '') ?? 0,
         ));
       } on FormatException {
@@ -39,8 +64,57 @@ class EditorStorage {
     return [for (final item in result) item.$1];
   }
 
+  Future<EditorProject> _restorePosition(EditorProject project) async {
+    try {
+      final response = await (await _drafts)
+          .match(_positionKey(project.id).toJS)
+          .toDart;
+      if (response == null) return project;
+      final data = jsonDecode((await response.text().toDart).toDart);
+      if (data is Map &&
+          data['revision'] == project.updatedAt.toIso8601String()) {
+        return project.copyWith(
+          lastPosition: EditorPosition.fromJson(data['position']),
+          updatedAt: project.updatedAt,
+        );
+      }
+    } catch (_) {
+      // 游标是可选记录，读取失败不影响草稿。
+    }
+    return project;
+  }
+
+  Future<void> savePosition(
+    String id,
+    DateTime revision,
+    EditorPosition position,
+  ) async {
+    if (!RegExp(r'^[a-f0-9]{32}$').hasMatch(id)) {
+      throw const FormatException('作品标识无效');
+    }
+    final data = jsonEncode({
+      'revision': revision.toIso8601String(),
+      'position': position.toJson(),
+    });
+    await (await _drafts)
+        .put(_positionKey(id).toJS, web.Response(data.toJS))
+        .toDart;
+  }
+
   Future<void> save(EditorProject project) async {
-    final response = web.Response(project.export().toJS);
+    final cache = await _assets;
+    for (final asset in project.assets.values) {
+      final cacheKey = '${project.id}/${asset.key}';
+      if (_savedAssetKeys.contains(cacheKey)) continue;
+      await cache
+          .put(
+            _assetKey(project.id, asset.key).toJS,
+            web.Response(asset.bytes.toJS),
+          )
+          .toDart;
+      _savedAssetKeys.add(cacheKey);
+    }
+    final response = web.Response(project.encodeDraft().toJS);
     response.headers.set(
       'X-Edited-At',
       '${DateTime.now().millisecondsSinceEpoch}',
@@ -49,7 +123,17 @@ class EditorStorage {
   }
 
   Future<void> delete(String id) async {
+    if (!RegExp(r'^[a-f0-9]{32}$').hasMatch(id)) {
+      throw const FormatException('作品标识无效');
+    }
     await (await _drafts).delete(_key(id).toJS).toDart;
+    await (await _drafts).delete(_positionKey(id).toJS).toDart;
+    final cache = await _assets;
+    final prefix = 'https://editor.invalid/$_prefix-assets/$id/';
+    for (final request in (await cache.keys().toDart).toDart) {
+      if (request.url.startsWith(prefix)) await cache.delete(request).toDart;
+    }
+    _savedAssetKeys.removeWhere((key) => key.startsWith('$id/'));
   }
 
   Future<EditorProject?> importProject() async {

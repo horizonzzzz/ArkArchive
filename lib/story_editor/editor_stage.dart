@@ -28,6 +28,23 @@ typedef _Handle = ({
   void Function(double width, double fontSize)? updateSubtitleBox,
 });
 
+class _StageSnapshot {
+  const _StageSnapshot({
+    required this.project,
+    required this.resources,
+    required this.scene,
+    required this.beat,
+    required this.cursor,
+    required this.textSignature,
+    required this.stage,
+  });
+
+  final EditorProject project;
+  final EditorPreviewResources resources;
+  final int scene, beat, cursor, textSignature;
+  final PreparedStage stage;
+}
+
 /// 舞台继承对象覆盖请求（当前分镜拖动继承自前序分镜的对象时触发）。
 typedef StageInheritedRequest = ({
   String tag,
@@ -39,6 +56,7 @@ typedef StageInheritedRequest = ({
   int sourceCommand,
   Map<String, String> values,
 });
+
 /// 编辑器监视器：以「播放头」语义渲染舞台——
 /// 选中第 n 条指令时重放到该指令执行后的状态（P0-1）；
 /// [selected] 为 -1 时保持分镜末态。
@@ -100,6 +118,16 @@ class EditorStage extends StatefulWidget {
 
 class _EditorStageState extends State<EditorStage> {
   PreparedStage? _stage;
+
+  final List<_StageSnapshot> _stageSnapshots = [];
+  EditorProject? _stageProject;
+  EditorPreviewResources? _stageResources;
+  int _stageScene = -1, _stageBeat = -1;
+  PreparedStage? _handlesForStage;
+  EditorProject? _handlesForProject;
+  StageState? _handlesForState;
+  List<_Handle>? _cachedHandles;
+  int _handlesScene = -1, _handlesBeat = -1, _handlesCursor = -1;
   Timer? _refresh;
   int _generation = 0;
   int _seekRevision = 0;
@@ -131,6 +159,7 @@ class _EditorStageState extends State<EditorStage> {
 
   /// 引擎构建时的文本签名；与 [_textSignature] 不一致说明脚本正文已落后。
   int _stageTextSignature = 0;
+  bool _stageCanSnapshot = false;
 
   @override
   void initState() {
@@ -149,13 +178,21 @@ class _EditorStageState extends State<EditorStage> {
         oldWidget.resources != widget.resources ||
         (projectChanged &&
             _assetSignature(oldWidget) != _assetSignature(widget))) {
+      if (oldWidget.resources != widget.resources ||
+          (projectChanged &&
+              (_assetSignature(oldWidget) != _assetSignature(widget) ||
+                  _replaySignature(oldWidget) != _replaySignature(widget)))) {
+        _discardStageSnapshots();
+      }
       _prepare();
       return;
     }
     if (projectChanged) {
       if (_replaySignature(oldWidget) != _replaySignature(widget)) {
+        _discardStageSnapshots();
         // 参数/结构变化需要引擎执行新脚本：重建（100ms 防抖）。
         // 对白/舞台文字正文不在此列，走 [_syncTextsInPlace] 零重建。
+        if (_syncVisualEdit(oldWidget)) return;
         _prepare();
         return;
       } else {
@@ -172,6 +209,13 @@ class _EditorStageState extends State<EditorStage> {
     if (oldWidget.playing != widget.playing) {
       widget.playing ? _startPlayback() : _pausePlayback();
     }
+  }
+
+  void _discardStageSnapshots() {
+    for (final snapshot in _stageSnapshots) {
+      snapshot.stage.dispose();
+    }
+    _stageSnapshots.clear();
   }
 
   /// 影响当前舞台重放的前缀指令（当前分镜含之前全部）。
@@ -218,6 +262,83 @@ class _EditorStageState extends State<EditorStage> {
       ),
   ]);
 
+  bool _syncVisualEdit(EditorStage oldWidget) {
+    final stage = _stage;
+    if (stage == null ||
+        widget.scene != oldWidget.scene ||
+        widget.beat != oldWidget.beat ||
+        !identical(_handlesForStage, stage) ||
+        !identical(_handlesForProject, oldWidget.project) ||
+        !identical(_handlesForState, stage.engine.state) ||
+        _handlesCursor != stage.engine.cursor) {
+      return false;
+    }
+    final oldCommands =
+        oldWidget.project.scenes[widget.scene].beats[widget.beat].commands;
+    final newCommands =
+        widget.project.scenes[widget.scene].beats[widget.beat].commands;
+    if (oldCommands.length != newCommands.length) return false;
+    var changedIndex = -1;
+    late EditCommand changed;
+    for (var i = 0; i < oldCommands.length; i++) {
+      final before = oldCommands[i];
+      final after = newCommands[i];
+      if (before.tag != after.tag || before.raw != after.raw) return false;
+      final keys = {...before.args.keys, ...after.args.keys};
+      final changedKeys = {
+        for (final key in keys)
+          if (before.value(key) != after.value(key)) key,
+      };
+      if (changedKeys.isEmpty) continue;
+      final allowed = switch (after.tag) {
+        'background' || 'image' => const {'x', 'y'},
+        'charslot' => const {'posto'},
+        'subtitle' => const {'x', 'y', 'width', 'size'},
+        _ => const <String>{},
+      };
+      if (changedIndex >= 0 ||
+          changedKeys.isEmpty ||
+          !allowed.containsAll(changedKeys)) {
+        return false;
+      }
+      changedIndex = i;
+      changed = after;
+    }
+    if (changedIndex < 0 || changedIndex != widget.selected) return false;
+    final handle = _cachedHandles
+        ?.where((item) => item.index == changedIndex && item.tag == changed.tag)
+        .firstOrNull;
+    if (handle == null) return false;
+    double? number(String key) {
+      final value = double.tryParse(changed.value(key));
+      return value != null && value.isFinite ? value : null;
+    }
+
+    double? currentNumber(String key, double? current) =>
+        changed.args.containsKey(key) ? number(key) : current;
+
+    if (changed.tag == 'charslot') {
+      final point = changed.value('posto').split(',');
+      if (point.length != 2) return false;
+      final x = double.tryParse(point[0]), y = double.tryParse(point[1]);
+      if (x == null || y == null || !x.isFinite || !y.isFinite) return false;
+      handle.update(Offset(x, y));
+    } else {
+      final x = currentNumber('x', handle.position.dx),
+          y = currentNumber('y', handle.position.dy);
+      if (x == null || y == null) return false;
+      handle.update(Offset(x, y));
+      if (changed.tag == 'subtitle') {
+        final width = currentNumber('width', handle.width);
+        final size = currentNumber('size', handle.fontSize);
+        if (width != null && size != null) {
+          handle.updateSubtitleBox?.call(width, size);
+        }
+      }
+    }
+    return true;
+  }
+
   /// 文本签名：对白/舞台文字正文的项目快照。引擎创建时脚本已固定，
   /// 就地同步只更新显示；播放前检测签名落后则重建引擎（完成后自动续播），
   /// 保证「改完马上复看」读的是当前文本。
@@ -247,24 +368,127 @@ class _EditorStageState extends State<EditorStage> {
     }
   }
 
+  void _stashCurrentStage() {
+    final stage = _stage;
+    _stage = null;
+    _cachedHandles = null;
+    _handlesForStage = null;
+    _handlesForProject = null;
+    _handlesForState = null;
+    if (stage == null) return;
+    final project = _stageProject;
+    final resources = _stageResources;
+    if (project == null ||
+        resources == null ||
+        !identical(project, widget.project) ||
+        !identical(resources, widget.resources) ||
+        !_stageCanSnapshot ||
+        stage.engine.running ||
+        stage.engine.hasActiveTicker) {
+      stage.dispose();
+      _stageSnapshots.removeWhere((snapshot) {
+        final obsolete =
+            !identical(snapshot.project, widget.project) ||
+            !identical(snapshot.resources, widget.resources);
+        if (obsolete) snapshot.stage.dispose();
+        return obsolete;
+      });
+      return;
+    }
+    _stageSnapshots.removeWhere((snapshot) {
+      final duplicate =
+          identical(snapshot.project, project) &&
+          identical(snapshot.resources, resources) &&
+          snapshot.scene == _stageScene &&
+          snapshot.beat == _stageBeat &&
+          snapshot.cursor == stage.engine.cursor;
+      if (duplicate) snapshot.stage.dispose();
+      return duplicate;
+    });
+    _stageSnapshots.add(
+      _StageSnapshot(
+        project: project,
+        resources: resources,
+        scene: _stageScene,
+        beat: _stageBeat,
+        cursor: stage.engine.cursor,
+        textSignature: _stageTextSignature,
+        stage: stage,
+      ),
+    );
+    while (_stageSnapshots.length > 3) {
+      _stageSnapshots.removeAt(0).stage.dispose();
+    }
+  }
+
   Future<void> _prepareNow(int generation) async {
     bool active() => mounted && generation == _generation;
     PreparedStage? prepared;
     try {
       final textSignature = _textSignature(widget);
       final compiled = widget.project.compile();
+      _stashCurrentStage();
       final range = compiled.ranges[(widget.scene, widget.beat)]!;
       final beatEnd = range.$2;
-      prepared = await widget.resources.prepare(
-        widget.project,
-        compiled,
-        end: beatEnd,
-        audible: false,
-        active: active,
-      );
-      if (!active()) throw StateError('预览已取消');
       final target = _targetEnd(range);
-      final reached = await prepared.engine.rebuildBefore(target);
+      final candidates = _stageSnapshots
+          .where(
+            (snapshot) =>
+                identical(snapshot.project, widget.project) &&
+                identical(snapshot.resources, widget.resources),
+          )
+          .toList();
+      final exactIndex = candidates.indexWhere(
+        (snapshot) =>
+            snapshot.scene == widget.scene &&
+            snapshot.beat == widget.beat &&
+            snapshot.cursor == target &&
+            snapshot.textSignature == textSignature,
+      );
+      var reached = false;
+      if (exactIndex >= 0) {
+        final snapshot = candidates[exactIndex];
+        _stageSnapshots.remove(snapshot);
+        prepared = snapshot.stage;
+        reached = true;
+      } else if (!widget.playing) {
+        candidates.sort((a, b) => b.cursor.compareTo(a.cursor));
+        for (final snapshot in candidates) {
+          final engine = snapshot.stage.engine;
+          if (!engine.canContinueStaticPreview(
+            compiled.script,
+            beatEnd,
+            target,
+          )) {
+            continue;
+          }
+          _stageSnapshots.remove(snapshot);
+          prepared = snapshot.stage;
+          reached = await engine.extendStaticPreview(
+            compiled.script,
+            beatEnd,
+            target,
+          );
+          if (!active()) throw StateError('预览已取消');
+          if (reached) break;
+          prepared.dispose();
+          prepared = null;
+        }
+      }
+      if (prepared == null) {
+        prepared = await widget.resources.prepare(
+          widget.project,
+          compiled,
+          end: beatEnd,
+          audible: false,
+          active: active,
+        );
+        if (!active()) throw StateError('预览已取消');
+        reached = await prepared.engine.rebuildBefore(
+          target,
+          revealText: !widget.playing,
+        );
+      }
       if (!active()) throw StateError('预览已取消');
       _stage?.dispose();
       setState(() {
@@ -274,9 +498,15 @@ class _EditorStageState extends State<EditorStage> {
         _error = reached ? null : '无法重建此分镜的舞台';
         _loading = false;
       });
+      _stageProject = widget.project;
+      _stageResources = widget.resources;
+      _stageScene = widget.scene;
+      _stageBeat = widget.beat;
       // 记录引擎构建时的文本快照签名：此后就地编辑的正文不进脚本，
       // 播放前按此检测落后并重建。
       _stageTextSignature = textSignature;
+      _stageCanSnapshot =
+          reached && !widget.playing && !prepared.engine.hasActiveTicker;
       if (textSignature != _textSignature(widget)) {
         prepared = null;
         _prepare();
@@ -331,8 +561,19 @@ class _EditorStageState extends State<EditorStage> {
   Future<bool> _performSeek(int target, int revision) async {
     final stage = _stage;
     if (stage == null || revision != _seekRevision || !mounted) return false;
-    final reached = await stage.engine.rebuildBefore(target);
+    final canContinue =
+        _stageCanSnapshot &&
+        !widget.playing &&
+        identical(_stageProject, widget.project);
+    _stageCanSnapshot = false;
+    final reached = await stage.engine.rebuildBefore(
+      target,
+      revealText: !widget.playing,
+      continueStaticPreview: canContinue,
+    );
     if (revision != _seekRevision || !mounted) return false;
+    _stageCanSnapshot =
+        reached && !widget.playing && !stage.engine.hasActiveTicker;
     setState(() => _error = reached ? null : '无法重建此分镜的舞台');
     return reached;
   }
@@ -409,6 +650,7 @@ class _EditorStageState extends State<EditorStage> {
   // —— 播放（P0-2）：沿停顿点推进，循环本段支持 —— //
 
   void _startPlayback() {
+    _stageCanSnapshot = false;
     if (_stage != null && _stageTextSignature != _textSignature(widget)) {
       // 就地编辑的正文未进入引擎脚本：先重建引擎，完成后自动续播。
       _prepare();
@@ -498,6 +740,10 @@ class _EditorStageState extends State<EditorStage> {
     _cancelPace();
     _focusNode.dispose();
     _stage?.dispose();
+    for (final snapshot in _stageSnapshots) {
+      snapshot.stage.dispose();
+    }
+    _stageSnapshots.clear();
     super.dispose();
   }
 
@@ -509,7 +755,20 @@ class _EditorStageState extends State<EditorStage> {
   };
 
   List<_Handle> _handles(PreparedStage stage) {
-    final state = stage.engine.state;
+    final engine = stage.engine;
+    final state = engine.state;
+    final cacheable =
+        !widget.playing && !engine.running && state.effects.isEmpty;
+    if (cacheable &&
+        _cachedHandles != null &&
+        identical(_handlesForStage, stage) &&
+        identical(_handlesForProject, widget.project) &&
+        identical(_handlesForState, state) &&
+        _handlesScene == widget.scene &&
+        _handlesBeat == widget.beat &&
+        _handlesCursor == engine.cursor) {
+      return _cachedHandles!;
+    }
     final handles = <_Handle>[];
     final seen = <String>{};
     var clearedSlots = false;
@@ -637,7 +896,19 @@ class _EditorStageState extends State<EditorStage> {
           ));
       }
     }
-    return handles.reversed.toList();
+    final result = handles.reversed.toList();
+    if (cacheable) {
+      _handlesForStage = stage;
+      _handlesForProject = widget.project;
+      _handlesForState = state;
+      _handlesScene = widget.scene;
+      _handlesBeat = widget.beat;
+      _handlesCursor = engine.cursor;
+      _cachedHandles = result;
+    } else {
+      _cachedHandles = null;
+    }
+    return result;
   }
 
   String _format(double value) => value.toStringAsFixed(1);
@@ -690,10 +961,12 @@ class _EditorStageState extends State<EditorStage> {
   ) {
     if (HardwareKeyboard.instance.isAltPressed) return (raw, null, null);
     const threshold = 6.0;
-    final anchorOffset = drag.anchor - Offset(
-      drag.position.dx,
-      drag.yUp ? -drag.position.dy : drag.position.dy,
-    );
+    final anchorOffset =
+        drag.anchor -
+        Offset(
+          drag.position.dx,
+          drag.yUp ? -drag.position.dy : drag.position.dy,
+        );
     var stageX = anchorOffset.dx + raw.dx;
     var stageY = anchorOffset.dy + (drag.yUp ? -raw.dy : raw.dy);
 
@@ -743,6 +1016,33 @@ class _EditorStageState extends State<EditorStage> {
       sy = drag.yUp ? -deltaY : deltaY;
     }
     return (Offset(sx, sy), hitX, hitY);
+  }
+
+  void _cacheDraggedHandle(_Handle drag, Offset position) {
+    final cached = _cachedHandles;
+    if (cached == null) return;
+    final index = cached.indexWhere((handle) => handle.index == drag.index);
+    if (index < 0) return;
+    final handle = cached[index];
+    final delta = position - handle.position;
+    cached[index] = (
+      index: handle.index,
+      sourceScene: handle.sourceScene,
+      sourceBeat: handle.sourceBeat,
+      sourceCommand: handle.sourceCommand,
+      inherited: handle.inherited,
+      tag: handle.tag,
+      label: handle.label,
+      keyName: handle.keyName,
+      anchor:
+          handle.anchor + Offset(delta.dx, handle.yUp ? -delta.dy : delta.dy),
+      position: position,
+      yUp: handle.yUp,
+      width: handle.width,
+      fontSize: handle.fontSize,
+      update: handle.update,
+      updateSubtitleBox: handle.updateSubtitleBox,
+    );
   }
 
   void _finishDrag(_Handle drag) {
@@ -882,6 +1182,7 @@ class _EditorStageState extends State<EditorStage> {
               onPanStart: (_) {
                 setState(() {
                   _drag = handle;
+                  _stageCanSnapshot = false;
                   _dragWidth = width;
                   _dragFontSize = fontSize;
                   _dragBubble = '宽 ${_format(width)}';
@@ -938,6 +1239,7 @@ class _EditorStageState extends State<EditorStage> {
               onPanStart: (_) {
                 setState(() {
                   _drag = handle;
+                  _stageCanSnapshot = false;
                   _dragWidth = width;
                   _dragFontSize = fontSize;
                   _dragBubble = '字号 ${fontSize.round()}';
@@ -1027,10 +1329,12 @@ class _EditorStageState extends State<EditorStage> {
             },
             onPanStart: (_) {
               _drag = handle;
+              _stageCanSnapshot = false;
               _point = handle.position;
               _dragOrigin = handle.position;
               setState(() {
-                _dragBubble = 'X ${_format(_point.dx)}  Y ${_format(_point.dy)}';
+                _dragBubble =
+                    'X ${_format(_point.dx)}  Y ${_format(_point.dy)}';
               });
             },
             onPanUpdate: (d) {
@@ -1060,6 +1364,7 @@ class _EditorStageState extends State<EditorStage> {
                 allHandles,
               );
               _point = snapped;
+              _cacheDraggedHandle(drag, snapped);
               setState(() {
                 _snapGuideX = guideX;
                 _snapGuideY = guideY;
@@ -1298,9 +1603,7 @@ class _EditorStageState extends State<EditorStage> {
                   padding: EdgeInsets.zero,
                   iconSize: 14,
                   color: const Color(0xFFE8EDF0),
-                  onPressed: _zoom > 0.5
-                      ? () => _setZoom(_zoom - 0.25)
-                      : null,
+                  onPressed: _zoom > 0.5 ? () => _setZoom(_zoom - 0.25) : null,
                   icon: const Icon(Icons.remove),
                 ),
                 InkWell(
@@ -1326,9 +1629,7 @@ class _EditorStageState extends State<EditorStage> {
                   padding: EdgeInsets.zero,
                   iconSize: 14,
                   color: const Color(0xFFE8EDF0),
-                  onPressed: _zoom < 2.0
-                      ? () => _setZoom(_zoom + 0.25)
-                      : null,
+                  onPressed: _zoom < 2.0 ? () => _setZoom(_zoom + 0.25) : null,
                   icon: const Icon(Icons.add),
                 ),
                 if (_zoom != 1.0 || _pan != Offset.zero)
@@ -1418,98 +1719,102 @@ class _EditorStageState extends State<EditorStage> {
                       child: const SizedBox.expand(),
                     ),
                   ),
-                    Center(
-                      child: Transform.translate(
-                        offset: _pan,
-                        child: OverflowBox(
-                          maxWidth: size.width,
-                          maxHeight: size.height,
-                          child: SizedBox.fromSize(
-                            size: size,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                if (stage != null)
-                                  IgnorePointer(
-                                    child: StoryStage(
-                                      engine: stage.engine,
-                                      catalog: stage.catalog,
-                                      textures: stage.textures,
+                  Center(
+                    child: Transform.translate(
+                      offset: _pan,
+                      child: OverflowBox(
+                        maxWidth: size.width,
+                        maxHeight: size.height,
+                        child: SizedBox.fromSize(
+                          size: size,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              if (stage != null)
+                                IgnorePointer(
+                                  child: StoryStage(
+                                    engine: stage.engine,
+                                    catalog: stage.catalog,
+                                    textures: stage.textures,
+                                  ),
+                                ),
+                              // 吸附参考线
+                              if (_snapGuideX != null)
+                                Positioned(
+                                  left: (_snapGuideX! * scale).clamp(
+                                    0.0,
+                                    size.width - 1,
+                                  ),
+                                  top: 0,
+                                  bottom: 0,
+                                  child: IgnorePointer(
+                                    child: Container(
+                                      width: 1,
+                                      color: const Color(0xCC56B6C2),
                                     ),
                                   ),
-                                // 吸附参考线
-                                if (_snapGuideX != null)
-                                  Positioned(
-                                    left: (_snapGuideX! * scale)
-                                        .clamp(0.0, size.width - 1),
-                                    top: 0,
-                                    bottom: 0,
-                                    child: IgnorePointer(
-                                      child: Container(
-                                        width: 1,
-                                        color: const Color(0xCC56B6C2),
-                                      ),
+                                ),
+                              if (_snapGuideY != null)
+                                Positioned(
+                                  top: (_snapGuideY! * scale).clamp(
+                                    0.0,
+                                    size.height - 1,
+                                  ),
+                                  left: 0,
+                                  right: 0,
+                                  child: IgnorePointer(
+                                    child: Container(
+                                      height: 1,
+                                      color: const Color(0xCC56B6C2),
                                     ),
                                   ),
-                                if (_snapGuideY != null)
-                                  Positioned(
-                                    top: (_snapGuideY! * scale)
-                                        .clamp(0.0, size.height - 1),
-                                    left: 0,
-                                    right: 0,
-                                    child: IgnorePointer(
-                                      child: Container(
-                                        height: 1,
-                                        color: const Color(0xCC56B6C2),
-                                      ),
-                                    ),
-                                  ),
-                                for (final handle in handles)
-                                  _outline(
+                                ),
+                              for (final handle in handles)
+                                _outline(
+                                  handle,
+                                  size,
+                                  scale,
+                                  !handle.inherited &&
+                                      handle.index == widget.selected,
+                                ),
+                              for (final handle in handles)
+                                if (!handle.inherited &&
+                                    handle.index == widget.selected)
+                                  ..._subtitleTransformHandles(
                                     handle,
                                     size,
                                     scale,
-                                    !handle.inherited &&
-                                        handle.index == widget.selected,
                                   ),
-                                for (final handle in handles)
-                                  if (!handle.inherited &&
-                                      handle.index == widget.selected)
-                                    ..._subtitleTransformHandles(
-                                      handle,
-                                      size,
-                                      scale,
-                                    ),
-                                for (final handle in handles)
-                                  _handle(handle, handles, size, scale),
-                              ],
-                            ),
+                              for (final handle in handles)
+                                _handle(handle, handles, size, scale),
+                            ],
                           ),
                         ),
                       ),
                     ),
-                    _hudOverlay(handles),
-                    if (_loading)
-                      const Align(
-                        alignment: Alignment.topCenter,
-                        child: LinearProgressIndicator(minHeight: 2),
+                  ),
+                  _hudOverlay(handles),
+                  if (_loading)
+                    const Align(
+                      alignment: Alignment.topCenter,
+                      child: LinearProgressIndicator(minHeight: 2),
+                    ),
+                  if (!_loading && warnings.isNotEmpty)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: IconButton(
+                        tooltip: '舞台提示',
+                        color: Colors.amber,
+                        icon: const Icon(Icons.warning_amber),
+                        onPressed: () => widget.onIssues(warnings),
                       ),
-                    if (!_loading && warnings.isNotEmpty)
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        child: IconButton(
-                          tooltip: '舞台提示',
-                          color: Colors.amber,
-                          icon: const Icon(Icons.warning_amber),
-                          onPressed: () => widget.onIssues(warnings),
-                        ),
-                      ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
           ),
+        ),
       );
     },
   );

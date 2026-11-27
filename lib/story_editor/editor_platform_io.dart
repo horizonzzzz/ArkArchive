@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
@@ -9,10 +11,34 @@ import '../story_player/data/asset_package.dart';
 import 'editor_file_picker.dart';
 import 'editor_project.dart';
 
+Future<Uint8List> _encodeDraft(Map<String, Object> metadata) =>
+    Isolate.run(() => utf8.encode(jsonEncode(metadata)));
+
 class EditorStorage {
+  static final _validId = RegExp(r'^[a-f0-9]{32}$');
+  final _savedAssetKeys = <String>{};
   Future<Directory> get _root async {
     final support = await getApplicationSupportDirectory();
     return Directory('${support.path}/story-editor-v1').create(recursive: true);
+  }
+
+  Future<Directory> _assetsRoot(String id) async {
+    if (!_validId.hasMatch(id)) {
+      throw const FormatException('作品标识无效');
+    }
+    return Directory('${(await _root).path}/assets/$id')
+        .create(recursive: true);
+  }
+
+  Future<Uint8List?> _loadAsset(String key) async {
+    final parts = key.split('/');
+    if (parts.length != 2 ||
+        !_validId.hasMatch(parts.first) ||
+        !RegExp(r'^local_[a-f0-9]{64}$').hasMatch(parts.last)) {
+      return null;
+    }
+    final file = File('${(await _assetsRoot(parts.first)).path}/${parts.last}');
+    return await file.exists() ? file.readAsBytes() : null;
   }
 
   Future<List<EditorProject>> list() async {
@@ -29,7 +55,11 @@ class EditorStorage {
     for (final (file, _) in dated) {
       try {
         if (await file.length() <= maxProjectBytes) {
-          result.add(EditorProject.decode(await file.readAsBytes()));
+          final project = await EditorProject.decodeDraft(
+            await file.readAsBytes(),
+            _loadAsset,
+          );
+          result.add(await _restorePosition(project));
         }
       } on FormatException {
         // 保留损坏的文件，不阻止读取其他草稿。
@@ -38,8 +68,54 @@ class EditorStorage {
     return result;
   }
 
+  Future<EditorProject> _restorePosition(EditorProject project) async {
+    final file = File('${(await _root).path}/${project.id}.position');
+    try {
+      if (!await file.exists() || await file.length() > 1024) return project;
+      final data = jsonDecode(await file.readAsString());
+      if (data is Map &&
+          data['revision'] == project.updatedAt.toIso8601String()) {
+        return project.copyWith(
+          lastPosition: EditorPosition.fromJson(data['position']),
+          updatedAt: project.updatedAt,
+        );
+      }
+    } on FormatException {
+      // 忽略损坏的位置记录，仍可打开草稿。
+    } on FileSystemException {
+      // 游标是可选记录，读取失败不影响草稿。
+    }
+    return project;
+  }
+
+  Future<void> savePosition(
+    String id,
+    DateTime revision,
+    EditorPosition position,
+  ) async {
+    if (!_validId.hasMatch(id)) throw const FormatException('作品标识无效');
+    final file = File('${(await _root).path}/$id.position');
+    final temp = File('${file.path}.tmp');
+    await temp.writeAsString(
+      jsonEncode({
+        'revision': revision.toIso8601String(),
+        'position': position.toJson(),
+      }),
+    );
+    await temp.rename(file.path);
+  }
+
   Future<void> save(EditorProject project) async {
-    final bytes = project.export();
+    final assets = await _assetsRoot(project.id);
+    for (final asset in project.assets.values) {
+      final cacheKey = '${project.id}/${asset.key}';
+      if (_savedAssetKeys.contains(cacheKey)) continue;
+      final file = File('${assets.path}/${asset.key}');
+      await file.writeAsBytes(asset.bytes, flush: true);
+      _savedAssetKeys.add(cacheKey);
+    }
+    final metadata = project.toJson(inlineAssets: false);
+    final bytes = await _encodeDraft(metadata);
     final file = File('${(await _root).path}/${project.id}.json');
     final temp = File('${file.path}.tmp');
     await temp.writeAsBytes(bytes, flush: true);
@@ -47,8 +123,15 @@ class EditorStorage {
   }
 
   Future<void> delete(String id) async {
-    final file = File('${(await _root).path}/$id.json');
+    if (!_validId.hasMatch(id)) throw const FormatException('作品标识无效');
+    final root = await _root;
+    final file = File('${root.path}/$id.json');
     if (await file.exists()) await file.delete();
+    final position = File('${root.path}/$id.position');
+    if (await position.exists()) await position.delete();
+    final assets = Directory('${root.path}/assets/$id');
+    if (await assets.exists()) await assets.delete(recursive: true);
+    _savedAssetKeys.removeWhere((key) => key.startsWith('$id/'));
   }
 
   Future<EditorProject?> importProject() async {

@@ -157,6 +157,37 @@ void main() {
     expect(restored.derivedFrom, 'story/main.txt');
     expect(restored.updatedAt, project.updatedAt);
   });
+  test('draft keeps assets separate and verifies them when restored', () async {
+    final asset = EditorAsset.create(
+      'bg.png',
+      Uint8List.fromList([1, 2, 3]),
+      width: 16,
+      height: 9,
+    );
+    final project = EditorProject.create('草稿')
+        .copyWith(assets: {asset.key: asset});
+    final draft = project.encodeDraft();
+    final draftJson = utf8.decode(draft);
+
+    expect(draftJson, contains('"draftAssets":1'));
+    expect(draftJson, isNot(contains('"data"')));
+    expect(draftJson, isNot(contains('"script"')));
+
+    final restored = await EditorProject.decodeDraft(
+      draft,
+      (key) async => key == '${project.id}/${asset.key}' ? asset.bytes : null,
+    );
+    expect(restored.assets[asset.key]!.bytes, asset.bytes);
+    expect(
+      EditorProject.decode(project.export()).assets[asset.key]!.bytes,
+      asset.bytes,
+    );
+
+    await expectLater(
+      EditorProject.decodeDraft(draft, (_) async => Uint8List.fromList([9])),
+      throwsFormatException,
+    );
+  });
 
   test('立绘清除命令保留引擎识别的 char_empty 标记', () {
     const clear = EditCommand('charslot', {'slot': 'm', 'name': 'char_empty'});
@@ -165,5 +196,38 @@ void main() {
     expect(command.tag, 'charslot');
     expect(command.value('slot'), 'm');
     expect(command.value('name'), 'char_empty');
+  });
+  test('official imports split long stories into manageable scenes', () {
+    final script = StoryScript.parse(
+      List.generate(61, (i) => '[name="阿米娅"] 台词 $i').join('\n'),
+    );
+    final project = EditorProject.fromScript('长篇', script);
+
+    expect(project.scenes.map((scene) => scene.beats.length), [30, 30, 1]);
+    expect(project.compile().script.commands, hasLength(61));
+    expect(project.validateIssues(), isEmpty);
+  });
+  test('official import keeps command order when splitting on background', () {
+    final script = StoryScript.parse(
+      [
+        '[Background(image="room_a")]',
+        for (var i = 0; i < 8; i++) '[name="阿米娅"] 台词 $i',
+        '[Background(image="room_b")]',
+        '[name="阿米娅"] 新背景',
+      ].join('\n'),
+    );
+    final project = EditorProject.fromScript('背景切换', script);
+
+    expect(project.scenes.map((scene) => scene.beats.length), [8, 1]);
+    expect(
+      project.compile().script.commands.map(
+        (command) => (command.tag, command.value('image'), command.text),
+      ),
+      orderedEquals(
+        script.commands.map(
+          (command) => (command.tag, command.value('image'), command.text),
+        ),
+      ),
+    );
   });
 }

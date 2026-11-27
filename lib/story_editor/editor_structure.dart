@@ -130,18 +130,50 @@ class EditorStructureTree extends StatefulWidget {
 }
 
 class _EditorStructureTreeState extends State<EditorStructureTree> {
-  final Set<int> _collapsedScenes = {};
+  final Map<int, bool> _expansion = {};
   bool _onlyMarked = false;
+  List<EditorIssue>? _indexedIssues;
+  final _sceneWarnings = <int, int>{};
+  final _beatWarnings = <(int, int), int>{};
 
-  int _warningsForScene(int si) =>
-      widget.issues.where((i) => i.sceneIndex == si).length;
+  bool _expanded(int scene) => _expansion[scene] ?? scene == widget.activeScene;
 
-  int _warningsForBeat(int si, int bi) => widget.issues
-      .where((i) => i.sceneIndex == si && i.beatIndex == bi)
-      .length;
+  @override
+  void didUpdateWidget(EditorStructureTree oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.project.id != widget.project.id ||
+        oldWidget.activeScene != widget.activeScene) {
+      _expansion.clear();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (!identical(_indexedIssues, widget.issues)) {
+      _indexedIssues = widget.issues;
+      _sceneWarnings.clear();
+      _beatWarnings.clear();
+      for (final issue in widget.issues) {
+        _sceneWarnings.update(
+          issue.sceneIndex,
+          (n) => n + 1,
+          ifAbsent: () => 1,
+        );
+        _beatWarnings.update(
+          (issue.sceneIndex, issue.beatIndex),
+          (n) => n + 1,
+          ifAbsent: () => 1,
+        );
+      }
+    }
+    final rows = <(int, int)>[
+      for (final (si, scene) in widget.project.scenes.indexed) ...[
+        (si, -1),
+        if (_expanded(si))
+          for (final (bi, beat) in scene.beats.indexed)
+            if (!_onlyMarked || beat.marker.isNotEmpty) (si, bi),
+      ],
+    ];
     final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -187,12 +219,18 @@ class _EditorStructureTreeState extends State<EditorStructureTree> {
         ),
         const Divider(height: 1),
         Expanded(
-          child: ListView(
+          child: ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 4),
-            children: [
-              for (var si = 0; si < widget.project.scenes.length; si++)
-                _buildSceneNode(context, si, scheme),
-            ],
+            itemCount: rows.length,
+            itemBuilder: (context, index) {
+              final (si, bi) = rows[index];
+              return KeyedSubtree(
+                key: ValueKey((si, bi)),
+                child: bi < 0
+                    ? _buildSceneNode(context, si, scheme)
+                    : _buildBeatNode(context, si, bi, scheme),
+              );
+            },
           ),
         ),
         Container(
@@ -212,134 +250,114 @@ class _EditorStructureTreeState extends State<EditorStructureTree> {
 
   Widget _buildSceneNode(BuildContext context, int si, ColorScheme scheme) {
     final scene = widget.project.scenes[si];
-    final collapsed = _collapsedScenes.contains(si);
-    final sceneWarnings = _warningsForScene(si);
+    final collapsed = !_expanded(si);
+    final sceneWarnings = _sceneWarnings[si] ?? 0;
     final markerColor = Color(
       editorMarkerColors[scene.marker.color] ?? 0xFFA5C7D5,
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        DragTarget<({int scene, int beat})>(
-          onAcceptWithDetails: (d) =>
-              widget.onMoveBeat(d.data, si, scene.beats.length),
-          builder: (context, candidate, _) => Container(
-            color: candidate.isNotEmpty
-                ? scheme.primaryContainer.withValues(alpha: 0.25)
-                : null,
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            child: Row(
-              children: [
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  iconSize: 16,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 24,
-                    minHeight: 24,
-                  ),
-                  onPressed: () => setState(() {
-                    if (!_collapsedScenes.remove(si)) {
-                      _collapsedScenes.add(si);
-                    }
-                  }),
-                  icon: Icon(
-                    collapsed ? Icons.chevron_right : Icons.expand_more,
-                  ),
-                ),
-                Container(
-                  width: 8,
-                  height: 8,
-                  margin: const EdgeInsets.only(right: 5),
-                  decoration: BoxDecoration(
-                    color: markerColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => widget.onSelectBeat(si, 0),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            scene.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelMedium
-                                ?.copyWith(
-                                  fontWeight: si == widget.activeScene
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                ),
-                          ),
-                          Text(
-                            '${scene.beats.length} 镜 · ${formatEstimatedDuration(scene.estimatedSeconds)}'
-                            '${sceneWarnings > 0 ? ' · !$sceneWarnings' : ''}',
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  fontSize: 10,
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                          ),
-                        ],
+    return DragTarget<({int scene, int beat})>(
+      onAcceptWithDetails: (d) =>
+          widget.onMoveBeat(d.data, si, scene.beats.length),
+      builder: (context, candidate, _) => Container(
+        color: candidate.isNotEmpty
+            ? scheme.primaryContainer.withValues(alpha: 0.25)
+            : null,
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Row(
+          children: [
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              iconSize: 16,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+              onPressed: () => setState(() {
+                _expansion[si] = collapsed;
+              }),
+              icon: Icon(collapsed ? Icons.chevron_right : Icons.expand_more),
+            ),
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(right: 5),
+              decoration: BoxDecoration(
+                color: markerColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+            Expanded(
+              child: InkWell(
+                onTap: () => widget.onSelectBeat(si, 0),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        scene.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              fontWeight: si == widget.activeScene
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
                       ),
-                    ),
+                      Text(
+                        '${scene.beats.length} 镜 · ${formatEstimatedDuration(scene.estimatedSeconds)}'
+                        '${sceneWarnings > 0 ? ' · !$sceneWarnings' : ''}',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          fontSize: 10,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                PopupMenuButton<String>(
-                  tooltip: '幕操作 ${si + 1}',
-                  iconSize: 16,
-                  padding: EdgeInsets.zero,
-                  onSelected: (action) {
-                    if (action == 'mark') {
-                      widget.onMarkScene(si);
-                    } else {
-                      widget.onSceneAction(si, action);
-                    }
-                  },
-                  itemBuilder: (_) => [
-                    const ArchivePopupMenuItem(
-                      value: 'add_beat',
-                      child: Text('新建分镜'),
-                    ),
-                    const ArchivePopupMenuItem(
-                      value: 'rename',
-                      child: Text('重命名幕'),
-                    ),
-                    const ArchivePopupMenuItem(
-                      value: 'mark',
-                      child: Text('标记与备注'),
-                    ),
-                    ArchivePopupMenuItem(
-                      value: 'up',
-                      enabled: si > 0,
-                      child: const Text('上移幕'),
-                    ),
-                    ArchivePopupMenuItem(
-                      value: 'down',
-                      enabled: si + 1 < widget.project.scenes.length,
-                      child: const Text('下移幕'),
-                    ),
-                    ArchivePopupMenuItem(
-                      value: 'delete',
-                      enabled: widget.project.scenes.length > 1,
-                      child: const Text('删除幕'),
-                    ),
-                  ],
+              ),
+            ),
+            PopupMenuButton<String>(
+              tooltip: '幕操作 ${si + 1}',
+              iconSize: 16,
+              padding: EdgeInsets.zero,
+              onSelected: (action) {
+                if (action == 'mark') {
+                  widget.onMarkScene(si);
+                } else {
+                  widget.onSceneAction(si, action);
+                }
+              },
+              itemBuilder: (_) => [
+                const ArchivePopupMenuItem(
+                  value: 'add_beat',
+                  child: Text('新建分镜'),
+                ),
+                const ArchivePopupMenuItem(
+                  value: 'rename',
+                  child: Text('重命名幕'),
+                ),
+                const ArchivePopupMenuItem(value: 'mark', child: Text('标记与备注')),
+                ArchivePopupMenuItem(
+                  value: 'up',
+                  enabled: si > 0,
+                  child: const Text('上移幕'),
+                ),
+                ArchivePopupMenuItem(
+                  value: 'down',
+                  enabled: si + 1 < widget.project.scenes.length,
+                  child: const Text('下移幕'),
+                ),
+                ArchivePopupMenuItem(
+                  value: 'delete',
+                  enabled: widget.project.scenes.length > 1,
+                  child: const Text('删除幕'),
                 ),
               ],
             ),
-          ),
+          ],
         ),
-        if (!collapsed)
-          for (var bi = 0; bi < scene.beats.length; bi++)
-            if (!_onlyMarked || scene.beats[bi].marker.isNotEmpty)
-              _buildBeatNode(context, si, bi, scheme),
-      ],
+      ),
     );
   }
 
@@ -351,7 +369,7 @@ class _EditorStructureTreeState extends State<EditorStructureTree> {
   ) {
     final beat = widget.project.scenes[si].beats[bi];
     final selected = si == widget.activeScene && bi == widget.activeBeat;
-    final warnings = _warningsForBeat(si, bi);
+    final warnings = _beatWarnings[(si, bi)] ?? 0;
     final markerColor = Color(
       editorMarkerColors[beat.marker.color] ?? 0xFFA5C7D5,
     );

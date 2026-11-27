@@ -36,6 +36,24 @@ EditorProject _stageProject() => EditorProject.create('播放头验证').copyWit
   ],
 );
 
+EditorProject _twoBeatStageProject({bool withBranch = false}) {
+  final project = _stageProject();
+  return project.copyWith(
+    scenes: [
+      EditorScene('第一幕', [
+        ...project.scenes.first.beats,
+        StoryBeat('分镜 2', [
+          if (withBranch)
+            const EditCommand('decision', {'options': '继续', 'values': '1'})
+          else
+            const EditCommand('subtitle', {'text': '新字幕', 'y': '180'}),
+          EditCommand('dialogue', {'name': '阿米娅', 'text': '第二幕台词'}),
+        ]),
+      ]),
+    ],
+  );
+}
+
 Future<EditorProject> _open(WidgetTester tester, EditorProject project) async {
   final storage = _Drafts()..projects[project.id] = project;
   await tester.pumpWidget(
@@ -74,6 +92,37 @@ void main() {
     await tester.tap(find.byTooltip('撤销'));
     await tester.pumpAndSettle();
     expect(_engineOf(tester).state.subtitle?.text, '终章');
+  });
+  testWidgets('切换分镜后返回复用静态舞台快照', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await _open(tester, _twoBeatStageProject(withBranch: true));
+    final firstEngine = _engineOf(tester);
+
+    await tester.tap(find.byKey(const ValueKey(('tree-beat', 0, 1))));
+    await tester.pumpAndSettle();
+    expect(_engineOf(tester), isNot(same(firstEngine)));
+
+    await tester.tap(find.byKey(const ValueKey(('tree-beat', 0, 0))));
+    await tester.pumpAndSettle();
+    expect(_engineOf(tester), same(firstEngine));
+  });
+
+  testWidgets('向前切换含字幕与对白的分镜时从已有舞台继续重放', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await _open(tester, _twoBeatStageProject());
+    final engine = _engineOf(tester);
+    final state = engine.state;
+
+    await tester.tap(find.byKey(const ValueKey(('tree-beat', 0, 1))));
+    await tester.pumpAndSettle();
+
+    expect(_engineOf(tester), same(engine));
+    expect(engine.state, same(state));
+    expect(engine.state.subtitle?.text, '新字幕');
+    expect(engine.state.text, '第二幕台词');
+    expect(engine.state.revealed, engine.totalCharacters);
   });
 
   testWidgets('全部分支禁用时结束播放并提示', (tester) async {
@@ -159,7 +208,7 @@ void main() {
     expect(engine.state.speaker, '凯尔希');
   });
 
-  testWidgets('参数变化重建生效：改字幕坐标重放后应用新值', (tester) async {
+  testWidgets('舞台参数就地同步：改字幕坐标不重建引擎', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1440, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await _open(tester, _stageProject());
@@ -175,6 +224,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_engineOf(tester).state.subtitle?.y, 260);
+    expect(identical(_engineOf(tester), engine), isTrue);
   });
 
   testWidgets('传输条：播放沿句推进、句级跳转、末态与位置标签', (tester) async {
@@ -637,5 +687,58 @@ void main() {
     // WidgetTester 使用虚拟时间，记录墙钟耗时供诊断；真实延迟须在 release 环境测量。
     debugPrint('500 指令实际定位测试耗时：${watch.elapsedMilliseconds}ms');
     expect(_engineOf(tester).cursor, 500);
+  });
+  testWidgets('剧本台逐行缓存输入，确认后提交', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final project = _stageProject();
+    final storage = _Drafts()..projects[project.id] = project;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StoryEditorPage(storage: storage, store: AssetStore()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('剧本台').last);
+    await tester.pumpAndSettle();
+    final cells = find.byWidgetPredicate((widget) {
+      return switch (widget.key) {
+        ValueKey(value: ('script-cell', String _, false)) => true,
+        _ => false,
+      };
+    });
+    expect(find.byType(TextFormField), findsNothing);
+    await tester.tap(cells.last);
+    await tester.pumpAndSettle();
+    expect(find.byType(TextFormField), findsOneWidget);
+    final lastField = find.byType(TextFormField).last;
+    await tester.enterText(lastField, '已提交台词');
+    expect(
+      storage.projects.values.single.compile().script.commands.any(
+        (command) => command.text == '已提交台词',
+      ),
+      isFalse,
+    );
+
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(
+      storage.projects.values.single.compile().script.commands.any(
+        (command) => command.text == '已提交台词',
+      ),
+      isTrue,
+    );
+
+    await tester.tap(cells.last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), '切换后保留台词');
+    await tester.tap(find.text('演出台').last);
+    await tester.pumpAndSettle();
+    expect(
+      storage.projects.values.single.compile().script.commands.last.text,
+      '切换后保留台词',
+    );
   });
 }

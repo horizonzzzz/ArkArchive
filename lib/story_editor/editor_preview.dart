@@ -237,21 +237,22 @@ class EditorPreviewResources {
         local[u]?.bytes ?? await store.loadTransient(u);
     final textures = <Uri, ui.Image>{};
     final imageRefs = <Uri, Set<String>>{};
-    for (final c in script.commands) {
-      final refs = catalog.collect(StoryScript([c]), warnings);
-      for (final ref in refs) {
-        if ({
+    catalog.collect(
+      script,
+      warnings,
+      onReference: (line, ref) {
+        if (const {
           AssetKind.music,
           AssetKind.sfx,
           AssetKind.video,
         }.contains(ref.kind)) {
-          continue;
+          return;
         }
-        for (final f in ref.files) {
-          (imageRefs[f.uri] ??= {}).add(locations[c.line] ?? '第 ${c.line} 行');
+        for (final file in ref.files) {
+          (imageRefs[file.uri] ??= {}).add(locations[line] ?? '第 $line 行');
         }
-      }
-    }
+      },
+    );
     final entries = imageRefs.entries.toList();
     for (var i = 0; i < entries.length && active() && !_closed; i += 6) {
       await Future.wait(

@@ -72,17 +72,17 @@ class EditorAsset {
   String get mime => (imageFormats[extension] ?? audioFormats[extension])!;
   Uri get uri => Uri(scheme: 'editor-asset', path: '/$key.$extension');
 
-  Map<String, Object> toJson() => {
+  Map<String, Object> toJson({bool inline = true}) => {
     'key': key,
     'name': name,
     'width': width,
     'height': height,
-    'data': base64Encode(bytes),
+    if (inline) 'data': base64Encode(bytes),
   };
-  static EditorAsset fromJson(Map<String, dynamic> json) {
+  static EditorAsset fromJson(Map<String, dynamic> json, {Uint8List? bytes}) {
     final asset = EditorAsset.create(
       json['name'] as String,
-      base64Decode(json['data'] as String),
+      bytes ?? base64Decode(json['data'] as String),
       width: json['width'] as int,
       height: json['height'] as int,
     );
@@ -101,9 +101,38 @@ class EditCommand {
   EditCommand withArgs(Map<String, String> changes) =>
       EditCommand(tag, {...args, ...changes}, raw);
 
+  static final _sources = Expando<String>();
   String get source =>
       raw ??
-      '[$tag(${args.entries.map((e) => '${e.key}=${_quote(e.value)}').join(', ')})]';
+      (_sources[this] ??=
+          '[$tag(${args.entries.map((e) => '${e.key}=${_quote(e.value)}').join(', ')})]');
+
+  static final _identifier = RegExp(r'^[a-zA-Z_][a-zA-Z_0-9]*$');
+
+  StoryCommand _compile(String source, int line, String location) {
+    if (raw == null &&
+        _identifier.hasMatch(tag) &&
+        args.keys.every(_identifier.hasMatch) &&
+        !source.contains('\uFEFF')) {
+      final normalized = Map<String, String>.unmodifiable({
+        for (final entry in args.entries) entry.key.toLowerCase(): entry.value,
+      });
+      final name = tag.toLowerCase();
+      return StoryCommand(
+        name,
+        normalized,
+        name == 'dialogue' ? normalized['text'] ?? '' : '',
+        line,
+        source,
+      );
+    }
+    final parsed = StoryScript.parse(source).commands;
+    if (parsed.length != 1) {
+      throw FormatException('$location：每项必须对应一条脚本指令');
+    }
+    final c = parsed.single;
+    return StoryCommand(c.tag, c.args, c.text, line + c.line - 1, c.raw);
+  }
 
   static String _quote(String value) =>
       '"${value.replaceAll(r'\', r'\\').replaceAll('"', r'\"').replaceAll('\r', r'\r').replaceAll('\n', r'\n').replaceAll('\t', r'\t')}"';
@@ -204,6 +233,11 @@ class EditorPosition {
   }
 }
 
+class _Duration {
+  const _Duration(this.value);
+  final double value;
+}
+
 class StoryBeat {
   const StoryBeat(
     this.title, [
@@ -225,13 +259,10 @@ class StoryBeat {
   );
 
   /// 估算该分镜演出时长（秒），用于编排台、结构树与台本时间轴。
-  double get estimatedSeconds {
-    var total = 0.0;
-    for (final c in commands) {
-      total += estimateCommandSeconds(c);
-    }
-    return total;
-  }
+  static final _durations = Expando<_Duration>();
+  double get estimatedSeconds => (_durations[this] ??= _Duration(
+    commands.fold(0.0, (sum, c) => sum + estimateCommandSeconds(c)),
+  )).value;
 
   /// 分镜内首句可读文案（对白/舞台文字），无则返回空字符串。
   String get leadLine {
@@ -347,9 +378,12 @@ class EditorScene {
     marker ?? this.marker,
   );
 
-  double get estimatedSeconds =>
-      beats.fold(0.0, (sum, b) => sum + b.estimatedSeconds);
+  static final _durations = Expando<_Duration>();
+  double get estimatedSeconds => (_durations[this] ??= _Duration(
+    beats.fold(0.0, (sum, b) => sum + b.estimatedSeconds),
+  )).value;
 }
+
 class EditorProject {
   EditorProject({
     required this.id,
@@ -375,10 +409,12 @@ class EditorProject {
   final String? derivedFrom;
   final EditorPosition? lastPosition;
 
-  double get estimatedSeconds =>
-      scenes.fold(0.0, (sum, s) => sum + s.estimatedSeconds);
+  late final double estimatedSeconds = scenes.fold(
+    0.0,
+    (sum, s) => sum + s.estimatedSeconds,
+  );
 
-  int get beatCount => scenes.fold(0, (sum, s) => sum + s.beats.length);
+  late final int beatCount = scenes.fold(0, (sum, s) => sum + s.beats.length);
 
   EditorProject copyWith({
     String? id,
@@ -477,16 +513,34 @@ class EditorProject {
       for (final entry in {
         for (final item in issues)
           '${item.sceneIndex}:${item.beatIndex}:${item.commandIndex}'
-              '\u0001${item.message}': item,
+                  '\u0001${item.message}':
+              item,
       }.values)
         entry,
     ];
   }
 
-  List<String> validate() =>
-      [for (final item in validateIssues()) item.message];
+  List<String> validate() => [
+    for (final item in validateIssues()) item.message,
+  ];
 
-  CompiledProject compile() {
+  late final _compilation = _tryCompile();
+
+  CompiledProject compile() => switch (_compilation) {
+    final CompiledProject compiled => compiled,
+    final FormatException error => throw error,
+    _ => throw StateError('编译结果无效'),
+  };
+
+  Object _tryCompile() {
+    try {
+      return _compile();
+    } on FormatException catch (error) {
+      return error;
+    }
+  }
+
+  CompiledProject _compile() {
     final source = StringBuffer();
     final commands = <StoryCommand>[];
     final ranges = <(int, int), (int, int)>{};
@@ -498,17 +552,12 @@ class EditorProject {
         for (final (i, command) in beat.commands.indexed) {
           final location = '${scene.title} / ${beat.title} / 指令 ${i + 1}';
           final raw = command.source;
-          final parsed = StoryScript.parse(raw).commands;
-          if (parsed.length != 1) {
-            throw FormatException('$location：每项必须对应一条脚本指令');
-          }
-          final c = parsed.single;
-          commands.add(
-            StoryCommand(c.tag, c.args, c.text, line + c.line - 1, c.raw),
-          );
+          commands.add(command._compile(raw, line, location));
           locations.add(location);
           source.writeln(raw);
-          line += const LineSplitter().convert(raw).length;
+          line += command.raw == null && !raw.contains(RegExp(r'[\r\n]'))
+              ? 1
+              : const LineSplitter().convert(raw).length;
         }
         ranges[(s, b)] = (start, commands.length);
       }
@@ -516,13 +565,14 @@ class EditorProject {
     return CompiledProject(
       source.toString(),
       StoryScript(List.unmodifiable(commands)),
-      ranges,
-      locations,
+      Map.unmodifiable(ranges),
+      List.unmodifiable(locations),
     );
   }
 
-  Map<String, Object> toJson() => {
+  Map<String, Object> toJson({bool inlineAssets = true}) => {
     'version': 1,
+    if (!inlineAssets) 'draftAssets': 1,
     'id': id,
     'title': title,
     'scenes': [
@@ -540,7 +590,9 @@ class EditorProject {
           ],
         },
     ],
-    'assets': [for (final asset in assets.values) asset.toJson()],
+    'assets': [
+      for (final asset in assets.values) asset.toJson(inline: inlineAssets),
+    ],
     'updatedAt': updatedAt.toIso8601String(),
     // ignore: use_null_aware_elements
     if (derivedFrom != null) 'derivedFrom': derivedFrom!,
@@ -551,12 +603,65 @@ class EditorProject {
   Uint8List export() =>
       utf8.encode(jsonEncode({...toJson(), 'script': compile().source}));
 
+  Uint8List encodeDraft() =>
+      utf8.encode(jsonEncode(toJson(inlineAssets: false)));
+
+  static final _assetKey = RegExp(r'^local_[a-f0-9]{64}$');
+
+  static Future<EditorProject> decodeDraft(
+    Uint8List bytes,
+    Future<Uint8List?> Function(String key) loadAsset,
+  ) async {
+    if (bytes.length > maxProjectBytes) {
+      throw const FormatException('作品文件超过 96 MB');
+    }
+    final data = jsonDecode(utf8.decode(bytes));
+    if (data is! Map<String, dynamic> || data['draftAssets'] != 1) {
+      return decode(bytes);
+    }
+    final draftId = data['id'];
+    if (draftId is! String || !RegExp(r'^[a-f0-9]{32}$').hasMatch(draftId)) {
+      throw const FormatException('草稿标识无效');
+    }
+    final assets = data['assets'];
+    if (assets is! List) throw const FormatException('草稿素材列表无效');
+    final blobs = <String, Uint8List>{};
+    var totalBytes = bytes.length;
+    for (final value in assets) {
+      if (value is! Map<String, dynamic>) {
+        throw const FormatException('草稿素材结构无效');
+      }
+      final key = value['key'];
+      if (key is! String || !_assetKey.hasMatch(key)) {
+        throw const FormatException('草稿素材标识无效');
+      }
+      final blob = await loadAsset('$draftId/$key');
+      if (blob == null ||
+          blob.length > maxAssetBytes ||
+          (totalBytes += blob.length) > maxProjectBytes) {
+        throw FormatException('草稿素材缺失或超过体积限制：$key');
+      }
+      blobs[key] = blob;
+    }
+    return _decodeJson(data, blobs: blobs);
+  }
+
   static EditorProject decode(Uint8List bytes) {
     if (bytes.length > maxProjectBytes) {
       throw const FormatException('作品文件超过 96 MB');
     }
+    final data = jsonDecode(utf8.decode(bytes));
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException('作品文件结构无效');
+    }
+    return _decodeJson(data);
+  }
+
+  static EditorProject _decodeJson(
+    Map<String, dynamic> data, {
+    Map<String, Uint8List> blobs = const {},
+  }) {
     try {
-      final data = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
       if (data['version'] != 1) throw const FormatException('不支持的作品版本');
       final id = data['id'] as String;
       if (!RegExp(r'^[a-f0-9]{32}$').hasMatch(id)) {
@@ -564,7 +669,11 @@ class EditorProject {
       }
       final assets = <String, EditorAsset>{};
       for (final value in data['assets'] as List) {
-        final asset = EditorAsset.fromJson(value as Map<String, dynamic>);
+        final assetData = value as Map<String, dynamic>;
+        final asset = EditorAsset.fromJson(
+          assetData,
+          bytes: blobs[assetData['key']],
+        );
         if (assets.containsKey(asset.key)) {
           throw const FormatException('作品包含重复素材');
         }
@@ -623,16 +732,37 @@ class EditorProject {
 
   static EditorProject fromScript(String title, StoryScript script) {
     final beats = <StoryBeat>[];
+    final scenes = <EditorScene>[];
     var commands = <EditCommand>[];
+    void flushScene() {
+      if (beats.isEmpty) return;
+      scenes.add(
+        EditorScene('第 ${scenes.length + 1} 段', List.unmodifiable(beats)),
+      );
+      beats.clear();
+    }
+
+    String? background;
     void flush() {
       if (commands.isEmpty) return;
       beats.add(StoryBeat('分镜 ${beats.length + 1}', commands));
       commands = [];
+      if (beats.length == 30) flushScene();
     }
 
     for (final command in script.commands) {
+      if (command.tag == 'background' && command.value('image').isNotEmpty) {
+        final next = command.value('image');
+        if (background != null &&
+            next != background &&
+            beats.length >= 8 &&
+            commands.isEmpty) {
+          flushScene();
+        }
+        background = next;
+      }
       commands.add(EditCommand.fromScript(command));
-      if ([
+      if (const [
         'dialogue',
         'dialog',
         'aside',
@@ -643,11 +773,12 @@ class EditorProject {
       }
     }
     flush();
-    return EditorProject.create(title).copyWith(
-      scenes: [
-        EditorScene('第一幕', beats.isEmpty ? const [StoryBeat('分镜 1')] : beats),
-      ],
-    );
+    flushScene();
+    if (scenes.isEmpty) {
+      scenes.add(const EditorScene('第 1 段', [StoryBeat('分镜 1')]));
+    }
+    return EditorProject.create(title)
+        .copyWith(scenes: List.unmodifiable(scenes));
   }
 }
 
@@ -840,10 +971,7 @@ class ScriptRowRef {
 }
 
 /// 收集作品中所有对白与舞台文字行（可按幕过滤）。
-List<ScriptRowRef> collectScriptRows(
-  EditorProject project, {
-  int? sceneIndex,
-}) {
+List<ScriptRowRef> collectScriptRows(EditorProject project, {int? sceneIndex}) {
   final rows = <ScriptRowRef>[];
   for (final (s, scene) in project.scenes.indexed) {
     if (sceneIndex != null && s != sceneIndex) continue;
@@ -908,7 +1036,9 @@ String _csvCell(String value) {
 
 /// 导出 UTF-8 CSV 表格台本（含 BOM 便于 Excel 直接打开）。
 String exportScriptCsv(EditorProject project, {int? sceneIndex}) {
-  final buf = StringBuffer('${String.fromCharCode(0xFEFF)}幕,分镜,序号,类型,说话人,台词\r\n');
+  final buf = StringBuffer(
+    '${String.fromCharCode(0xFEFF)}幕,分镜,序号,类型,说话人,台词\r\n',
+  );
   for (final row in collectScriptRows(project, sceneIndex: sceneIndex)) {
     final fields = [
       row.sceneTitle,

@@ -130,11 +130,16 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   final _redo = <_Selection>[];
   final _navBack = <EditorPosition>[];
   final _navForward = <EditorPosition>[];
+  final _positions = <String, EditorPosition>{};
+  EditorPosition get _position =>
+      EditorPosition(scene: _scene, beat: _beat, command: _command);
+  Timer? _validationTimer;
   final _drafts = <String, EditorProject>{};
   final _batchSpeakerController = TextEditingController();
   Timer? _saveTimer;
   Future<void> _writes = Future.value();
   EditorProject? _pending;
+  (String, DateTime, EditorPosition)? _pendingPosition;
   EditorProject? _failedSave;
   String _status = '';
   bool _busy = false;
@@ -143,6 +148,14 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   bool _playing = false, _loop = false;
   int _speed = 1;
   _EditorWorkspace _workspace = _EditorWorkspace.stage;
+  final _stageKey = GlobalKey();
+
+  void _selectWorkspace(_EditorWorkspace target) {
+    _scriptKey.currentState?.commitPendingEdits();
+    setState(() => _workspace = target);
+  }
+
+  final _scriptKey = GlobalKey<EditorScriptViewState>();
   late final _resources = EditorPreviewResources(widget.store);
   EditorProject get project => _project!;
   EditorScene get scene => project.scenes[_scene];
@@ -150,31 +163,20 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   EditCommand? get command => _command < 0 ? null : beat.commands[_command];
   _Selection get _selection => (project, _scene, _beat, _command);
 
-  /// 编译缓存：播放头/停顿点计算高频使用，避免每次点击重新解析全脚本。
-  EditorProject? _compiledProject;
-  CompiledProject? _compiledCache;
-  CompiledProject? get _compiled {
-    final current = _project;
-    if (current == null) return null;
-    if (!identical(_compiledProject, current)) {
-      _compiledProject = current;
-      try {
-        _compiledCache = current.compile();
-      } on FormatException {
-        _compiledCache = null;
+  List<EditorIssue> _validationCache = const [];
+
+  void _scheduleValidation(EditorProject current) {
+    _validationTimer?.cancel();
+    _validationTimer = Timer(const Duration(milliseconds: 500), () {
+      if (mounted && identical(_project, current)) {
+        setState(() => _validateNow(current));
       }
-    }
-    return _compiledCache;
+    });
   }
 
-  EditorProject? _validationProject;
-  List<EditorIssue>? _validationCache;
-  List<EditorIssue> _validatedIssues(EditorProject current) {
-    if (!identical(_validationProject, current)) {
-      _validationProject = current;
-      _validationCache = current.validateIssues();
-    }
-    return _validationCache!;
+  List<EditorIssue> _validateNow(EditorProject current) {
+    _validationTimer?.cancel();
+    return _validationCache = current.validateIssues();
   }
 
   @override
@@ -220,9 +222,10 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   void _toast(String text) => _message(text);
 
   void _open(EditorProject next, {bool save = false}) {
+    _scriptKey.currentState?.commitPendingEdits();
     _flush();
     // P1-4：重开作品恢复上次停留的幕/分镜/指令位置。
-    final pos = next.lastPosition;
+    final pos = _positions[next.id] ?? next.lastPosition;
     var s = 0, b = 0, c = -1;
     if (pos != null && next.scenes.isNotEmpty) {
       s = pos.scene.clamp(0, next.scenes.length - 1);
@@ -243,9 +246,11 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       _navBack.clear();
       _navForward.clear();
       _workspace = _EditorWorkspace.stage;
+      _validationCache = const [];
       _status = save ? '待保存' : '本地草稿';
     });
     if (save) _queueSave(next);
+    _scheduleValidation(next);
   }
 
   void _restore(_Selection value) {
@@ -278,15 +283,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     final targetScene = sceneIndex ?? _scene;
     final targetBeat = beatIndex ?? _beat;
     final targetCmd = selected ?? _command;
-    final withPos = next.copyWith(
-      lastPosition: EditorPosition(
-        scene: targetScene,
-        beat: targetBeat,
-        command: targetCmd,
-      ),
-    );
     setState(() {
-      _project = withPos;
+      _project = next;
       _scene = targetScene;
       _beat = targetBeat;
       _command = targetCmd;
@@ -300,15 +298,15 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           ..addAll(targetCmd >= 0 ? [targetCmd] : const []);
         _selectionAnchor = targetCmd >= 0 ? targetCmd : null;
       } else {
-        final len =
-            withPos.scenes[targetScene].beats[targetBeat].commands.length;
+        final len = next.scenes[targetScene].beats[targetBeat].commands.length;
         _selectedCommands.removeWhere((i) => i < 0 || i >= len);
         if (_command >= len) _command = len - 1;
       }
       if (typing == null) _formVersion++;
       _typing = typing;
     });
-    _queueSave(withPos);
+    _queueSave(next);
+    _scheduleValidation(next);
   }
 
   void _history({required bool redo}) {
@@ -318,9 +316,11 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     to.add(_selection);
     setState(() => _restore(from.removeLast()));
     _queueSave(project);
+    _scheduleValidation(project);
   }
 
   void _queueSave(EditorProject next) {
+    _positions[next.id] = _position;
     _drafts[next.id] = next;
     _pending = next;
     _status = '待保存';
@@ -332,12 +332,31 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   void _flush() {
     _saveTimer?.cancel();
     final snapshot = _pending;
+    final navigation = _pendingPosition;
+    _pendingPosition = null;
+    if (snapshot == null && navigation != null) {
+      final (id, revision, position) = navigation;
+      final storage = widget.storage;
+      _writes = _writes.then((_) async {
+        try {
+          await storage.savePosition(id, revision, position);
+        } catch (_) {
+          // 导航位置可从上次完整草稿恢复，失败不影响内容保存。
+        }
+      });
+      return;
+    }
+    final position = _positions[snapshot?.id];
+    final stored = snapshot?.copyWith(
+      lastPosition: position,
+      updatedAt: snapshot.updatedAt,
+    );
     _pending = null;
-    if (snapshot == null) return;
+    if (snapshot == null || stored == null) return;
     final storage = widget.storage;
     _writes = _writes.then((_) async {
       try {
-        await storage.save(snapshot);
+        await storage.save(stored);
         if (mounted && identical(_project, snapshot)) {
           final now = DateTime.now();
           setState(
@@ -370,6 +389,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   @override
   void dispose() {
     _flush();
+    _validationTimer?.cancel();
     _batchSpeakerController.dispose();
     _resources.dispose();
     super.dispose();
@@ -407,6 +427,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   }
 
   Future<void> _projects() async {
+    _scriptKey.currentState?.commitPendingEdits();
     _flush();
     final selection = await showDialog<String>(
       context: context,
@@ -565,9 +586,10 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   }
 
   Future<void> _export({required bool scriptOnly}) async {
+    _scriptKey.currentState?.commitPendingEdits();
     try {
       final current = project;
-      final issues = _validatedIssues(current);
+      final issues = _validateNow(current);
       if (issues.isNotEmpty) {
         final outcome = await _issues(issues, title: '作品检查', allowExport: true);
         if (!mounted || !outcome.proceed) return;
@@ -655,6 +677,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     bool recordHistory = true,
     _EditorWorkspace? workspace,
   }) {
+    _scriptKey.currentState?.commitPendingEdits();
     if (sceneIndex < 0 || sceneIndex >= project.scenes.length) return;
     final targetBeats = project.scenes[sceneIndex].beats;
     if (beatIndex < 0 || beatIndex >= targetBeats.length) return;
@@ -672,15 +695,15 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       beat: beatIndex,
       command: clampedCmd,
     );
-    if (recordHistory && current != nextPos) {
+    if (recordHistory &&
+        (current.scene != nextPos.scene ||
+            current.beat != nextPos.beat ||
+            current.command != nextPos.command)) {
       _navBack.add(current);
       if (_navBack.length > 50) _navBack.removeAt(0);
       _navForward.clear();
     }
-    final nextProject = project.copyWith(lastPosition: nextPos);
     setState(() {
-      _project = nextProject;
-      _drafts[nextProject.id] = nextProject;
       _scene = sceneIndex;
       _beat = beatIndex;
       _command = clampedCmd;
@@ -693,7 +716,11 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       _formVersion++;
       if (workspace != null) _workspace = workspace;
     });
-    _queueSave(nextProject);
+    final currentProject = project;
+    _positions[currentProject.id] = nextPos;
+    _pendingPosition = (currentProject.id, currentProject.updatedAt, nextPos);
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 450), _flush);
   }
 
   void _stepNavHistory(int delta) {
@@ -780,20 +807,13 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
 
   // —— 播放头与传输控制（P0-1 / P0-2）——
 
-  /// 分镜内停顿点（对白/旁白/选项）的全局指令索引，与引擎口径一致。
+  /// 当前分镜的停顿点，不为绘制传输条编译全作品。
   List<int> _stopIndexes() {
-    final compiled = _compiled;
-    if (compiled == null) return const [];
-    final range = compiled.ranges[(_scene, _beat)];
-    if (range == null) return const [];
     final stops = <int>[];
-    for (var i = range.$1; i < range.$2; i++) {
-      final command = compiled.script.commands[i];
+    for (final (i, command) in beat.commands.indexed) {
       final isStop = switch (command.tag) {
-        'dialogue' ||
-        'aside' ||
-        'multiline' ||
-        'endtip' => command.text.isNotEmpty,
+        'dialogue' => command.value('text').isNotEmpty,
+        'aside' || 'multiline' || 'endtip' => command.raw != null,
         'decision' => command.value('options').isNotEmpty,
         _ => false,
       };
@@ -1400,6 +1420,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   }
 
   Future<void> _exportScriptFormat(String format) async {
+    _scriptKey.currentState?.commitPendingEdits();
     final content = switch (format) {
       'csv' => exportScriptCsv(project),
       'srt' => exportScriptSrt(project),
@@ -1506,17 +1527,17 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       (
         label: '切换到演出台',
         hint: '工作区',
-        run: () => setState(() => _workspace = _EditorWorkspace.stage),
+        run: () => _selectWorkspace(_EditorWorkspace.stage),
       ),
       (
         label: '切换到编排台（故事板）',
         hint: '工作区',
-        run: () => setState(() => _workspace = _EditorWorkspace.board),
+        run: () => _selectWorkspace(_EditorWorkspace.board),
       ),
       (
         label: '切换到剧本台（对白表格）',
         hint: '工作区',
-        run: () => setState(() => _workspace = _EditorWorkspace.script),
+        run: () => _selectWorkspace(_EditorWorkspace.script),
       ),
       (label: '全局搜索', hint: '导航', run: _openGlobalSearch),
       (label: '添加演出指令', hint: '编辑', run: _showCommandChooser),
@@ -1609,7 +1630,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   }
 
   Future<void> _checkProjectIssues() async {
-    final issues = _validatedIssues(project);
+    final issues = _validateNow(project);
     final outcome = await _issues(
       issues.isEmpty ? [const EditorIssue('没有发现结构问题。')] : issues,
       title: '作品检查',
@@ -1618,19 +1639,16 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   }
 
   void _stepStop(int delta) {
-    final compiled = _compiled;
-    if (compiled == null || _beatLength == 0) return;
-    final range = compiled.ranges[(_scene, _beat)]!;
+    if (_beatLength == 0) return;
     final stops = _stopIndexes();
-    // 未选中时视为分镜起点之前：上一句回第一条指令，下一句到第一句。
-    final currentGlobal = _command < 0 ? range.$1 - 1 : range.$1 + _command;
-    final Iterable<int> candidates = delta < 0
-        ? stops.where((s) => s < currentGlobal)
-        : stops.where((s) => s > currentGlobal);
-    final target = candidates.isEmpty
-        ? (delta < 0 ? range.$1 : range.$2 - 1)
-        : (delta < 0 ? candidates.last : candidates.first);
-    _selectCommand(target - range.$1);
+    final candidates = delta < 0
+        ? stops.where((s) => s < _command)
+        : stops.where((s) => s > _command);
+    _selectCommand(
+      delta < 0
+          ? candidates.lastOrNull ?? 0
+          : candidates.firstOrNull ?? _beatLength - 1,
+    );
   }
 
   void _stepCommand(int delta) =>
@@ -1878,7 +1896,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       if (!reached) throw StateError('无法从当前分镜开始播放');
       final warnings = {
         ...[
-          for (final issue in _validatedIssues(current)) issue.message,
+          for (final issue in _validateNow(current)) issue.message,
           ...stage.engine.warnings,
         ],
       };
@@ -2267,8 +2285,9 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     builder: (context, size) {
       final wide = size.maxWidth >= 1100;
       final landscape = !wide && size.maxWidth >= 580 && size.maxHeight < 530;
-      final issues = _validatedIssues(project);
+      final issues = _validationCache;
       final stage = EditorStage(
+        key: _stageKey,
         project: project,
         scene: _scene,
         beat: _beat,
@@ -2341,6 +2360,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         );
       } else if (_workspace == _EditorWorkspace.script) {
         centerContent = EditorScriptView(
+          key: _scriptKey,
           project: project,
           activeScene: _scene,
           compact: !wide && !landscape,
@@ -2432,6 +2452,15 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           ],
         );
       }
+      final workspaceContent = _workspace == _EditorWorkspace.stage
+          ? centerContent
+          : Stack(
+              fit: StackFit.expand,
+              children: [
+                centerContent,
+                Offstage(offstage: true, child: stage),
+              ],
+            );
 
       return Column(
         children: [
@@ -2448,10 +2477,10 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
                     children: [
                       SizedBox(width: 228, child: structureTree),
                       const VerticalDivider(width: 1),
-                      Expanded(child: centerContent),
+                      Expanded(child: workspaceContent),
                     ],
                   )
-                : centerContent,
+                : workspaceContent,
           ),
         ],
       );
@@ -2556,13 +2585,9 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   /// 常驻传输条（P0-2 & §4.2）：宽屏单行；窄屏紧凑双行避免位置标签截断。
   Widget _transportBar({bool compact = false}) {
     final length = _beatLength;
-    final compiled = _compiled;
-    final range = compiled?.ranges[(_scene, _beat)];
-    final disabled = _busy || length == 0 || range == null;
+    final disabled = _busy || length == 0;
     final stops = _stopIndexes();
-    final stopAt = _command < 0 || stops.isEmpty || range == null
-        ? 0
-        : stops.where((s) => s <= range.$1 + _command).length;
+    final stopAt = stops.where((s) => s <= _command).length;
     final position = _command < 0
         ? '分镜末态 · $length 条指令'
         : stops.isEmpty
@@ -2845,7 +2870,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       final active = _workspace == target;
       return InkWell(
         borderRadius: BorderRadius.circular(6),
-        onTap: () => setState(() => _workspace = target),
+        onTap: () => _selectWorkspace(target),
         child: Container(
           padding: EdgeInsets.symmetric(
             horizontal: compactTab ? 7 : 10,
@@ -3056,7 +3081,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
               case 'delete':
                 await _deleteProject();
               case 'check':
-                final issues = _validatedIssues(project);
+                final issues = _validateNow(project);
                 await _issues(
                   issues.isEmpty ? [const EditorIssue('没有发现结构问题。')] : issues,
                   title: '作品检查',

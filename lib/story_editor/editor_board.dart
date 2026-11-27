@@ -129,8 +129,23 @@ class _EditorBoardViewState extends State<EditorBoardView> {
 
   // P1-1 框选批量：鼠标在卡片墙空白处拖出矩形选区。
   static const double _marqueeSlop = 4.0;
-  final Map<BeatRef, GlobalKey> _cardKeys = {};
-  final Map<int, GlobalKey> _newBeatKeys = {};
+  final _scroll = ScrollController();
+  static const _padding = 14.0,
+      _gap = 12.0,
+      _header = 40.0,
+      _height = 188.0,
+      _footer = 18.0;
+  List<List<int>> _visible = const [];
+  double _gridWidth = 0;
+  int get _columns =>
+      ((_gridWidth + _gap) / (_cardWidth + _gap)).floor().clamp(1, 10000);
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
   final GlobalKey _boardAreaKey = GlobalKey();
   int? _marqueePointer;
   Offset? _marqueeOrigin;
@@ -178,27 +193,42 @@ class _EditorBoardViewState extends State<EditorBoardView> {
     });
   }
 
-  GlobalKey _cardKey(BeatRef ref) => _cardKeys.putIfAbsent(ref, GlobalKey.new);
-
-  GlobalKey _newBeatKey(int sceneIndex) =>
-      _newBeatKeys.putIfAbsent(sceneIndex, GlobalKey.new);
-
-  Rect? _globalRect(GlobalKey key) {
-    final box = key.currentContext?.findRenderObject();
-    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
-    return box.localToGlobal(Offset.zero) & box.size;
-  }
-
-  /// 框选只在卡片墙空白处生效；落在分镜卡片或「新建分镜」占位卡上时
-  /// 让位给点选/勾选/拖拽重排等既有交互。
-  bool _isOnInteractiveControl(Offset global) {
-    for (final key in _cardKeys.values) {
-      if (_globalRect(key)?.contains(global) ?? false) return true;
+  Iterable<BeatRef> _intersections(Rect rect) sync* {
+    final box = _boardAreaKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize || !_scroll.hasClients) return;
+    final query = Rect.fromPoints(
+      box.globalToLocal(rect.topLeft),
+      box.globalToLocal(rect.bottomRight),
+    ).shift(Offset(-_padding, _scroll.offset - _padding));
+    final columns = _columns;
+    final width = (_gridWidth - (columns - 1) * _gap) / columns;
+    var top = 0.0;
+    for (final (si, beats) in _visible.indexed) {
+      top += _header;
+      final count = beats.length + 1;
+      final rows = (count + columns - 1) ~/ columns;
+      if (top > query.bottom) break;
+      const stride = _height + _gap;
+      final first = ((query.top - top) / stride).floor().clamp(0, rows);
+      final last = ((query.bottom - top) / stride).floor().clamp(-1, rows - 1);
+      for (var row = first; row <= last; row++) {
+        for (var col = 0; col < columns; col++) {
+          final i = row * columns + col;
+          if (i >= count) break;
+          final cell = Rect.fromLTWH(
+            col * (width + _gap),
+            top + row * stride,
+            width,
+            _height,
+          );
+          if (cell.overlaps(query) ||
+              (query.isEmpty && cell.contains(query.topLeft))) {
+            yield (scene: si, beat: i == beats.length ? -1 : beats[i]);
+          }
+        }
+      }
+      top += rows * stride - _gap + _footer;
     }
-    for (final key in _newBeatKeys.values) {
-      if (_globalRect(key)?.contains(global) ?? false) return true;
-    }
-    return false;
   }
 
   void _onBoardPointerDown(PointerDownEvent event) {
@@ -207,7 +237,10 @@ class _EditorBoardViewState extends State<EditorBoardView> {
     // 内，同时框选会与列表滚动冲突，且 §4.2 移动端本就无多选）。
     if (event.kind != PointerDeviceKind.mouse) return;
     if ((event.buttons & kPrimaryButton) == 0) return;
-    if (_isOnInteractiveControl(event.position)) return;
+    if (_intersections(Rect.fromPoints(event.position, event.position))
+        .isNotEmpty) {
+      return;
+    }
     _marqueePointer = event.pointer;
     _marqueeOrigin = event.position;
     _marqueeCurrent = event.position;
@@ -234,12 +267,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
     _selected
       ..clear()
       ..addAll(_marqueeAdditive ? _marqueeBase : const {});
-    for (final entry in _cardKeys.entries) {
-      final cardRect = _globalRect(entry.value);
-      if (cardRect != null && cardRect.overlaps(rect)) {
-        _selected.add(entry.key);
-      }
-    }
+    _selected.addAll(_intersections(rect).where((ref) => ref.beat >= 0));
   }
 
   void _onBoardPointerUp(PointerUpEvent event) {
@@ -307,12 +335,6 @@ class _EditorBoardViewState extends State<EditorBoardView> {
           r.scene >= widget.project.scenes.length ||
           r.beat >= widget.project.scenes[r.scene].beats.length,
     );
-    _cardKeys.removeWhere(
-      (r, _) =>
-          r.scene >= widget.project.scenes.length ||
-          r.beat >= widget.project.scenes[r.scene].beats.length,
-    );
-    _newBeatKeys.removeWhere((si, _) => si >= widget.project.scenes.length);
 
     if (widget.compact) {
       return _buildMobileSwitcher(context);
@@ -486,12 +508,34 @@ class _EditorBoardViewState extends State<EditorBoardView> {
               key: _boardAreaKey,
               fit: StackFit.expand,
               children: [
-                ListView(
-                  padding: const EdgeInsets.all(14),
-                  children: [
-                    for (var si = 0; si < widget.project.scenes.length; si++)
-                      _buildSceneSection(context, si),
-                  ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    _gridWidth = (constraints.maxWidth - 2 * _padding).clamp(
+                      0.0,
+                      double.infinity,
+                    );
+                    _visible = [
+                      for (final (si, scene) in widget.project.scenes.indexed)
+                        [
+                          for (final (bi, _) in scene.beats.indexed)
+                            if (_matchesFilter(si, bi)) bi,
+                        ],
+                    ];
+                    return CustomScrollView(
+                      controller: _scroll,
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.all(_padding),
+                          sliver: SliverMainAxisGroup(
+                            slivers: [
+                              for (final (si, visible) in _visible.indexed)
+                                _buildSceneSection(context, si, visible),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 if (_marquee != null) _marqueeOverlay(),
               ],
@@ -523,102 +567,110 @@ class _EditorBoardViewState extends State<EditorBoardView> {
     );
   }
 
-  Widget _buildSceneSection(BuildContext context, int sceneIndex) {
+  Widget _buildSceneSection(
+    BuildContext context,
+    int sceneIndex,
+    List<int> visibleBeats,
+  ) {
     final scene = widget.project.scenes[sceneIndex];
     final scheme = Theme.of(context).colorScheme;
-    final visibleBeats = [
-      for (var bi = 0; bi < scene.beats.length; bi++)
-        if (_matchesFilter(sceneIndex, bi)) bi,
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 10,
-                height: 10,
-                margin: const EdgeInsets.only(right: 6),
-                decoration: BoxDecoration(
-                  color: Color(
-                    editorMarkerColors[scene.marker.color] ?? 0xFFA5C7D5,
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: _header,
+            child: Row(
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  margin: const EdgeInsets.only(right: 6),
+                  decoration: BoxDecoration(
+                    color: Color(
+                      editorMarkerColors[scene.marker.color] ?? 0xFFA5C7D5,
+                    ),
+                    shape: BoxShape.circle,
                   ),
-                  shape: BoxShape.circle,
                 ),
-              ),
-              Text(
-                '${scene.title} · ${scene.beats.length} 镜 · 约 ${formatEstimatedDuration(scene.estimatedSeconds)}',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const Spacer(),
-              Text(
-                '双击卡片进演出台',
-                style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(color: scheme.onSurfaceVariant),
-              ),
-            ],
+                Text(
+                  '${scene.title} · ${scene.beats.length} 镜 · 约 ${formatEstimatedDuration(scene.estimatedSeconds)}',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const Spacer(),
+                Text(
+                  '双击卡片进演出台',
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              for (final bi in visibleBeats)
-                _buildDraggableCard(context, sceneIndex, bi),
-              // 原型 `.board-empty`：每幕末尾「＋ 新建分镜」虚线占位卡（可作为跨幕拖放落点）
-              DragTarget<BeatRef>(
-                onWillAcceptWithDetails: (details) =>
-                    !(details.data.scene == sceneIndex &&
-                        details.data.beat == scene.beats.length - 1),
-                onAcceptWithDetails: (details) => widget.onMoveBeat(
-                  details.data,
-                  sceneIndex,
-                  scene.beats.length,
-                ),
-                builder: (context, candidate, _) => InkWell(
-                  key: _newBeatKey(sceneIndex),
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: () => widget.onAddBeat(sceneIndex),
-                  child: Container(
-                    width: _cardWidth,
-                    height: 188,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: candidate.isNotEmpty
-                            ? scheme.primary
-                            : scheme.outlineVariant,
-                        width: candidate.isNotEmpty ? 2 : 1,
-                      ),
+        ),
+        SliverGrid.builder(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: _columns,
+            crossAxisSpacing: _gap,
+            mainAxisSpacing: _gap,
+            mainAxisExtent: _height,
+          ),
+          itemCount: visibleBeats.length + 1,
+          itemBuilder: (context, index) {
+            if (index < visibleBeats.length) {
+              return _buildDraggableCard(
+                context,
+                sceneIndex,
+                visibleBeats[index],
+              );
+            }
+            return DragTarget<BeatRef>(
+              onWillAcceptWithDetails: (details) =>
+                  !(details.data.scene == sceneIndex &&
+                      details.data.beat == scene.beats.length - 1),
+              onAcceptWithDetails: (details) => widget.onMoveBeat(
+                details.data,
+                sceneIndex,
+                scene.beats.length,
+              ),
+              builder: (context, candidate, _) => InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => widget.onAddBeat(sceneIndex),
+                child: Container(
+                  width: _cardWidth,
+                  height: 188,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
                       color: candidate.isNotEmpty
-                          ? scheme.primaryContainer.withValues(alpha: 0.2)
-                          : scheme.surfaceContainerLowest,
+                          ? scheme.primary
+                          : scheme.outlineVariant,
+                      width: candidate.isNotEmpty ? 2 : 1,
                     ),
-                    alignment: Alignment.center,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.add_circle_outline,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          candidate.isNotEmpty ? '释放移动到此幕末尾' : '＋ 新建分镜',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
+                    color: candidate.isNotEmpty
+                        ? scheme.primaryContainer.withValues(alpha: 0.2)
+                        : scheme.surfaceContainerLowest,
+                  ),
+                  alignment: Alignment.center,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.add_circle_outline,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        candidate.isNotEmpty ? '释放移动到此幕末尾' : '＋ 新建分镜',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ],
-          ),
-        ],
-      ),
+            );
+          },
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: _footer)),
+      ],
     );
   }
 
@@ -635,6 +687,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
 
     final card = SizedBox(
       width: _cardWidth,
+      height: _height,
       child: _BeatCard(
         project: widget.project,
         visual: _visuals[sceneIndex][beatIndex],
@@ -665,7 +718,7 @@ class _EditorBoardViewState extends State<EditorBoardView> {
     );
 
     return DragTarget<BeatRef>(
-      key: _cardKey(ref),
+      key: ValueKey(ref),
       onWillAcceptWithDetails: (details) => details.data != ref,
       onAcceptWithDetails: (details) =>
           widget.onMoveBeat(details.data, sceneIndex, beatIndex),
@@ -756,13 +809,16 @@ class _BeatCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             // 16:9 缩略图区域（带签名缓存）
-            AspectRatio(
-              aspectRatio: 16 / 9,
+            Expanded(
               child: Stack(
                 fit: StackFit.expand,
                 children: [
                   if (bgAsset != null && bgAsset.isImage)
-                    Image.memory(bgAsset.bytes, fit: BoxFit.cover)
+                    Image.memory(
+                      bgAsset.bytes,
+                      fit: BoxFit.cover,
+                      cacheWidth: 480,
+                    )
                   else
                     Container(
                       decoration: BoxDecoration(

@@ -30,13 +30,20 @@ class EditorScriptView extends StatefulWidget {
   final void Function(String format) onExportScript;
 
   @override
-  State<EditorScriptView> createState() => _EditorScriptViewState();
+  State<EditorScriptView> createState() => EditorScriptViewState();
 }
 
-class _EditorScriptViewState extends State<EditorScriptView> {
+class EditorScriptViewState extends State<EditorScriptView> {
   final TextEditingController _search = TextEditingController();
   final TextEditingController _batchSpeaker = TextEditingController();
   bool _onlyCurrentScene = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _onlyCurrentScene = collectScriptRows(widget.project).length > 80;
+  }
+
   final Set<String> _selectedKeys = {};
 
   @override
@@ -48,6 +55,84 @@ class _EditorScriptViewState extends State<EditorScriptView> {
 
   String _rowId(ScriptRowRef row) =>
       '${row.sceneIndex}:${row.beatIndex}:${row.commandIndex}';
+  final Map<String, ({ScriptRowRef row, String? speaker, String? text})>
+  _pendingEdits = {};
+
+  void _rememberEdit(ScriptRowRef row, {String? speaker, String? text}) {
+    final id = _rowId(row);
+    final previous = _pendingEdits[id];
+    _pendingEdits[id] = (
+      row: row,
+      speaker: speaker ?? previous?.speaker,
+      text: text ?? previous?.text,
+    );
+  }
+
+  void _commitEdit(String id) {
+    final pending = _pendingEdits.remove(id);
+    if (pending != null) {
+      widget.onEditRow(
+        pending.row,
+        speaker: pending.speaker,
+        text: pending.text,
+      );
+    }
+  }
+
+  (String, bool)? _activeCell;
+
+  void commitPendingEdits() {
+    for (final id in _pendingEdits.keys.toList()) {
+      _commitEdit(id);
+    }
+  }
+
+  Widget _editableCell(ScriptRowRef row, {required bool speaker}) {
+    final id = _rowId(row);
+    final key = (id, speaker);
+    final value = speaker ? row.speaker : row.text;
+    if (_activeCell != key) {
+      return TextButton(
+        key: ValueKey(('script-cell', id, speaker)),
+        style: TextButton.styleFrom(alignment: Alignment.centerLeft),
+        onPressed: () {
+          commitPendingEdits();
+          setState(() => _activeCell = key);
+        },
+        child: Text(
+          value.isEmpty ? (speaker ? '旁白' : '编辑台词') : value,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+    }
+    void finish() {
+      if (!mounted || _activeCell != key) return;
+      _commitEdit(id);
+      setState(() => _activeCell = null);
+    }
+
+    final pending = _pendingEdits[id];
+    return Focus(
+      onFocusChange: (focused) {
+        if (!focused) finish();
+      },
+      child: TextFormField(
+        key: ValueKey(('script-edit', id, speaker, widget.formVersion)),
+        autofocus: true,
+        initialValue: (speaker ? pending?.speaker : pending?.text) ?? value,
+        decoration: InputDecoration(
+          hintText: speaker ? '旁白' : null,
+          isDense: true,
+          border: const OutlineInputBorder(),
+        ),
+        onChanged: (value) => speaker
+            ? _rememberEdit(row, speaker: value)
+            : _rememberEdit(row, text: value),
+        onEditingComplete: finish,
+      ),
+    );
+  }
 
   List<ScriptRowRef> _filteredRows() {
     final all = collectScriptRows(
@@ -287,145 +372,109 @@ class _EditorScriptViewState extends State<EditorScriptView> {
                         .project
                         .scenes[row.sceneIndex]
                         .beats[row.beatIndex];
-                    return GestureDetector(
-                      onDoubleTap: () => widget.onJumpToRow(row),
-                      child: Container(
-                        color: checked
-                            ? scheme.primaryContainer.withValues(alpha: 0.16)
-                            : null,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 36,
-                              child: Checkbox(
-                                value: checked,
-                                onChanged: (v) => setState(() {
-                                  if (v == true) {
-                                    _selectedKeys.add(id);
-                                  } else {
-                                    _selectedKeys.remove(id);
-                                  }
-                                }),
-                              ),
+                    return Container(
+                      color: checked
+                          ? scheme.primaryContainer.withValues(alpha: 0.16)
+                          : null,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 36,
+                            child: Checkbox(
+                              value: checked,
+                              onChanged: (v) => setState(() {
+                                if (v == true) {
+                                  _selectedKeys.add(id);
+                                } else {
+                                  _selectedKeys.remove(id);
+                                }
+                              }),
                             ),
-                            SizedBox(
-                              width: 165,
-                              child: InkWell(
-                                onTap: () => widget.onJumpToRow(row),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Container(
-                                          width: 8,
-                                          height: 8,
-                                          margin: const EdgeInsets.only(
-                                            right: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Color(
-                                              editorMarkerColors[beat
-                                                      .marker
-                                                      .color] ??
-                                                  0xFFA5C7D5,
-                                            ),
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        Expanded(
-                                          child: Text(
-                                            '${row.sceneTitle} / ${row.beatTitle}',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Text(
-                                      '指令 #${row.commandIndex + 1}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelSmall
-                                          ?.copyWith(
-                                            color: scheme.onSurfaceVariant,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 150,
-                              child: row.isDialogue
-                                  ? TextFormField(
-                                      key: ValueKey((
-                                        'script-speaker',
-                                        widget.formVersion,
-                                        id,
-                                      )),
-                                      initialValue: row.speaker,
-                                      decoration: const InputDecoration(
-                                        hintText: '旁白',
-                                        isDense: true,
-                                        border: OutlineInputBorder(),
-                                      ),
-                                      onChanged: (v) =>
-                                          widget.onEditRow(row, speaker: v),
-                                    )
-                                  : Text(
-                                      '舞台文字',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: scheme.onSurfaceVariant,
-                                          ),
-                                    ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextFormField(
-                                key: ValueKey((
-                                  'script-text',
-                                  widget.formVersion,
-                                  id,
-                                )),
-                                initialValue: row.text,
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  border: OutlineInputBorder(),
-                                ),
-                                onChanged: (v) =>
-                                    widget.onEditRow(row, text: v),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 60,
-                              child: Row(
+                          ),
+                          SizedBox(
+                            width: 165,
+                            child: InkWell(
+                              onTap: () => widget.onJumpToRow(row),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  IconButton(
-                                    tooltip: '定位到演出台',
-                                    visualDensity: VisualDensity.compact,
-                                    iconSize: 18,
-                                    onPressed: () => widget.onJumpToRow(row),
-                                    icon: const Icon(Icons.open_in_new),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 8,
+                                        height: 8,
+                                        margin: const EdgeInsets.only(right: 4),
+                                        decoration: BoxDecoration(
+                                          color: Color(
+                                            editorMarkerColors[beat
+                                                    .marker
+                                                    .color] ??
+                                                0xFFA5C7D5,
+                                          ),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          '${row.sceneTitle} / ${row.beatTitle}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Text(
+                                    '指令 #${row.commandIndex + 1}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: scheme.onSurfaceVariant,
+                                        ),
                                   ),
                                 ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 150,
+                            child: row.isDialogue
+                                ? _editableCell(row, speaker: true)
+                                : Text(
+                                    '舞台文字',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: scheme.onSurfaceVariant,
+                                        ),
+                                  ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(child: _editableCell(row, speaker: false)),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 60,
+                            child: Row(
+                              children: [
+                                IconButton(
+                                  tooltip: '定位到演出台',
+                                  visualDensity: VisualDensity.compact,
+                                  iconSize: 18,
+                                  onPressed: () => widget.onJumpToRow(row),
+                                  icon: const Icon(Icons.open_in_new),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   },

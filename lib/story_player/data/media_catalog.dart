@@ -341,8 +341,21 @@ class MediaCatalog {
   }
 
   /// 逐条指令收集带分类的资源引用；warnings 与 [dependencies] 一致。
-  List<AssetRef> collect(StoryScript script, List<String> warnings) {
+  List<AssetRef> collect(
+    StoryScript script,
+    List<String> warnings, {
+    void Function(int line, AssetRef ref)? onReference,
+  }) {
     final refs = <AssetRef>[];
+    var line = 0;
+    void emit(AssetRef ref) {
+      if (onReference == null) {
+        refs.add(ref);
+      } else {
+        onReference(line, ref);
+      }
+    }
+
     void addImage(String key, AssetKind kind) {
       if (key.isEmpty) return;
       final uri = image(
@@ -356,7 +369,7 @@ class MediaCatalog {
         },
       );
       final name = uri.pathSegments.last;
-      refs.add(
+      emit(
         AssetRef(kind, _stripExtension(name), [
           AssetFile(uri, _imageExportPath(kind, uri)),
         ]),
@@ -364,6 +377,7 @@ class MediaCatalog {
     }
 
     for (final c in script.commands) {
+      line = c.line;
       if (['background', 'image'].contains(c.tag) &&
           c.value('image').isNotEmpty) {
         addImage(
@@ -393,7 +407,7 @@ class MediaCatalog {
           if (name.isEmpty || name == 'char_empty') continue;
           if (c.tag != 'interlude') {
             final ref = _characterRef(name, c.line, warnings);
-            if (ref != null) refs.add(ref);
+            if (ref != null) emit(ref);
           }
         }
       }
@@ -410,7 +424,7 @@ class MediaCatalog {
               warnOnMissing: false,
             );
             if (ref != null) {
-              refs.add(ref);
+              emit(ref);
             } else {
               addImage(name, AssetKind.cutin);
             }
@@ -443,7 +457,7 @@ class MediaCatalog {
           }
         }
         if (files.isNotEmpty) {
-          refs.add(
+          emit(
             AssetRef(
               c.tag == 'playmusic' ? AssetKind.music : AssetKind.sfx,
               _audioTitle(first!),
@@ -462,7 +476,7 @@ class MediaCatalog {
           final title = uri.pathSegments.isNotEmpty
               ? _stripExtension(uri.pathSegments.last)
               : 'video';
-          refs.add(
+          emit(
             AssetRef(AssetKind.video, title, [
               AssetFile(uri, _assetExportPath(uri, dir: 'video')),
             ], group: title),

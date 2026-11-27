@@ -14,6 +14,17 @@ import 'package:arknights_story_player/story_player/data/asset_store.dart';
 class _MemoryStorage extends EditorStorage {
   final Map<String, EditorProject> projects = {};
   final List<(String title, String ext, Uint8List bytes)> exported = [];
+  final positions = <String, EditorPosition>{};
+  int contentWrites = 0;
+
+  @override
+  Future<void> savePosition(
+    String id,
+    DateTime revision,
+    EditorPosition position,
+  ) async {
+    if (projects[id]?.updatedAt == revision) positions[id] = position;
+  }
 
   @override
   Future<List<EditorProject>> list() async =>
@@ -22,6 +33,7 @@ class _MemoryStorage extends EditorStorage {
   @override
   Future<void> save(EditorProject project) async {
     projects[project.id] = project;
+    contentWrites++;
   }
 
   @override
@@ -443,8 +455,9 @@ void main() {
       expect(find.text('对白：终于到了。'), findsOneWidget);
       // 推进防抖保存，确认 lastPosition 已持久化
       await tester.pump(const Duration(milliseconds: 600));
-      expect(storage.projects.values.single.lastPosition?.scene, 1);
-      expect(storage.projects.values.single.lastPosition?.beat, 0);
+      expect(storage.positions.values.single.scene, 1);
+      expect(storage.positions.values.single.beat, 0);
+      expect(storage.contentWrites, 0);
 
       // 点击面包屑后退按钮回到第一幕分镜一
       await tester.tap(find.byTooltip('后退（Alt+←）'));

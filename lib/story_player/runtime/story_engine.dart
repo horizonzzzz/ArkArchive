@@ -362,7 +362,7 @@ class _StickerStep {
 /// 指令语义对齐 PRTS 生产播放器 StoryPlayer.DH9HUkmm.js（2026-11-03 审计版）。
 class StoryEngine extends ChangeNotifier {
   StoryEngine(
-    this.script, {
+    StoryScript script, {
     StoryAudio? audio,
     StoryVideo? video,
     this.elapsed,
@@ -373,7 +373,8 @@ class StoryEngine extends ChangeNotifier {
     this.characterArtSize,
     this.imageNaturalWidth,
     this.effectAssets = const {},
-  }) : audio = audio ?? SilentStoryAudio(),
+  }) : _script = script,
+       audio = audio ?? SilentStoryAudio(),
        video = video ?? NoopStoryVideo() {
     // 默认注入的 Noop 输出把警告回传引擎诊断，与旧版跳过行为一致。
     if (video == null) {
@@ -389,10 +390,11 @@ class StoryEngine extends ChangeNotifier {
     _collectSkipNodes();
     _registerBuiltins();
     _clock.start();
-    _ticker = Timer.periodic(const Duration(milliseconds: 16), (_) => _tick());
+    _syncTicker();
   }
 
-  final StoryScript script;
+  StoryScript _script;
+  StoryScript get script => _script;
   final StoryAudio audio;
   final StoryVideo video;
   final Map<String, dynamic> variables;
@@ -411,7 +413,7 @@ class StoryEngine extends ChangeNotifier {
   final List<String> warnings = [];
   final Map<String, _Animation> _animations = {};
   final Stopwatch _clock = Stopwatch();
-  late final Timer _ticker;
+  Timer? _ticker;
   late final PlaySpeed defaultSpeed;
   final math.Random _random = math.Random();
   final Map<String, _Motion> _motions = {};
@@ -574,7 +576,63 @@ class StoryEngine extends ChangeNotifier {
     if (!warnings.contains(text)) warnings.add(text);
   }
 
+  /// 编辑器快照缓存用来避免保留仍在逐帧变化的引擎。
+  bool get hasActiveTicker => _ticker?.isActive ?? false;
+
+  bool get _needsTicker {
+    if (paused || _disposed || _rebuilding) return false;
+    if (running ||
+        typing ||
+        state.effects.isNotEmpty ||
+        _animations.isNotEmpty) {
+      return true;
+    }
+    if (_motions.isNotEmpty || _shakePath != null) {
+      return true;
+    }
+    if (state.interludes.values.any(
+      (frame) => frame.visible && frame.voiceActive,
+    )) {
+      return true;
+    }
+    final overlays = [state.subtitle, ...state.stickers.values];
+    if (overlays.any(
+      (overlay) =>
+          overlay != null &&
+          overlay.visible &&
+          overlay.revealed < plainText(overlay.text).runes.length,
+    )) {
+      return true;
+    }
+    if (state.timer case final timer?
+        when timer.visible && timer.startMicros >= 0) {
+      return true;
+    }
+    if (state.stamps.any((stamp) => stamp.elapsedMs < 5000)) return true;
+    return _waitingInput &&
+        !running &&
+        !finished &&
+        state.choices.isEmpty &&
+        (autoMode != 'default' || _fastForwarding > 0);
+  }
+
+  void _syncTicker() {
+    if (_needsTicker) {
+      if (_ticker != null) return;
+      _lastTick = _nowUs();
+      _ticker = Timer.periodic(const Duration(milliseconds: 16), (_) {
+        _tick();
+        _syncTicker();
+      });
+      return;
+    }
+    _ticker?.cancel();
+    _ticker = null;
+    _lastTick = _nowUs();
+  }
+
   void _changed() {
+    _syncTicker();
     if (!_disposed) notifyListeners();
   }
 
@@ -1223,14 +1281,63 @@ class StoryEngine extends ChangeNotifier {
   Future<bool> seekToCommand(int commandIndex) =>
       _rebuildTo(commandIndex, requireStop: true);
 
+  static bool _canReplayFromPreview(StoryCommand command) =>
+      switch (command.tag) {
+        'dialogue' || 'dialog' || 'aside' || 'subtitle' || 'delay' => true,
+        'blocker' || 'background' || 'image' => command.value('image').isEmpty,
+        _ => false,
+      };
+
+  bool canContinueStaticPreview(StoryScript source, int end, int target) {
+    final commands = script.commands;
+    return !_disposed &&
+        !running &&
+        !paused &&
+        !finished &&
+        !hasActiveTicker &&
+        cursor < target &&
+        target <= end &&
+        commands.length <= end &&
+        end <= source.commands.length &&
+        (identical(source, script) ||
+            Iterable<int>.generate(commands.length)
+                .every((i) => identical(commands[i], source.commands[i]))) &&
+        source.commands
+            .getRange(cursor, end > commands.length ? end : target)
+            .every(_canReplayFromPreview);
+  }
+
+  /// 从已经重放完成的静止舞台继续。只允许续跑无需新素材的静态指令。
+  Future<bool> extendStaticPreview(StoryScript source, int end, int target) {
+    if (!canContinueStaticPreview(source, end, target)) {
+      return Future.value(false);
+    }
+    if (end > script.commands.length) {
+      _script = StoryScript(source.commands.sublist(0, end));
+    }
+    return rebuildBefore(target, revealText: true, continueStaticPreview: true);
+  }
+
   /// 创作预览可重建到任意分镜边界，不重演一次性音效和视频。
-  Future<bool> rebuildBefore(int nextIndex, {bool resumeAudio = false}) =>
-      _rebuildTo(nextIndex - 1, requireStop: false, resumeAudio: resumeAudio);
+  Future<bool> rebuildBefore(
+    int nextIndex, {
+    bool resumeAudio = false,
+    bool revealText = false,
+    bool continueStaticPreview = false,
+  }) => _rebuildTo(
+    nextIndex - 1,
+    requireStop: false,
+    resumeAudio: resumeAudio,
+    revealText: revealText,
+    continueStaticPreview: continueStaticPreview,
+  );
 
   Future<bool> _rebuildTo(
     int commandIndex, {
     required bool requireStop,
     bool resumeAudio = true,
+    bool revealText = false,
+    bool continueStaticPreview = false,
   }) async {
     if (_disposed ||
         state.metadata.isVideoOnly ||
@@ -1243,27 +1350,43 @@ class StoryEngine extends ChangeNotifier {
     }
 
     final wasPaused = paused;
+    // 分支跳转和动态演出继续走完整重放，保留原有定位规则。
+    final continuePreview =
+        continueStaticPreview &&
+        !requireStop &&
+        !resumeAudio &&
+        revealText &&
+        !running &&
+        !paused &&
+        !finished &&
+        !hasActiveTicker &&
+        cursor <= commandIndex &&
+        script.commands
+            .getRange(cursor, commandIndex + 1)
+            .every(_canReplayFromPreview);
     _epoch++;
-    _cancelAnimations();
-    _cancelShake();
-    _resetMotions();
-    clearOverlays();
-    unawaited(video.stop());
-    final metadata = state.metadata;
-    state = StageState()..metadata = metadata;
-    cursor = 0;
-    _playbackTrace.clear();
-    _resumeTracks.clear();
-    _skipNodeIndex = 0;
-    _currentSkipMode = 'skip';
-    _selectedValue = 0;
-    _predicates = null;
-    _decisionValues = const [];
-    _itemSlotInUse = false;
-    _resetMultiline();
-    finished = false;
-    _waitingInput = false;
-    _autoClickAt = -1;
+    if (!continuePreview) {
+      _cancelAnimations();
+      _cancelShake();
+      _resetMotions();
+      clearOverlays();
+      unawaited(video.stop());
+      final metadata = state.metadata;
+      state = StageState()..metadata = metadata;
+      cursor = 0;
+      _playbackTrace.clear();
+      _resumeTracks.clear();
+      _skipNodeIndex = 0;
+      _currentSkipMode = 'skip';
+      _selectedValue = 0;
+      _predicates = null;
+      _decisionValues = const [];
+      _itemSlotInUse = false;
+      _resetMultiline();
+      finished = false;
+      _waitingInput = false;
+      _autoClickAt = -1;
+    }
     _rebuilding = true;
     running = true;
     await audio.stop();
@@ -1309,6 +1432,10 @@ class StoryEngine extends ChangeNotifier {
         return false;
       }
       if (!requireStop) _waitingInput = false;
+      if (revealText) {
+        if (typing) state.revealed = totalCharacters;
+        _completeOverlayTyping();
+      }
       if (resumeAudio) {
         for (final command in _resumeTracks.values) {
           await audio.execute(command);
@@ -3904,7 +4031,7 @@ class StoryEngine extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _epoch++;
-    _ticker.cancel();
+    _ticker?.cancel();
     _cancelAnimations();
     _cancelShake();
     _clock.stop();
