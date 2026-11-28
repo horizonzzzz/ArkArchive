@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:arknights_story_player/app/app_theme.dart';
 import 'package:arknights_story_player/app/story_launcher.dart';
+import 'package:arknights_story_player/story_editor/editor_platform.dart';
+import 'package:arknights_story_player/story_editor/editor_project.dart';
 import 'package:arknights_story_player/story_player/story_player.dart';
 import 'package:arknights_story_player/story_player/ui/story_stage.dart';
 import 'package:arknights_story_player/story_player/data/file_cache.dart';
@@ -161,6 +163,30 @@ class _Repository extends StoryRepository {
   }
 }
 
+class _FakeEditorStorage extends EditorStorage {
+  final Map<String, EditorProject> _projects = {};
+
+  @override
+  Future<List<EditorProject>> list() async => _projects.values.toList();
+
+  @override
+  Future<void> save(EditorProject project) async {
+    _projects[project.id] = project;
+  }
+
+  @override
+  Future<void> savePosition(
+    String id,
+    DateTime revision,
+    EditorPosition position,
+  ) async {}
+
+  @override
+  Future<void> delete(String id) async {
+    _projects.remove(id);
+  }
+}
+
 Future<_Repository> _mount(
   WidgetTester tester, {
   Size size = const Size(390, 844),
@@ -168,6 +194,7 @@ Future<_Repository> _mount(
   bool reduceMotion = false,
   bool highContrast = false,
   _Repository? repository,
+  EditorStorage? editorStorage,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -184,7 +211,10 @@ Future<_Repository> _mount(
         ),
         child: child!,
       ),
-      home: StoryLauncher(repository: repo),
+      home: StoryLauncher(
+        repository: repo,
+        editorStorage: editorStorage,
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -1086,6 +1116,29 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.tap(find.text('系统设置').last);
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('桌面默认窗口客户区尺寸进入创作页即显示编辑器完整宽屏布局', (tester) async {
+    // 1400×800 桌面窗口扣除系统边框后的典型客户区尺寸。
+    await _mount(
+      tester,
+      size: const Size(1384, 761),
+      editorStorage: _FakeEditorStorage(),
+    );
+    expect(find.byKey(const Key('desktop-sidebar')), findsOneWidget);
+    await tester.tap(find.text('创作').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新建作品'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    expect(find.text('演出台'), findsOneWidget);
+    expect(find.text('编排台'), findsOneWidget);
+    expect(find.text('剧本台'), findsOneWidget);
+    expect(find.textContaining('结构树'), findsOneWidget);
+    expect(find.text('指令属性'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

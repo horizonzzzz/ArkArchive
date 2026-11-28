@@ -32,8 +32,14 @@ import 'settings_page.dart';
 import '../story_player/data/playback_settings.dart';
 
 class StoryLauncher extends StatefulWidget {
-  const StoryLauncher({super.key, this.repository, this.onThemeChanged});
+  const StoryLauncher({
+    super.key,
+    this.repository,
+    this.editorStorage,
+    this.onThemeChanged,
+  });
   final StoryRepository? repository;
+  final EditorStorage? editorStorage;
   final ValueChanged<bool>? onThemeChanged;
 
   @override
@@ -60,7 +66,7 @@ class _StoryLauncherState extends State<StoryLauncher> {
   int _page = 0;
   bool _editorOpened = false;
   EditorProject? _editorIncoming;
-  late final _editorStorage = EditorStorage();
+  late final _editorStorage = widget.editorStorage ?? EditorStorage();
   int _cacheReturnPage = 0;
   bool _busy = false;
   int _done = 0, _total = 0;

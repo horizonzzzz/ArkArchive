@@ -26,7 +26,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
-  Win32Window::Size size(1280, 720);
+  // 桌面侧边栏(216) + 编辑器宽屏阈值(1100) + 窗口边框，确保启动即显示编辑器完整桌面布局。
+  Win32Window::Size size(1400, 800);
   if (!window.Create(L"方舟档案室", origin, size)) {
     return EXIT_FAILURE;
   }

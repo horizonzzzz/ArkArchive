@@ -52,7 +52,8 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "方舟档案室");
   }
 
-  gtk_window_set_default_size(window, 1280, 720);
+  // 桌面侧边栏(216) + 编辑器宽屏阈值(1100)，确保启动即显示编辑器完整桌面布局。
+  gtk_window_set_default_size(window, 1400, 800);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
