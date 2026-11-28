@@ -1752,7 +1752,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     for (final entry in editorFields.entries) {
       final group = switch (entry.key) {
         'dialogue' || 'dialog' || 'aside' || 'subtitle' => '文字',
-        'background' || 'image' || 'charslot' => '画面',
+        'background' || 'image' || 'charslot' || 'character' => '画面',
         'playmusic' || 'stopmusic' || 'playsound' || 'stopsound' => '音频',
         'delay' || 'blocker' => '流程',
         _ => '效果',
@@ -3449,6 +3449,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
       'background' => '背景：${value('image')}',
       'image' => 'CG：${value('image')}',
       'charslot' => '人物：${value('name')}（${value('slot')}）',
+      'character' =>
+        '立绘：${value('name')}${value('name2').isEmpty ? '' : ' / ${value('name2')}'}',
       'playmusic' => '播放音乐：${value('key')}',
       'playsound' => '播放音效：${value('key')}',
       'delay' =>

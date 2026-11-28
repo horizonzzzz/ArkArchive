@@ -132,8 +132,8 @@ class _EditorInspectorState extends State<EditorInspector> {
     final tags = selected.map((c) => c.tag).toSet();
     final sameTag = tags.length == 1 ? tags.first : null;
     final definition = sameTag != null ? editorFields[sameTag] : null;
-    final commonFields = definition != null &&
-            selected.every((c) => c.raw == null)
+    final commonFields =
+        definition != null && selected.every((c) => c.raw == null)
         ? definition.$2
         : _sharedCommonFields(selected);
 
@@ -155,9 +155,8 @@ class _EditorInspectorState extends State<EditorInspector> {
         const SizedBox(height: 6),
         Text(
           '仅修改的字段会统一写入所选指令，未改字段保持原值。',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
         if (commonFields.isEmpty)
           const Padding(
@@ -205,7 +204,12 @@ class _EditorInspectorState extends State<EditorInspector> {
     final mixed = values.length > 1;
     final singleVal = mixed ? '' : values.first;
     final idxSet = indices.toSet();
-    final key = ValueKey(('multi', widget.formVersion, field.key, indices.join(',')));
+    final key = ValueKey((
+      'multi',
+      widget.formVersion,
+      field.key,
+      indices.join(','),
+    ));
 
     if (field.type == FieldType.toggle) {
       return SwitchListTile(
@@ -375,9 +379,8 @@ class _EditorInspectorState extends State<EditorInspector> {
                     const SizedBox(width: 4),
                     Text(
                       _groupTitle(group),
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: Theme.of(context).textTheme.labelMedium
+                          ?.copyWith(fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -389,7 +392,8 @@ class _EditorInspectorState extends State<EditorInspector> {
               (current.tag == 'background' ||
                   current.tag == 'image' ||
                   current.tag == 'subtitle' ||
-                  current.tag == 'charslot'))
+                  current.tag == 'charslot' ||
+                  current.tag == 'character'))
             _quickCoordinateActions(context, current),
           for (final field in fields)
             Padding(
@@ -415,6 +419,13 @@ class _EditorInspectorState extends State<EditorInspector> {
             onPressed: () {
               if (current.tag == 'charslot') {
                 widget.onUpdateCommand({'posto': '0,0'});
+              } else if (current.tag == 'character') {
+                widget.onUpdateCommand({
+                  'xpos1': '0',
+                  'ypos1': '0',
+                  'xpos2': '0',
+                  'ypos2': '0',
+                });
               } else if (current.tag == 'subtitle') {
                 final w = double.tryParse(current.value('width')) ?? 800;
                 final cx = ((1280 - w) / 2).clamp(0, 1279).toStringAsFixed(0);
@@ -430,6 +441,13 @@ class _EditorInspectorState extends State<EditorInspector> {
             onPressed: () {
               if (current.tag == 'charslot') {
                 widget.onUpdateCommand({'posfrom': '', 'posto': '0,0'});
+              } else if (current.tag == 'character') {
+                widget.onUpdateCommand({
+                  'xpos1': '0',
+                  'ypos1': '0',
+                  'xpos2': '0',
+                  'ypos2': '0',
+                });
               } else if (current.tag == 'subtitle') {
                 widget.onUpdateCommand({
                   'x': '240',
@@ -509,10 +527,7 @@ class _EditorInspectorState extends State<EditorInspector> {
           key: key,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              field.label,
-              style: Theme.of(context).textTheme.labelMedium,
-            ),
+            Text(field.label, style: Theme.of(context).textTheme.labelMedium),
             const SizedBox(height: 6),
             SegmentedButton<String>(
               showSelectedIcon: false,
@@ -561,9 +576,7 @@ class _EditorInspectorState extends State<EditorInspector> {
     if (isMediaField(field.type)) {
       final asset = widget.project.assets[value];
       final isLocal = value.startsWith('local_');
-      final displayName = value.isEmpty
-          ? '未选择'
-          : (asset?.name ?? value);
+      final displayName = value.isEmpty ? '未选择' : (asset?.name ?? value);
       return Container(
         key: key,
         padding: const EdgeInsets.all(8),
@@ -736,10 +749,7 @@ class _EditorInspectorState extends State<EditorInspector> {
         minLines: field.type == FieldType.multiline ? 3 : 1,
         maxLines: field.type == FieldType.multiline ? 6 : 1,
         keyboardType: field.type == FieldType.number
-            ? const TextInputType.numberWithOptions(
-                decimal: true,
-                signed: true,
-              )
+            ? const TextInputType.numberWithOptions(decimal: true, signed: true)
             : TextInputType.text,
         decoration: InputDecoration(
           labelText: field.label,

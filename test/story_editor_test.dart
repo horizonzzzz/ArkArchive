@@ -197,6 +197,40 @@ void main() {
     expect(command.value('slot'), 'm');
     expect(command.value('name'), 'char_empty');
   });
+  test('官方 Character 双人立绘导入为可编辑节点并保留未编辑参数', () {
+    const source =
+        '[Character(name="char_108_silent_1#3",name2="char_242_mayer#2",fadetime=1,blackstart=0.2)]';
+    final project = EditorProject.fromScript('双人立绘', StoryScript.parse(source));
+    final imported = project.scenes.single.beats.single.commands.single;
+
+    expect(imported.tag, 'character');
+    expect(imported.raw, isNull);
+    expect(imported.value('name'), 'char_108_silent_1#3');
+    expect(imported.value('name2'), 'char_242_mayer#2');
+    expect(editorFields['character']?.$1, contains('立绘'));
+
+    final edited = imported.withArgs({'focus': '2'});
+    expect(edited.value('blackstart'), '0.2');
+    final roundTrip = EditorProject.decode(
+      project
+          .copyWith(
+            scenes: [
+              project.scenes.single.copyWith(
+                beats: [
+                  project.scenes.single.beats.single.copyWith(
+                    commands: [edited],
+                  ),
+                ],
+              ),
+            ],
+          )
+          .export(),
+    ).compile().script.commands.single;
+    expect(roundTrip.tag, 'character');
+    expect(roundTrip.value('name2'), 'char_242_mayer#2');
+    expect(roundTrip.value('focus'), '2');
+    expect(roundTrip.value('blackstart'), '0.2');
+  });
   test('official imports split long stories into manageable scenes', () {
     final script = StoryScript.parse(
       List.generate(61, (i) => '[name="阿米娅"] 台词 $i').join('\n'),

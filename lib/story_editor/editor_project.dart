@@ -309,6 +309,7 @@ class StoryBeat {
       if (c.tag == 'background' ||
           c.tag == 'image' ||
           c.tag == 'charslot' ||
+          c.tag == 'character' ||
           c.tag == 'subtitle' ||
           c.tag == 'blocker' ||
           c.tag == 'dialogue') {
@@ -341,6 +342,9 @@ double estimateCommandSeconds(EditCommand c) {
     case 'effect':
       final fade = double.tryParse(c.value('fadetime')) ?? 0;
       return c.value('block') == 'true' ? fade.clamp(0.0, 15.0) : 0.0;
+    case 'character':
+      final fade = double.tryParse(c.value('fadetime')) ?? .15;
+      return fade.clamp(0.0, 15.0);
     case 'charslot':
       final dur = double.tryParse(c.value('duration')) ?? 0;
       return c.value('isblock') == 'true' ? dur.clamp(0.0, 15.0) : 0.0;
@@ -883,6 +887,38 @@ const editorFields = <String, (String, List<EditorField>)>{
   'image': (
     '插图 / CG',
     [EditorField('image', '插图（留空清除）', FieldType.cg), _x, _y, _fade, _block],
+  ),
+  'character': (
+    '立绘（旧版双人指令）',
+    [
+      EditorField('name', '左侧 / 中间立绘', FieldType.character),
+      EditorField('name2', '右侧立绘（可选）', FieldType.character),
+      EditorField('focus', '焦点', FieldType.choice, '0', {
+        '0': '全部明亮',
+        '1': '左侧 / 中间明亮',
+        '2': '右侧明亮',
+        '3': '全部变暗',
+      }),
+      EditorField('fadetime', '淡入淡出（秒）', FieldType.number, '0.15'),
+      EditorField('enter', '左侧 / 中间入场方向', FieldType.choice, '', {
+        '': '无',
+        'left': '从左',
+        'right': '从右',
+        'up': '从上',
+        'down': '从下',
+      }),
+      EditorField('enter2', '右侧入场方向', FieldType.choice, '', {
+        '': '无',
+        'left': '从左',
+        'right': '从右',
+        'up': '从上',
+        'down': '从下',
+      }),
+      EditorField('xpos1', '左侧 / 中间 X', FieldType.number, '0'),
+      EditorField('ypos1', '左侧 / 中间 Y', FieldType.number, '0'),
+      EditorField('xpos2', '右侧 X', FieldType.number, '0'),
+      EditorField('ypos2', '右侧 Y', FieldType.number, '0'),
+    ],
   ),
   'charslot': (
     '立绘',

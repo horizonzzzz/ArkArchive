@@ -233,6 +233,7 @@ class _EditorStageState extends State<EditorStage> {
   static String _assetPart(EditCommand command) => switch (command.tag) {
     'background' || 'image' => command.value('image'),
     'charslot' => command.value('name'),
+    'character' => '${command.value('name')}\u0001${command.value('name2')}',
     'playmusic' => '${command.value('key')}\u0001${command.value('intro')}',
     'playsound' => command.value('key'),
     'bgeffect' || 'effect' => command.value('name'),
