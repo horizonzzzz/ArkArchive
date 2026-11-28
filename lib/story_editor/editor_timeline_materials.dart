@@ -35,29 +35,36 @@ class _TimelineMaterialBoxState extends State<TimelineMaterialBox> {
     FieldType.character: '立绘',
     FieldType.music: 'BGM',
   };
-  static final _references =
-      Expando<Map<(FieldType, String), TimelineMaterial>>();
+  static final _projectReferences = Expando<Set<(FieldType, String)>>();
+  static final _beatReferences = Expando<Set<(FieldType, String)>>();
   final _picked = <(FieldType, String), TimelineMaterial>{};
   var _type = FieldType.background;
 
-  Map<(FieldType, String), TimelineMaterial> _scan() {
-    final project = widget.project;
-    return {
-      for (final scene in project.scenes)
-        for (final beat in scene.beats)
-          for (final command in beat.commands)
-            for (final field
-                in editorFields[command.tag]?.$2 ?? const <EditorField>[])
-              if (_types.containsKey(field.type) &&
-                  command.value(field.key).isNotEmpty &&
-                  command.value(field.key) != 'char_empty')
-                (field.type, command.value(field.key)): TimelineMaterial(
-                  field.type,
-                  command.value(field.key),
-                  project.assets[command.value(field.key)],
-                ),
-    };
+  static Set<(FieldType, String)> _scan(List<EditCommand> commands) {
+    final references = <(FieldType, String)>{};
+    for (final command in commands) {
+      final parsed = command.parsedRaw;
+      if (command.raw != null && parsed == null) continue;
+      final fields = editorFields[parsed?.tag ?? command.tag]?.$2 ?? const [];
+      final args = parsed?.args ?? command.args;
+      for (final field in fields) {
+        final key = args[field.key] ?? '';
+        if (_types.containsKey(field.type) &&
+            key.isNotEmpty &&
+            key != 'char_empty') {
+          references.add((field.type, key));
+        }
+      }
+    }
+    return references;
   }
+
+  Set<(FieldType, String)> get _references =>
+      _projectReferences[widget.project] ??= {
+        for (final scene in widget.project.scenes)
+          for (final beat in scene.beats)
+            ...(_beatReferences[beat.commands] ??= _scan(beat.commands)),
+      };
 
   Future<void> _pick() async {
     final type = _type;
@@ -88,7 +95,13 @@ class _TimelineMaterialBoxState extends State<TimelineMaterialBox> {
               for (final asset in widget.project.assets.values)
                 if (asset.isImage == (_type != FieldType.music))
                   (_type, asset.key): TimelineMaterial(_type, asset.key, asset),
-              ...(_references[widget.project] ??= _scan()),
+              for (final (type, key) in _references)
+                if (type == _type)
+                  (type, key): TimelineMaterial(
+                    type,
+                    key,
+                    widget.project.assets[key],
+                  ),
               ..._picked,
             }.values
             .where(

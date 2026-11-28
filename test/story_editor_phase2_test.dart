@@ -16,6 +16,7 @@ import 'package:arknights_story_player/story_editor/story_editor_page.dart';
 import 'package:arknights_story_player/story_player/data/asset_store.dart';
 
 import 'package:arknights_story_player/story_editor/editor_timeline.dart';
+import 'package:arknights_story_player/story_editor/editor_timeline_materials.dart';
 import 'package:arknights_story_player/story_editor/editor_timeline_view.dart';
 import 'package:arknights_story_player/story_player/ui/story_stage.dart';
 
@@ -218,6 +219,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     await drag.moveTo(dropPoint);
     await tester.pump();
+    final insertion = find.byKey(
+      ValueKey(('timeline-insertion', background, false)),
+    );
+    final playhead = tester.widget<EditorTimelineView>(timeline).playhead;
+    expect(
+      tester.getRect(insertion).right,
+      laneRect.left + 38 * (playhead + 1),
+    );
     await drag.up();
     await tester.pump(const Duration(milliseconds: 600));
     // 图片解码依赖宿主线程，加载指示器持续调度帧。
@@ -277,7 +286,124 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('影响 38 个分镜'), findsOneWidget);
+
+    final occupiedView = tester.widget<EditorTimelineView>(timeline);
+    final span = occupiedView.timeline.spanAt(
+      background,
+      occupiedView.playhead,
+    );
+    expect(span, isNotNull);
+    expect(occupiedView.timeline.spanAt(background, 1), isNull);
+    final occupiedLaneRect = tester.getRect(lane);
+    final rejectedDrag = await tester.startGesture(tester.getCenter(trayItem));
+    await tester.pump(const Duration(milliseconds: 250));
+    await rejectedDrag.moveTo(
+      Offset(occupiedLaneRect.left + 38 * 1.5, occupiedLaneRect.center.dy),
+    );
+    await tester.pump();
+    expect(
+      find.byKey(ValueKey(('timeline-insertion', background, true))),
+      findsOneWidget,
+    );
+    await rejectedDrag.up();
+    await tester.pump();
+    expect(
+      tester.widget<EditorTimelineView>(timeline).project,
+      same(occupiedView.project),
+    );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('角色被改名后恢复全部立绘轨，原始素材引用随分镜更新', (tester) async {
+    final project = EditorProject.create('轨道筛选');
+    final resources = EditorPreviewResources(AssetStore());
+    addTearDown(resources.dispose);
+    final storage = _MemoryStorage();
+    final left = find.byKey(
+      const ValueKey(('timeline-lane', (kind: TrackKind.character, id: 'l'))),
+    );
+    final right = find.byKey(
+      const ValueKey(('timeline-lane', (kind: TrackKind.character, id: 'r'))),
+    );
+    final roleFilter = find.byWidgetPredicate(
+      (widget) => widget is DropdownButton<String?>,
+    );
+    final stopMusic = find.text('停止 BGM');
+
+    Future<void> show(String role, String background) async {
+      final current = project.copyWith(
+        scenes: [
+          EditorScene('测试幕', [
+            StoryBeat('测试分镜', [
+              EditCommand('charslot', {'slot': 'l', 'name': role}),
+              const EditCommand('charslot', {'slot': 'r', 'name': 'another#1'}),
+              EditCommand(
+                'background',
+                const {},
+                '[Background(image="$background")]原文',
+              ),
+              const EditCommand('stopmusic', {'fadetime': '1'}),
+            ]),
+          ]),
+        ],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EditorTimelineView(
+              timeline: EditorTimeline.of(current, 0),
+              project: current,
+              playhead: 0,
+              source: null,
+              affectedCount: 0,
+              missing: (_, _) => false,
+              monitor: const SizedBox(),
+              materials: TimelineMaterialBox(
+                project: current,
+                resources: resources,
+                storage: storage,
+              ),
+              inspector: const SizedBox(),
+              onSeek: (_) {},
+              onSelectSource: (_, _) {},
+              onOpen: (_) {},
+              onInsert: (_, _, [asset]) {},
+              onSplit: (_, _) {},
+              onTrim: (_, _, _) {},
+              onReplace: (_, _, _) {},
+              onFreeze: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await show('first#1', 'raw_bg');
+    final oldMaterial = find.byKey(
+      const ValueKey(('timeline-material', FieldType.background, 'raw_bg')),
+    );
+    final newMaterial = find.byKey(
+      const ValueKey(('timeline-material', FieldType.background, 'raw_bg_new')),
+    );
+    expect(oldMaterial, findsOneWidget);
+    expect(stopMusic, findsOneWidget);
+    expect(
+      find.byTooltip('停止 BGM\n测试幕 / 测试分镜 / 指令 4\nfadetime = 1'),
+      findsOneWidget,
+    );
+    await tester.tap(roleFilter);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('first').last);
+    await tester.pumpAndSettle();
+    expect(right, findsNothing);
+
+    await show('renamed#1', 'raw_bg_new');
+    expect(tester.widget<DropdownButton<String?>>(roleFilter).value, isNull);
+    expect(left, findsOneWidget);
+    expect(right, findsOneWidget);
+    expect(oldMaterial, findsNothing);
+    expect(newMaterial, findsOneWidget);
   });
   testWidgets('窄屏可进入轨道、分割区间并回到故事板', (tester) async {
     final project = EditorProject.create('窄屏轨道').copyWith(

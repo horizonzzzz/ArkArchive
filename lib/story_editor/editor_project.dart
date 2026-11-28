@@ -97,6 +97,24 @@ class EditCommand {
   final Map<String, String> args;
   final String? raw;
 
+  static final _rawCommands = Expando<List<StoryCommand>>();
+
+  /// 供只读投影使用。无效原文保留在项目里，由编译和预览报告。
+  StoryCommand? get parsedRaw {
+    final source = raw;
+    if (source == null) return null;
+    final parsed = _rawCommands[this] ??= _parseRaw(source);
+    return parsed.length == 1 ? parsed.single : null;
+  }
+
+  static List<StoryCommand> _parseRaw(String raw) {
+    try {
+      return StoryScript.parse(raw).commands;
+    } on FormatException {
+      return const [];
+    }
+  }
+
   String value(String key) => args[key] ?? '';
   EditCommand withArgs(Map<String, String> changes) =>
       EditCommand(tag, {...args, ...changes}, raw);

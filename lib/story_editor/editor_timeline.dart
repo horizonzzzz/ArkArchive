@@ -108,21 +108,6 @@ class EditorTimeline {
 
   static final _sceneCache = Expando<EditorTimeline>();
   static final _projectCache = Expando<List<EditorTimeline>>();
-  static final _rawCache = Expando<List<StoryCommand>>();
-
-  static StoryCommand? _parseRaw(EditCommand edit) {
-    final parsed = _rawCache[edit] ??= _parseRawCommands(edit.raw!);
-    return parsed.length == 1 ? parsed.single : null;
-  }
-
-  static List<StoryCommand> _parseRawCommands(String raw) {
-    try {
-      return StoryScript.parse(raw).commands;
-    } on FormatException {
-      // 原文暂时无效时仍保留指令位置，错误由作品校验和舞台报告。
-      return const [];
-    }
-  }
 
   static EditorTimeline of(EditorProject project, int scene) {
     final timelines = _projectCache[project] ??= [];
@@ -284,7 +269,7 @@ class EditorTimeline {
         columns.add(TrackColumn(address, ++global));
         final command = edit.raw == null
             ? StoryCommand(edit.tag, edit.args, edit.value('text'), 0, '')
-            : _parseRaw(edit);
+            : edit.parsedRaw;
         if (command == null) {
           column++;
           continue;
@@ -535,14 +520,26 @@ class EditorTimeline {
               set(TrackKind.subtitle, label);
             }
           case 'dialogue':
+          case 'dialog':
+          case 'aside':
+          case 'multiline':
+          case 'endtip':
           case 'decision':
           case 'delay':
             ticks.add(
-              TrackTick(column, switch (c.tag) {
-                'decision' => '选项 ${c.value('options')}',
-                'delay' => '等待 ${c.number('time')} 秒',
-                _ => c.text,
-              }, c.tag == 'dialogue' ? c.value('name') : ''),
+              TrackTick(
+                column,
+                switch (c.tag) {
+                  'decision' => '选项 ${c.value('options')}',
+                  'delay' => '等待 ${c.number('time')} 秒',
+                  'endtip' => c.text.isEmpty ? '结束提示' : c.text,
+                  _ => c.text.isEmpty ? '清除对白框' : c.text,
+                },
+                switch (c.tag) {
+                  'dialogue' || 'dialog' || 'multiline' => c.value('name'),
+                  _ => '',
+                },
+              ),
             );
         }
         column++;

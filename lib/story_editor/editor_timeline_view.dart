@@ -240,10 +240,12 @@ class _EditorTimelineViewState extends State<EditorTimelineView> {
     builder: (context, box) {
       final wide = box.maxWidth >= 690;
       final scheme = Theme.of(context).colorScheme;
+      final roles = _roles;
+      if (!roles.contains(_role)) _role = null;
       final rows = _rows.toList();
       // 投影与播放头共享地址。窄屏可在轨道和来源参数间来回切换，素材箱始终可拖放。
       final showInspector = _showInspector && widget.source != null;
-      final toolbar = _toolbar();
+      final toolbar = _toolbar(roles);
       return ColoredBox(
         color: scheme.surfaceContainerLow,
         child: Column(
@@ -297,18 +299,18 @@ class _EditorTimelineViewState extends State<EditorTimelineView> {
     },
   );
 
-  Widget _toolbar() {
+  Set<String> get _roles => {
+    for (final entry in _timeline.tracks.entries)
+      if (entry.key.kind == TrackKind.character)
+        for (final span in entry.value) ...[
+          characterTrackBase(span.initial.label),
+          for (final marker in span.markers)
+            characterTrackBase(marker.$2.label),
+        ],
+  };
+
+  Widget _toolbar(Set<String> roles) {
     final span = _selectedSpan;
-    final roles = <String>{
-      for (final entry in _timeline.tracks.entries)
-        if (entry.key.kind == TrackKind.character)
-          for (final span in entry.value) ...[
-            characterTrackBase(span.initial.label),
-            for (final marker in span.markers)
-              characterTrackBase(marker.$2.label),
-          ],
-    };
-    final role = roles.contains(_role) ? _role : null;
     return SizedBox(
       height: 42,
       child: ListView(
@@ -330,7 +332,7 @@ class _EditorTimelineViewState extends State<EditorTimelineView> {
           const SizedBox(width: 8),
           if (roles.isNotEmpty)
             DropdownButton<String?>(
-              value: role,
+              value: _role,
               onChanged: (value) => setState(() => _role = value),
               items: [
                 const DropdownMenuItem(value: null, child: Text('全部角色')),
@@ -583,21 +585,49 @@ class _EditorTimelineViewState extends State<EditorTimelineView> {
                 key: ValueKey(('timeline-drop', slot)),
                 onWillAcceptWithDetails: (details) =>
                     details.data.type == type &&
-                    _timeline.spanAt(slot, _dropColumn(details.offset)) == null,
+                    _timeline.spanAt(slot, widget.playhead) == null,
                 onAcceptWithDetails: (details) {
+                  if (_timeline.spanAt(slot, widget.playhead) != null) return;
                   final material = details.data;
                   final command = trackMaterialCommand(slot, material.key)!;
                   widget.onInsert(_timeline.insertAfter(widget.playhead), [
                     command,
                   ], material.asset);
                 },
-                builder: (context, candidates, rejected) => IgnorePointer(
-                  child: ColoredBox(
-                    color: candidates.isEmpty
-                        ? Colors.transparent
-                        : scheme.primary.withValues(alpha: .18),
-                  ),
-                ),
+                builder: (context, candidates, rejected) {
+                  final active =
+                      candidates.isNotEmpty ||
+                      rejected.whereType<TimelineMaterial>().any(
+                        (m) => m.type == type,
+                      );
+                  final occupied =
+                      _timeline.spanAt(slot, widget.playhead) != null;
+                  final color = occupied ? scheme.error : scheme.primary;
+                  return IgnorePointer(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (active) ...[
+                          ColoredBox(color: color.withValues(alpha: .18)),
+                          Positioned(
+                            left: (widget.playhead + 1) * _unit - 2,
+                            top: 0,
+                            bottom: 0,
+                            width: 2,
+                            child: ColoredBox(
+                              key: ValueKey((
+                                'timeline-insertion',
+                                slot,
+                                occupied,
+                              )),
+                              color: color,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           if (slot.kind == TrackKind.dialogue)
@@ -607,8 +637,9 @@ class _EditorTimelineViewState extends State<EditorTimelineView> {
               in _timeline.events[slot] ?? const <(int, TrackValue)>[])
             _tick(
               column,
-              _tooltip(event, slot.kind),
+              _label(event),
               '',
+              tooltip: _tooltip(event, slot.kind),
               source: event.source,
               missing:
                   event.mediaOrigin != null && widget.missing(event, slot.kind),
@@ -620,15 +651,11 @@ class _EditorTimelineViewState extends State<EditorTimelineView> {
     );
   }
 
-  int _dropColumn(Offset global) {
-    final box = _boardKey.currentContext!.findRenderObject()! as RenderBox;
-    return _columnAt(box.globalToLocal(global).dx);
-  }
-
   Widget _tick(
     int column,
     String label,
     String speaker, {
+    String? tooltip,
     TrackAddress? source,
     bool missing = false,
   }) {
@@ -650,7 +677,7 @@ class _EditorTimelineViewState extends State<EditorTimelineView> {
       top: 3,
       bottom: 3,
       child: Tooltip(
-        message: speaker.isEmpty ? label : '$speaker · $label',
+        message: tooltip ?? (speaker.isEmpty ? label : '$speaker · $label'),
         child: Material(
           color: color,
           child: InkWell(

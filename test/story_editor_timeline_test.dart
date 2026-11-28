@@ -59,6 +59,29 @@ void main() {
     expect(identical(timeline, EditorTimeline.of(project, 0)), isTrue);
   });
 
+  test('导入的旁白、多段对白、结束提示和对白框清除均有刻度', () {
+    final project = EditorProject.fromScript(
+      '轨道',
+      StoryScript.parse('''
+[Aside]旁白
+[Multiline(name="甲", end=true)]多段对白
+[EndTip]结束提示内容
+[Dialog(name="乙")]对白
+[Dialog]
+'''),
+    );
+    final timeline = EditorTimeline.of(project, 0);
+    expect(
+      timeline.ticks.map((tick) => (tick.column, tick.label, tick.speaker)),
+      [
+        (0, '旁白', ''),
+        (1, '多段对白', '甲'),
+        (2, '结束提示内容', ''),
+        (3, '对白', '乙'),
+        (4, '清除对白框', ''),
+      ],
+    );
+  });
   test('跨幕继承、空分镜、按通道/图层清除和固化', () {
     final project = EditorProject.create('轨道').copyWith(
       scenes: const [
