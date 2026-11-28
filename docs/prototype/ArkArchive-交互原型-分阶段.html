@@ -547,6 +547,58 @@
   @media (prefers-reduced-motion:reduce){
     *{animation:none!important;transition:none!important}
   }
+
+  /* ===== 三期轨道台（编排台双层） ===== */
+  .tracks-wrap{border:1px solid var(--line);border-radius:8px;background:var(--panel);margin-top:16px;overflow:hidden}
+  .tracks-wrap .pane-head{height:32px}
+  .track-toolbar{display:flex;align-items:center;gap:12px;padding:8px 10px;border-bottom:1px solid var(--line);background:#0d151f}
+  .mini-mon{width:150px;aspect-ratio:16/9;flex:0 0 150px;background:#000;border:1px solid var(--line2);border-radius:4px;overflow:hidden;position:relative;cursor:pointer;container-type:size}
+  .mini-mon .stage{position:absolute;inset:0}
+  .qbin{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
+  .qchip{border:1px solid var(--line2);background:#101a26;border-radius:5px;padding:3px 8px;font-size:10px;color:#a9b8ca;cursor:grab;white-space:nowrap}
+  .qchip:hover{border-color:#3b5b80;color:#dbe4f0}
+  .qchip.drag{opacity:.5}
+  .trk-scroll{overflow:auto;max-height:360px}
+  .trk-row{display:grid;grid-template-columns:128px minmax(0,1fr);border-top:1px solid #101a25}
+  .trk-row:first-child{border-top:0}
+  .trk-head{padding:4px 8px;border-right:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0;background:var(--panel2)}
+  .trk-head .tname{font-size:10px;color:#8ea3ba;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .trk-head .tval{font-size:9px;color:#5c6d80;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .trk-lane{position:relative;height:26px;background:#0a121b;overflow:hidden}
+  .trk-ruler{height:34px}
+  .rbeat{display:flex;flex-direction:column;justify-content:center;padding:0 5px;overflow:hidden;cursor:pointer;border-left:1px solid #17242f;height:100%;float:left}
+  .rbeat:first-child{border-left:0}
+  .rbeat:hover{background:#131f2c}
+  .rbeat.on{background:#15253a}
+  .rbeat span{font-size:9.5px;color:#a9b8ca;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rbeat small{font-size:8px;color:#5c6d80}
+  .beat-sep{position:absolute;top:0;bottom:0;width:1px;background:#1c2937;pointer-events:none}
+  .clip{position:absolute;top:2px;bottom:2px;border-radius:3px;overflow:hidden;border:1px solid;cursor:pointer}
+  .clip .cl-label{position:absolute;inset:0;display:flex;align-items:center;padding:0 5px;font-size:8.5px;color:rgba(255,255,255,.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+  .clip .seg-tick{position:absolute;top:0;bottom:0;width:5px;transform:translateX(-50%);border-left:1px solid rgba(255,255,255,.7);cursor:pointer;z-index:1}
+  .clip .cl-open{position:absolute;right:1px;top:0;color:rgba(255,255,255,.75);font-size:8px;line-height:1;pointer-events:none}
+  .clip:hover{filter:brightness(1.18)}
+  .clip.source-on{outline:1px solid #fbbf24;outline-offset:-1px}
+  .m-screen .trk-row{grid-template-columns:88px minmax(300px,1fr)}
+  .clip .trimbar{touch-action:none}
+  .clip.trimming{outline:1px solid #fff}
+  .clip .trimbar{position:absolute;right:0;top:0;bottom:0;width:7px;cursor:ew-resize;background:rgba(255,255,255,.24);opacity:0}
+  .clip:hover .trimbar{opacity:1}
+  .trk-inherit{position:absolute;top:2px;bottom:2px;border:1px dashed #2b3d4f;border-radius:3px;background:repeating-linear-gradient(135deg,rgba(90,110,130,.2) 0 5px,transparent 5px 10px);padding:0 5px;display:flex;align-items:center;font-size:8.5px;color:#7d90a6;white-space:nowrap;overflow:hidden}
+  .dlg-tick{position:absolute;top:3px;bottom:3px;width:4px;border-radius:2px;cursor:pointer}
+  .dlg-tick.wait{width:2px;background:#3f4f61}
+  .dlg-tick:hover{outline:1px solid #fff}
+  .fx-mark{position:absolute;top:50%;transform:translate(-50%,-50%);color:#ef4444;font-size:9px;cursor:pointer}
+  .playhead-line{position:absolute;top:0;bottom:0;width:1px;background:#f8fafc;box-shadow:0 0 5px rgba(248,250,252,.75);z-index:5;pointer-events:none}
+  .trk-lane.drop-ok{background:#0f2231;box-shadow:inset 0 0 0 1px #3b82f6}
+  .trim-guide{position:absolute;top:0;bottom:0;width:1px;background:#fbbf24;z-index:6;pointer-events:none}
+  .trk-foot{display:flex;justify-content:space-between;gap:12px;padding:5px 10px;font-size:9px;color:#5c6d80;border-top:1px solid #101a25;flex-wrap:wrap}
+  .board-card.on{border-color:var(--accent2);box-shadow:0 0 0 1px rgba(96,165,250,.35)}
+  .board-card.affected{border-color:#d97706;box-shadow:0 0 0 1px rgba(245,158,11,.35)}
+  .bin-item{cursor:grab}
+  .inh-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);background:#101a26;border-radius:999px;padding:3px 10px;font-size:10px;color:#a9b8ca;margin:2px 4px 2px 0;cursor:pointer;max-width:100%}
+  .inh-chip:hover{border-color:#3b5b80;color:#dbe4f0}
+  .inh-chip small{color:#5c6d80;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 <style>
   /* ===== ArkArchive 应用外壳对齐 ===== */
@@ -942,23 +994,40 @@
           <div class="batchbar" id="batchbar"></div>
           <div class="cmdlist" id="cmdlist"></div>
         </div>
-        <div class="lanes-wrap">
-          <div class="pane-head"><b>状态泳道</b><span class="stage-chip P1">P1</span><div class="right"><button class="iconbtn" title="只看背景（示意）">◧</button></div></div>
-          <div class="lanes" id="lanes"></div>
+        <div class="lanes-wrap" id="inheritWrap">
+          <div class="pane-head"><b>继承状态</b><span class="stage-chip P1" data-rm="P1-2">P1</span><div class="right"><span class="hint">进入本分镜时台上已有</span></div></div>
+          <div class="lanes" id="inheritBar"></div>
         </div>
       </div>
     </section>
 
     <section class="view" id="view-board">
       <div class="view-head">
-        <h2>编排台 · 故事板</h2>
-        <span class="stage-chip P1">P1</span>
-        <p>粗剪：看全貌、排顺序、批量处理。拖拽卡片可重排。</p>
+        <h2>编排台 · 双层</h2>
+        <span class="stage-chip P1" data-rm="P1-1">P1</span>
+        <p>卡片墙看分镜顺序，状态轨道看当前幕的演出。两者共用播放头。</p>
+        <span class="hint" title="示例数据用于演示轨道操作。实际指令范围、资源与验收见配套产品分析。"><a href="ArkArchive-剧情编辑器产品交互分析.html#features">第三期交付说明</a></span>
         <div class="grow"></div>
         <button class="btn small" id="btnBoardNew">＋ 新建分镜</button>
       </div>
       <div class="view-body">
         <div id="board"></div>
+        <div class="tracks-wrap" id="tracksWrap">
+          <div class="pane-head"><b>状态轨道</b><span class="stage-chip P1" data-rm="P1-2">P1 · 三期</span>
+            <div class="right">
+              <span class="hint">作用域</span>
+              <button class="btn tiny" id="trkPrev" title="上一幕">‹</button>
+              <span class="hint" id="trkScope" style="min-width:118px;text-align:center;white-space:nowrap"></span>
+              <button class="btn tiny" id="trkNext" title="下一幕">›</button>
+              <span class="hint">点轨道移动播放头，双击定位演出台</span>
+            </div>
+          </div>
+          <div class="track-toolbar">
+            <div class="mini-mon" id="miniMon" title="播放头处的舞台重放 · 点击回演出台精修"></div>
+            <div class="qbin" id="qbin"></div>
+          </div>
+          <div class="trk-scroll"><div id="tracks" class="tracks-demo"></div></div>
+        </div>
       </div>
     </section>
 
@@ -1094,6 +1163,7 @@
         <li><b>批量化：</b>点击一条后 <span class="help-kbd">Shift</span> 连选、<span class="help-kbd">Ctrl</span> 增减；批量条可改说话人、复制、删除。</li>
         <li><b>舞台直编：</b>拖动立绘或舞台文字，接近中线会自动吸附；右侧检查器数值同步。缩放按钮可放大舞台。</li>
         <li><b>多端工作区：</b>桌面端提供编排、演出、剧本（对白表格）、交付四工作区；右上角可切“手机”预览精简形态（演出主视图 + 轻分镜切换 + 检查定位）。</li>
+        <li><b>轨道台（编排台双层 · 三期）：</b>下层状态轨道默认当前幕：点卡片 / 轨道 / 对白刻度移动<b>全局播放头</b>（双击定位回演出台）；拖色块右缘<b>裁尾</b>自动补退场指令；把「素材快取」里的背景 / 立绘 / CG / BGM <b>拖进轨道</b>直接建指令；斜纹 = 继承区，立绘色块内白竖线 = 差分/移动。演出台右下的「继承徽标行」显示入台延续状态。</li>
         <li><b>路线图联动：</b>点界面上的 <b>P0/P1/P2</b> 徽标或顶部“路线图”，都能打开分期面板并定位到对应区域；切换“阶段视图”可预览只交付 P0 时的界面。</li>
       </ol>
       <p class="hint" style="margin:10px 2px 0">原型数据为示意，不会真正导出文件；所有编辑仅在当前页面内存中生效，刷新即重置。</p>
@@ -1179,6 +1249,7 @@ const SLOT_NAME = {l:'左', m:'中', r:'右'};
 const state = {
   view:'stage', mView:'stage', device:'desktop', appPage:'create',
   sel:{s:0,b:0,c:0}, multi:new Set(), anchor:0,
+  trackSource:null, trackFilter:'', mobileTracks:false,
   playing:false, loop:false, speed:1, timer:null,
   zoom:1, pulse:false, drag:null,
   undo:[], redo:[], clip:[],
@@ -1352,7 +1423,7 @@ function renderBin(){
     const thumb = it.kind==='char'
       ? `<div class="bin-thumb" style="background:linear-gradient(180deg,#132238,#0a111b)"><i style="color:${ROLE[it.role]}">●</i></div>`
       : `<div class="bin-thumb ${it.cls||''}"><i>${it.kind==='cg'?'CG':it.kind==='bgm'?'BGM':'BG'}</i></div>`;
-    return `<div class="bin-item" data-bin="${i}" title="${esc(it.name)}">${thumb}<span>${esc(it.name)}</span></div>`;
+    return `<div class="bin-item" draggable="true" data-bin="${i}" title="${esc(it.name)}｜点击 = 应用到选中指令；拖到轨道台对应轨道 = 插入指令">${thumb}<span>${esc(it.name)}</span></div>`;
   }).join('');
 }
 
@@ -1426,45 +1497,276 @@ function renderBatch(){
     <button class="btn tiny" data-batch="clear">取消选择</button>`;
 }
 
-/* ---------- lanes ---------- */
-function laneSegments(type, slot){
-  const cmds = currentCmds(), out = [];
-  for(let i=0;i<cmds.length;i++){
-    const c = cmds[i];
-    if(c.type !== type) continue;
-    if(type==='char' && c.args.slot !== slot) continue;
-    let end = cmds.length;
-    for(let j=i+1;j<cmds.length;j++){
-      const d = cmds[j];
-      if(d.type===type && (type!=='char' || d.args.slot===slot)){ end=j; break; }
-    }
-    out.push({i,end});
-  }
-  return out;
+/* ---------- tracks（编排台轨道区 + 演出台继承徽标，三期） ---------- */
+const TRACK_DEFS = [
+  {id:'bg',  label:'背景',       type:'bg',   edge:'#22c55e'},
+  {id:'cg',  label:'CG',         type:'cg',   edge:'#a855f7'},
+  {id:'cl',  label:'立绘 · 左',   type:'char', slot:'l'},
+  {id:'cm',  label:'立绘 · 中',   type:'char', slot:'m'},
+  {id:'cr',  label:'立绘 · 右',   type:'char', slot:'r'},
+  {id:'tx',  label:'舞台文字',     type:'text', edge:'#f59e0b'},
+  {id:'bm',  label:'BGM',        type:'bgm',  edge:'#06b6d4'},
+  {id:'fx',  label:'特效（单次）', type:'fx',  kind:'event'}
+];
+const trunc = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; };
+const rgbaOf = (hex, a) => {
+  const h = String(hex).replace('#','');
+  const v = parseInt(h.length===3 ? h.split('').map(c=>c+c).join('') : h, 16);
+  return `rgba(${(v>>16)&255},${(v>>8)&255},${v&255},${a})`;
+};
+function sceneFlat(si){
+  const flat = [];
+  project.scenes[si].beats.forEach((beat,b)=>beat.cmds.forEach((cmd,c)=>flat.push({b,c,cmd})));
+  return flat;
 }
-function renderLanes(){
-  const el = $('#lanes'); if(!el) return;
-  const cmds = currentCmds(); const n = Math.max(1,cmds.length);
-  const tracks = [
-    {label:'背景', type:'bg'}, {label:'立绘 L', type:'char', slot:'l'},
-    {label:'立绘 M', type:'char', slot:'m'}, {label:'立绘 R', type:'char', slot:'r'},
-    {label:'文字', type:'text'}, {label:'BGM', type:'bgm'}
-  ];
-  const ph = ((state.sel.c+1)/n*100).toFixed(2);
-  let html = '';
-  tracks.forEach(tr=>{
-    const segs = laneSegments(tr.type, tr.slot);
-    const blocks = segs.map(sg=>{
-      const left = sg.i/n*100, width = Math.max(2.5,(sg.end-sg.i)/n*100);
-      const sel = sg.i===state.sel.c ? 'sel' : '';
-      return `<div class="blk ${tr.type==='char'?'char':tr.type} ${sel}" data-lane="${sg.i}"
-        style="left:${left}%;width:${width}%"
-        title="${esc(TYPE_NAME[tr.type])} ${sg.i+1}：${esc(summary(cmds[sg.i]))}"></div>`;
-    }).join('');
-    html += `<div class="lane"><div class="ln">${tr.label}</div><div class="tr">${blocks}<div class="ph" style="left:${ph}%"></div></div></div>`;
+function buildTrackClips(def, flat){
+  const total = flat.length;
+  const clips = [];
+  let cur = null;
+  flat.forEach((f, gi)=>{
+    const cmd = f.cmd;
+    if(def.type==='char'){
+      if(cmd.type!=='char' || cmd.args.slot!==def.slot) return;
+      const role = cmd.args.role || '无';
+      if(role==='无'){ if(cur){ cur.end = gi; clips.push(cur); cur = null; } }
+      else if(!cur) cur = {start:gi, end:total, label:role, role, segs:[gi]};
+      else if(cur.role!==role){ cur.end = gi; clips.push(cur); cur = {start:gi, end:total, label:role, role, segs:[gi]}; }
+      else cur.segs.push(gi);
+      return;
+    }
+    if(cmd.type!==def.type) return;
+    const v = def.type==='text' ? (cmd.args.text||'') : (cmd.args.asset||'');
+    if(!v){ if(cur){ cur.end = gi; clips.push(cur); cur = null; } }
+    else { if(cur){ cur.end = gi; clips.push(cur); } cur = {start:gi, end:total, label:v, segs:[gi]}; }
   });
-  html += `<div class="lane-tick"><div></div><div class="ticks"><span>1</span><span>${Math.ceil(n/2)}</span><span>${n}</span></div></div>`;
-  el.innerHTML = html;
+  if(cur) clips.push(cur);
+  return clips;
+}
+function trackInherit(def, flat, entry){
+  if(def.type==='char'){
+    const c = entry.chars && entry.chars[def.slot];
+    if(!c) return null;
+    const end = flat.findIndex(f=>f.cmd.type==='char' && f.cmd.args.slot===def.slot);
+    return {label:`${c.role}（继承）`, end: end<0 ? flat.length : end};
+  }
+  const map = {bg:entry.bg, cg:entry.cg, text:entry.subtitle && entry.subtitle.text, bgm:entry.music};
+  const v = map[def.type];
+  if(!v) return null;
+  const end = flat.findIndex(f=>f.cmd.type===def.type);
+  return {label:`${trunc(v, 10)}（继承）`, end: end<0 ? flat.length : end};
+}
+const charHeadVal = (st, slot) => { const c = st.chars[slot]; return c ? `${c.role} · ${MOOD[c.mood]||c.mood||''}` : '—（空槽）'; };
+function trkPosLabel(si, flat, gi){
+  const f = flat[gi];
+  if(!f) return '本幕结尾';
+  return `${project.scenes[si].beats[f.b].title} · 指令 ${f.c+1}`;
+}
+function renderTracks(el=$('#tracks')){
+  if(!el) return;
+  const si = state.sel.s;
+  const scene = project.scenes[si];
+  if(!scene){ el.innerHTML = ''; return; }
+  const scope = $('#trkScope');
+  if(scope) scope.textContent = `第 ${si+1} 幕 · ${scene.title}`;
+  const flat = sceneFlat(si);
+  const total = Math.max(1, flat.length);
+  const entry = stateAt(si, 0, -1);
+  const selGi = Math.max(0, flat.findIndex(f=>f.b===state.sel.b && f.c===state.sel.c));
+  const ph = ((selGi+.5)/total*100).toFixed(2);
+  const source = selectedTrackSource();
+  const [kind, value] = state.trackFilter.split(':');
+  // 分镜刻度（横轴 = 当前幕内指令序列，等宽刻度）
+  const weights = scene.beats.map(bt=>Math.max(1, bt.cmds.length));
+  const wsum = weights.reduce((a,b)=>a+b, 0) || 1;
+  const ruler = scene.beats.map((bt,i)=>
+    `<div class="rbeat ${i===state.sel.b?'on':''}" data-beat="${i}" style="width:${(weights[i]/wsum*100).toFixed(3)}%" title="${esc(bt.title)} · ${bt.cmds.length} 条指令">
+      <span>${esc(bt.title)}</span><small>${bt.cmds.length} 条</small>
+    </div>`).join('');
+  const seps = [];
+  let acc = 0;
+  weights.forEach((w,i)=>{ if(i < weights.length-1){ acc += w; seps.push((acc/wsum*100).toFixed(3)); } });
+  const sepHTML = seps.map(p=>`<div class="beat-sep" style="left:${p}%"></div>`).join('');
+  // 轨道头当前值（播放头处实时摘要）
+  const phSt = stateAt(state.sel.s, state.sel.b, state.sel.c);
+  const isStop = f => f.cmd.type==='line' || f.cmd.type==='wait';
+  const lineCount = flat.filter(isStop).length;
+  const stopAt = flat.slice(0, selGi+1).filter(isStop).length;
+  const headVal = {
+    bg: phSt.bg || '（黑场）',
+    cg: phSt.cg || '—（无 CG）',
+    cl: charHeadVal(phSt, 'l'), cm: charHeadVal(phSt, 'm'), cr: charHeadVal(phSt, 'r'),
+    tx: phSt.subtitle ? trunc(phSt.subtitle.text, 12) : '—（无文字）',
+    bm: phSt.music || '（无 BGM）',
+    fx: `单次事件 ×${flat.filter(f=>f.cmd.type==='fx').length}`
+  };
+  let html = `<div class="trk-row">
+    <div class="trk-head"><span class="tname">分镜（当前幕）</span><span class="tval">${flat.length} 条指令 · ${lineCount} 个停顿点</span></div>
+    <div class="trk-lane trk-ruler" data-total="${flat.length}">${ruler}${sepHTML}<div class="playhead-line" style="left:${ph}%"></div></div>
+  </div>`;
+  // 对白轨：说话人色带刻度（非区间）
+  let dlgHTML = sepHTML;
+  flat.forEach((f, gi)=>{
+    const c = f.cmd;
+    if(c.type==='line'){
+      const col = ROLE[c.args.speaker] || '#64748b';
+      dlgHTML += `<span class="dlg-tick" data-gi="${gi}" style="left:calc(${((gi+0.5)/total*100).toFixed(2)}% - 2px);background:${col}"
+        title="${esc(c.args.speaker)}：${esc(trunc(c.args.text, 20))} · ${esc(trkPosLabel(si, flat, gi))}"></span>`;
+    } else if(c.type==='wait'){
+      dlgHTML += `<span class="dlg-tick wait" data-gi="${gi}" style="left:calc(${((gi+0.5)/total*100).toFixed(2)}% - 1px)"
+        title="等待 ${c.args.time}s · ${esc(trkPosLabel(si, flat, gi))}"></span>`;
+    }
+  });
+  html += `<div class="trk-row">
+    <div class="trk-head"><span class="tname">对白</span><span class="tval">第 ${stopAt}/${lineCount} 句 · 灰细线 = 等待</span></div>
+    <div class="trk-lane" data-track="dlg" data-total="${flat.length}">${dlgHTML}<div class="playhead-line" style="left:${ph}%"></div></div>
+  </div>`;
+  TRACK_DEFS.forEach(def=>{
+    if(kind==='type' && def.type!==value || kind==='role' && def.type!=='char') return;
+    let body = sepHTML;
+    if(def.kind==='event'){
+      flat.forEach((f, gi)=>{
+        if(f.cmd.type!=='fx') return;
+        body += `<span class="fx-mark" data-gi="${gi}" style="left:${((gi+0.5)/total*100).toFixed(2)}%" title="单次特效：${esc(f.cmd.args.asset||'')} · ${esc(trkPosLabel(si, flat, gi))}（持续特效 bgeffect 才有区间）">◆</span>`;
+      });
+    } else {
+      const inh = trackInherit(def, flat, entry);
+      const inherited = inh && findInheritSource(def.type, def.slot, si, 0);
+      if(inh?.end && inherited && (kind!=='role' || inherited.cmd.args.role===value)){
+        const {s,b,c} = inherited;
+        body += `<div class="clip trk-inherit" data-src="${keyOf(s,b,c)}" data-gi="0" data-end="${inh.end}" style="left:0;width:${(inh.end/total*100).toFixed(3)}%" title="继承自第 ${s+1} 幕 · ${esc(project.scenes[s].beats[b].title)} · 指令 ${c+1}">${esc(inh.label)}</div>`;
+      }
+      buildTrackClips(def, flat).forEach(sg=>{
+        if(kind==='role' && sg.role!==value) return;
+        const first = flat[sg.start];
+        const sourceKey = keyOf(si,first.b,first.c);
+        const active = source?.def===def && source.start===sg.start;
+        const left = (sg.start/total*100).toFixed(3);
+        const width = Math.max(1.2, (sg.end-sg.start)/total*100).toFixed(3);
+        const col = def.type==='char' ? (ROLE[sg.role]||'#94a3b8') : def.edge;
+        const ticks = def.type==='char' && sg.segs.length>1
+          ? sg.segs.slice(1).map(g=>`<span class="seg-tick" data-gi="${g}" title="${esc(fullSummary(flat[g].cmd))}" style="left:${((g-sg.start)/Math.max(1,sg.end-sg.start)*100).toFixed(2)}%"></span>`).join('') : '';
+        const open = sg.end>=flat.length && flat.length>0 ? '<span class="cl-open">›</span>' : '';
+        const segNote = def.type==='char' ? ` · ${sg.segs.length} 次演出指令（差分/移动）` : '';
+        const title = `${def.label}：${fullSummary(first.cmd)}${segNote}\n生效：${esc(trkPosLabel(si, flat, sg.start))} → ${sg.end<flat.length ? esc(trkPosLabel(si, flat, sg.end))+'（覆盖点）' : '本幕结尾（延续到下一幕）'}\n点选 = 播放头定位 · 双击 = 定位演出台 · 拖右缘 = 裁尾`;
+        body += `<div class="clip${active?' source-on':''}" data-src="${sourceKey}" data-gi="${sg.start}" data-end="${sg.end}" style="left:${left}%;width:${width}%;background:${rgbaOf(col,.38)};border-color:${rgbaOf(col,.85)}" title="${esc(title)}">
+          <span class="cl-label">${esc(trunc(sg.label, 12))}${def.type==='char' && sg.segs.length>1 ? ` ·+${sg.segs.length-1}` : ''}</span>${ticks}${open}<span class="trimbar"></span>
+        </div>`;
+      });
+    }
+    html += `<div class="trk-row">
+      <div class="trk-head"><span class="tname">${def.label}</span><span class="tval">${esc(String(headVal[def.id] ?? ''))}</span></div>
+      <div class="trk-lane" data-track="${def.id}" data-total="${flat.length}">${body}<div class="playhead-line" style="left:${ph}%"></div></div>
+    </div>`;
+  });
+  const filterOptions = Object.fromEntries([
+    ['', '全部轨道'], ...TRACK_DEFS.filter(d=>d.type!=='char').map(d=>[`type:${d.type}`,d.label]),
+    ['type:char','立绘'], ...Object.keys(ROLE).map(role=>[`role:${role}`,role])
+  ]);
+  const affected = new Set(source?.def ? flat.slice(source.marker ?? source.start, source.end).map(f=>f.b) : []);
+  if(el.id==='tracks') $$('#board .board-card').forEach(card=>{
+    card.classList.toggle('affected', Number(card.dataset.s)===si && affected.has(Number(card.dataset.b)));
+  });
+  const sourceLabel = source ? `第 ${source.s+1} 幕 · ${project.scenes[source.s].beats[source.b].title} · 指令 ${source.c+1} · ${fullSummary(source.cmd)}` : '';
+  el.innerHTML = `<div class="trk-foot">
+    <select class="select" data-track-filter aria-label="筛选轨道">${options(filterOptions,state.trackFilter)}</select>
+    <button class="btn tiny" data-track-action="source" ${source?'':'disabled'}>在演出台定位来源</button>
+    <button class="btn tiny" data-track-action="split" ${source?.def && selGi+1<source.end?'':'disabled'}>在此插入状态更新</button>
+    <button class="btn tiny" data-track-action="freeze">在此固化状态</button>
+    ${affected.size ? `<span>影响 ${affected.size} 个分镜</span>` : ''}
+  </div>${source?`<div class="trk-foot">${esc(sourceLabel)}</div>`:''}${html}
+  <div class="trk-foot">斜纹表示跨幕继承。立绘竖线可定位差分或移动指令。向左拖区间右缘可裁尾。素材拖到空轨道会在播放头后插入，拖到已有区间会换素材。</div>`;
+}
+function renderMiniMon(){
+  const el = $('#miniMon'); if(!el) return;
+  const beat = currentBeat();
+  if(!beat){ el.innerHTML = ''; return; }
+  const st = stateAt(state.sel.s, state.sel.b, state.sel.c);
+  const cmd = currentCmd();
+  el.innerHTML = stageHTML(st, {
+    selType: cmd ? cmd.type : null, selSlot: cmd ? cmd.args.slot : null,
+    caption: `镜 ${state.sel.b+1}/${currentScene().beats.length} · 指令 ${state.sel.c+1}/${Math.max(1, currentCmds().length)}`
+  });
+}
+function renderQBin(){
+  const el = $('#qbin'); if(!el) return;
+  const icon = {bg:'▣', cg:'▦', char:'●', bgm:'♪'};
+  el.innerHTML = `<span class="hint" style="flex:0 0 auto">拖素材到轨道插入或替换：</span>` +
+    BIN.map((it,i)=>`<span class="qchip" draggable="true" data-bin="${i}" data-kind="${it.kind}" ${it.kind==='char'&&ROLE[it.role]?`style="color:${ROLE[it.role]}"`:''} title="${esc(it.name)} · 拖到同类轨道">${icon[it.kind]||'▪'} ${esc(it.name)}</span>`).join('');
+}
+function trackScene(d){
+  const s = clamp(state.sel.s + d, 0, project.scenes.length - 1);
+  if(s === state.sel.s) return;
+  const b = clamp(state.sel.b, 0, project.scenes[s].beats.length - 1);
+  state.sel = {s, b, c:0};
+  state.multi.clear(); state.anchor = 0;
+  state.pulse = true;
+  refreshAll(false);
+}
+function selectedTrackSource(){
+  const source = state.trackSource;
+  if(source?.cursor!==state.sel || source.column!==state.sel.c) return null;
+  const cmd = project.scenes[source.s]?.beats[source.b]?.cmds[source.c];
+  return cmd ? {...source, cmd} : null;
+}
+function trackSelectGi(gi, source=null){
+  const flat = sceneFlat(state.sel.s);
+  if(!flat.length) return;
+  const f = flat[clamp(gi, 0, flat.length-1)];
+  state.sel = {s:state.sel.s, b:f.b, c:f.c};
+  state.trackSource = source && {...source, cursor:state.sel, column:f.c};
+  state.multi.clear(); state.anchor = state.sel.c;
+  state.pulse = true;
+  refreshAll(false);
+}
+function matchesTrack(def, cmd){
+  return cmd.type===def.type && (def.type!=='char' || cmd.args.slot===def.slot);
+}
+function activeTrackCommand(cmd){
+  if(cmd.type==='char') return !!cmd.args.role && cmd.args.role!=='无';
+  return !!(cmd.type==='text' ? cmd.args.text : cmd.args.asset);
+}
+function findInheritSource(type, slot, s=state.sel.s, b=state.sel.b){
+  for(let si=s; si>=0; si--){
+    const beats = project.scenes[si].beats;
+    const maxB = si===s ? b-1 : beats.length-1;
+    for(let bi=maxB; bi>=0; bi--){
+      const cmds = beats[bi].cmds;
+      for(let ci=cmds.length-1; ci>=0; ci--){
+        const cmd = cmds[ci];
+        if(matchesTrack({type,slot},cmd)) return activeTrackCommand(cmd) ? {s:si, b:bi, c:ci, cmd} : null;
+      }
+    }
+  }
+  return null;
+}
+function trackStateCommand(def, flat){
+  const command = flat.findLast(f=>matchesTrack(def,f.cmd))?.cmd ?? findInheritSource(def.type,def.slot,state.sel.s,0)?.cmd;
+  if(!command || !activeTrackCommand(command)) return null;
+  const copy = structuredClone(command);
+  if('fade' in copy.args) copy.args.fade = 0;
+  return copy;
+}
+function renderInherit(){
+  const el = $('#inheritBar'); if(!el) return;
+  const beat = currentBeat();
+  if(!beat){ el.innerHTML = '<div class="empty">未选择分镜</div>'; return; }
+  const entry = stateAt(state.sel.s, state.sel.b, -1);
+  const items = [];
+  if(entry.bg) items.push({type:'bg', label:`背景 · ${entry.bg}`});
+  ['l','m','r'].forEach(slot=>{
+    const c = entry.chars[slot];
+    if(c) items.push({type:'char', slot, label:`立绘${SLOT_NAME[slot]} · ${c.role}`});
+  });
+  if(entry.cg) items.push({type:'cg', label:`CG · ${entry.cg}`});
+  if(entry.subtitle && entry.subtitle.text) items.push({type:'text', label:`舞台文字 · ${trunc(entry.subtitle.text, 8)}`});
+  if(entry.music) items.push({type:'bgm', label:`BGM · ${entry.music}`});
+  if(!items.length){ el.innerHTML = `<div class="empty">本分镜开头没有继承内容（空台起幕）</div>`; return; }
+  el.innerHTML = items.map(it=>{
+    const src = findInheritSource(it.type, it.slot);
+    const pos = src ? `${project.scenes[src.s].beats[src.b].title} · 指令 ${src.c+1}` : '';
+    const dataSrc = src ? ` data-src="${src.s},${src.b},${src.c}"` : '';
+    return `<span class="inh-chip"${dataSrc} title="进入「${esc(beat.title)}」时已生效，来自 ${esc(pos || '未知来源')}；点击定位来源指令">${esc(it.label)}<small>← ${esc(pos || '—')}</small></span>`;
+  }).join('');
 }
 
 /* ---------- inspector ---------- */
@@ -1585,8 +1887,8 @@ function redo(){
   toast('已重做');
 }
 function refreshAll(save=true){
-  renderTree(); renderStage(); renderTransport(); renderStrip(); renderCmdList(); renderLanes(); renderInspector(); updateCrumb(); fitMonitor();
-  if(state.view==='board') renderBoard();
+  renderTree(); renderStage(); renderTransport(); renderStrip(); renderCmdList(); renderInherit(); renderInspector(); updateCrumb(); fitMonitor();
+  if(state.view==='board'){ renderBoard(); renderTracks(); renderMiniMon(); }
   if(state.view==='script') renderScript();
   if(state.view==='deliver') renderDeliver();
   if(state.device==='mobile') renderMobile();
@@ -1599,7 +1901,8 @@ function selectCmd(c, opts={}){
   state.sel.c = clamp(c, 0, cmds.length-1);
   if(!opts.keepMulti) { state.multi.clear(); state.anchor = state.sel.c; }
   state.pulse = opts.pulse !== false;
-  renderStage(); renderTransport(); renderStrip(); renderCmdList(); renderLanes(); renderInspector(); updateCrumb();
+  renderStage(); renderTransport(); renderStrip(); renderCmdList(); renderInherit(); renderInspector(); updateCrumb();
+  if(state.view==='board'){ renderTracks(); renderMiniMon(); }
   if(opts.scroll !== false) scrollCmdIntoView();
   if(state.device==='mobile') renderMobile();
 }
@@ -1643,7 +1946,8 @@ function renderBoard(){
     scene.beats.forEach((beat, bi)=>{
       const st = stateAt(si, bi, beat.cmds.length-1);
       const first = beat.cmds.find(c=>c.type==='line');
-      html += `<div class="board-card" draggable="true" data-s="${si}" data-b="${bi}">
+      const on = si===state.sel.s && bi===state.sel.b ? ' on' : '';
+      html += `<div class="board-card${on}" draggable="true" data-s="${si}" data-b="${bi}">
         <div class="thumb">${miniStage(st)}
           <span class="stage-chip P1">P1</span>
           ${beat.warn?'<span class="badge-warn">!</span>':''}
@@ -1723,10 +2027,10 @@ const ROADMAP = [
   {id:'P0-5', stage:'P0', title:'检查器：滑杆、数值、分组', status:'part', view:'stage', target:'#inspector', desc:'严格映射真实指令参数，原型演示滑杆/数值联动与字段分组；数值 scrub 待实现。'},
   {id:'P0-6', stage:'P0', title:'存量修复与原有入口保留', status:'part', view:'stage', target:'#cmdlist', desc:'修复窄屏拖动/列表倒序/校验定位；保留「我的作品」与「作品素材管理」弹窗。'},
   {id:'P1-1', stage:'P1', title:'故事板：卡片墙（移动端轻量化）', status:'live', view:'board', target:'#board', desc:'桌面卡片墙拖拽重排与批量；手机端收敛为轻量分镜横滑切换，不做桌面式四区对等。'},
-  {id:'P1-2', stage:'P1', title:'状态泳道：生效区间 + 点击跳转', status:'part', view:'stage', target:'#lanes', desc:'原型演示泳道与点击跳转；影响范围高亮与「在此固化状态」待实现。'},
-  {id:'P1-3', stage:'P1', title:'素材箱：常驻 + 引用治理', status:'part', view:'stage', target:'#bin', desc:'原型演示点击素材写入选中指令；后续承接「作品素材管理」的引用统计与未引用清理。'},
+  {id:'P1-2', stage:'P1', title:'轨道台：编排台双层 + 区间编辑（三期核心）', status:'live', view:'board', target:'#tracksWrap', desc:'应用已交付当前幕轨道、全局播放头、来源与影响范围、筛选、继承与缺失标记、裁尾、分割和固化。原型用示例素材演示主要操作和窄屏切换。'},
+  {id:'P1-3', stage:'P1', title:'素材箱：拖放插入和替换（三期）', status:'part', view:'board', target:'#qbin', desc:'应用支持素材拖到空轨道插入，拖到区间或媒体字段替换。原型演示轨道拖放。全作品引用治理留待后续。'},
   {id:'P1-4', stage:'P1', title:'结构树 + 搜索 + 标记', status:'part', view:'stage', target:'#tree', desc:'原型演示三层结构与切换；全局搜索、标记、恢复位置待实现。'},
-  {id:'P1-5', stage:'P1', title:'分层保存 + 自动快照 + 撤销历史', status:'part', view:'deliver', target:'#versionCard', desc:'结构/素材分层写盘（解决大包阻塞），配合自动快照轮转与差异恢复。'},
+  {id:'P1-5', stage:'P1', title:'分层保存 + 自动快照 + 撤销历史（三期后移观察）', status:'part', view:'deliver', target:'#versionCard', desc:'结构/素材分层写盘与大包阻塞治理；二期缩略图签名缓存已缓解大头，若三期轨道拖拽/裁尾推高写盘频率则优先级回升。原型中版本快照仍为示意。'},
   {id:'P1-6', stage:'P1', title:'剧本台：对白表格（桌面优先）', status:'live', view:'script', target:'#scriptBody', desc:'桌面端批量改词与官方派生润色核心视图；手机端不上大表格，保留搜索定位。'},
   {id:'P2-1', stage:'P2', title:'分支图 + 路径 / Predicate 调试', status:'plan', view:'stage', target:'', desc:'只读节点图已可查看；支持选项路径与 Predicate 命中状态调试（无通用变量系统）。'},
   {id:'P2-2', stage:'P2', title:'交付：台本先行，Web 包与视频后置', status:'plan', view:'deliver', target:'#exportCard', desc:'P1 先交付台本/SRT 与正式播放器直放；Web 只读交互包与 MP4 录制编码按需后置评估。'},
@@ -1897,7 +2201,17 @@ function renderMobile(){
     const sheet = screen.querySelector('.m-sheet');
     if(sheet) document.querySelector('.m-frame')?.appendChild(sheet);
   } else if(state.mView==='board'){
-    let html = `<div style="padding:8px 10px 2px;color:#83939f;font-size:9.5px">移动端轻分镜切换：点击卡片直接回演出台；多选批量与剧本表格请用桌面端。</div>`;
+    let html = `<div class="trk-foot"><button class="btn tiny" data-mobile-tracks>${state.mobileTracks?'分镜卡片':'可视化轨道'}</button></div>`;
+    if(state.mobileTracks){
+      const st = stateAt(state.sel.s,state.sel.b,state.sel.c);
+      screen.innerHTML = html + `<div class="trk-foot">
+        <button class="btn tiny" data-track-scene="-1">上一幕</button><span>${esc(currentScene().title)}</span>
+        <button class="btn tiny" data-track-scene="1">下一幕</button>
+      </div><div class="m-monitor">${stageHTML(st,{caption:`指令 ${state.sel.c+1}/${currentCmds().length}`})}</div>
+      <div class="trk-scroll"><div class="tracks-demo"></div></div>`;
+      renderTracks(screen.querySelector('.tracks-demo'));
+      return;
+    }
     project.scenes.forEach((scene,si)=>{
       html += `<div style="padding:8px 10px 0;color:#7d90a6;font-size:10px">${esc(scene.title)}</div><div class="m-board">`;
       scene.beats.forEach((beat,bi)=>{
@@ -2025,7 +2339,7 @@ function switchView(view){
   $$('.view').forEach(v=>v.classList.toggle('active', v.id === 'view-'+view));
   $$('#worktabs .tab').forEach(t=>t.classList.toggle('on', t.dataset.view===view));
   if(view==='stage') setTimeout(fitMonitor, 30);
-  if(view==='board') renderBoard();
+  if(view==='board'){ renderBoard(); renderTracks(); renderMiniMon(); renderQBin(); }
   if(view==='script') renderScript();
   if(view==='deliver') renderDeliver();
 }
@@ -2065,7 +2379,7 @@ function applyStageFilter(){
     el.classList.toggle('planned', !allowed);
   });
   $('#phaseHint').innerHTML = f==='all'
-    ? '全部阶段：P0 可体验 · P1 部分示意 · P2 占位'
+    ? '全部阶段：P0 可体验 · P1 多数示意（轨道台为三期核心）· P2 占位'
     : f==='P0'
       ? '<b style="color:#4ade80">P0 视图</b>：播放头/传输/选择集；P1/P2 显示为规划态'
       : '<b style="color:#fbbf24">P0 + P1</b>：结构视图与检查清单可用；P2 仍为规划态';
@@ -2076,6 +2390,7 @@ function stageNote(el){
   if(el.classList.contains('bin')) rm = 'P1-3';
   else if(el.classList.contains('lanes-wrap')) rm = 'P1-2';
   else if(el.id==='view-board') rm = 'P1-1';
+  else if(el.id==='tracksWrap') rm = 'P1-2';
   else if(el.id==='view-script') rm = 'P1-6';
   else if(el.id==='view-deliver') rm = 'P1-5';
   else if(el.id==='exportCard') rm = 'P2-2';
@@ -2161,7 +2476,8 @@ function bindEvents(){
       state.anchor = i;
     }
     state.pulse = true;
-    renderStage(); renderTransport(); renderStrip(); renderCmdList(); renderLanes(); renderInspector(); updateCrumb();
+    renderStage(); renderTransport(); renderStrip(); renderCmdList(); renderInherit(); renderInspector(); updateCrumb();
+    if(state.view==='board'){ renderTracks(); renderMiniMon(); }
     if(state.device==='mobile') renderMobile();
   });
 
@@ -2174,9 +2490,12 @@ function bindEvents(){
     else if(a==='clear'){ state.multi.clear(); renderCmdList(); renderInspector(); }
   });
 
-  $('#lanes').addEventListener('click', e=>{
-    const b = e.target.closest('[data-lane]'); if(!b) return;
-    selectCmd(Number(b.dataset.lane));
+  $('#inheritBar').addEventListener('click', e=>{
+    const chip = e.target.closest('.inh-chip'); if(!chip) return;
+    if(!chip.dataset.src){ toast('未找到来源指令'); return; }
+    const [s,b,c] = chip.dataset.src.split(',').map(Number);
+    selectBeat(s, b); selectCmd(c);
+    toast('已定位到来源指令：继承状态从这里开始生效');
   });
 
   $('#tree').addEventListener('click', e=>{
@@ -2283,12 +2602,207 @@ function bindEvents(){
     $$('.board-card').forEach(x=>x.classList.remove('drag','drop-target'));
     dragBeat = null;
   });
+  let boardClickAt = 0;
   $('#board').addEventListener('click', e=>{
     const card = e.target.closest('.board-card');
-    if(card){ selectBeat(Number(card.dataset.s), Number(card.dataset.b)); switchView('stage'); return; }
+    if(card){
+      const s = Number(card.dataset.s), b = Number(card.dataset.b);
+      if(s===state.sel.s && b===state.sel.b){
+        // 同卡片二连击 = 进入演出台（单层重渲染会打断原生 dblclick，改手动判定）
+        const now = Date.now();
+        if(now - boardClickAt < 400){ boardClickAt = 0; switchView('stage'); }
+        else boardClickAt = now;
+        return;
+      }
+      // 单击 = 选中：双层共用的全局播放头移动，轨道与小监视器联动
+      selectBeat(s, b);
+      return;
+    }
     if(e.target.closest('[data-newscene]')) toast('新建分镜属 P1 示意；当前原型请用「复制分镜」或直接在数据中新增');
   });
   $('#btnBoardNew').addEventListener('click', ()=>toast('新建分镜属 P1 示意'));
+
+  /* tracks —— 轨道区（三期） */
+  const laneDefOf = lane => TRACK_DEFS.find(d=>d.id === lane.dataset.track);
+  const laneAccepts = (def, bin) => !!def && !!bin && def.type===bin.kind;
+  function trackOpenSource(source=selectedTrackSource() || state.sel){
+    selectBeat(source.s,source.b);
+    selectCmd(source.c);
+    if(state.device==='mobile'){
+      state.mView = 'stage';
+      state.sheet = true;
+      renderMobile();
+    } else {
+      switchView('stage');
+      scrollCmdIntoView();
+    }
+  }
+  function insertAfterPlayhead(cmds){
+    if(!cmds.length || !currentBeat()) return;
+    pushUndo();
+    const c = Math.min(state.sel.c+1,currentCmds().length);
+    currentCmds().splice(c,0,...cmds);
+    state.sel = {...state.sel,c:c+cmds.length-1};
+    state.multi.clear(); state.anchor = state.sel.c;
+    refreshAll();
+  }
+  let lastTrackClick;
+  function handleTrackClick(e){
+    const action = e.target.closest('[data-track-action]')?.dataset.trackAction;
+    if(action==='source'){ trackOpenSource(); return; }
+    const flat = sceneFlat(state.sel.s);
+    if(action==='split' || action==='freeze'){
+      const cursor = flat.findIndex(f=>f.b===state.sel.b && f.c===state.sel.c);
+      const prefix = flat.slice(0,cursor+1);
+      const source = selectedTrackSource();
+      if(action==='split'){
+        if(!source?.def || cursor+1>=source.end) return;
+        const cmd = trackStateCommand(source.def,prefix);
+        if(cmd){ insertAfterPlayhead([cmd]); toast('已插入状态更新，可撤销'); }
+      } else {
+        const cmds = TRACK_DEFS.filter(d=>d.kind!=='event').map(d=>trackStateCommand(d,prefix)).filter(Boolean);
+        if(!cmds.length){ toast('当前位置没有可固化的状态'); return; }
+        insertAfterPlayhead(cmds);
+        toast('已固化当前状态，可撤销');
+      }
+      return;
+    }
+    const beat = e.target.closest('.rbeat');
+    if(beat){ selectBeat(state.sel.s,Number(beat.dataset.beat)); return; }
+    const lane = e.target.closest('.trk-lane[data-track]');
+    if(!lane || !flat.length || e.target.closest('.trimbar')) return;
+    const hit = e.target.closest('.dlg-tick,.fx-mark,.seg-tick');
+    const clip = e.target.closest('.clip');
+    const rect = lane.getBoundingClientRect();
+    const start = clip ? Number(clip.dataset.gi) : 0;
+    const end = clip ? Number(clip.dataset.end) : flat.length;
+    const gi = hit ? Number(hit.dataset.gi) : clamp(Math.floor((e.clientX-rect.left)/rect.width*flat.length),start,end-1);
+    const f = flat[gi];
+    const [s,b,c] = !hit && clip ? clip.dataset.src.split(':').map(Number) : [state.sel.s,f.b,f.c];
+    const source = hit || clip ? {s,b,c,start,end,def:clip ? laneDefOf(lane) : null,marker:hit ? gi : null} : null;
+    const key = `${state.sel.s}:${lane.dataset.track}:${gi}:${s}:${b}:${c}`;
+    const now = Date.now();
+    if(lastTrackClick?.key===key && now-lastTrackClick.at<360){
+      lastTrackClick = null;
+      trackOpenSource(source || {s,b,c});
+      return;
+    }
+    lastTrackClick = {key,at:now};
+    trackSelectGi(gi,source);
+  }
+  function handleTrackFilter(e){
+    if(!e.target.matches('[data-track-filter]')) return;
+    state.trackFilter = e.target.value;
+    renderTracks(e.currentTarget.querySelector('.tracks-demo') || e.currentTarget);
+  }
+  $('#trkPrev').addEventListener('click', ()=>trackScene(-1));
+  $('#trkNext').addEventListener('click', ()=>trackScene(1));
+  $('#miniMon').addEventListener('click', ()=>trackOpenSource(state.sel));
+  $('#tracks').addEventListener('click',handleTrackClick);
+  $('#tracks').addEventListener('change',handleTrackFilter);
+  $('#mobileShell').addEventListener('change',handleTrackFilter);
+  /* 裁尾：拖 clip 右缘，在松手点插入退场指令 */
+  const STOP_NAME = {bg:'背景退场（清空）', char:'立绘退场（清空）', cg:'CG 退场（清空）', text:'舞台文字清除', bgm:'BGM 停止'};
+  function stopCmdFor(def){
+    switch(def.type){
+      case 'bg': return B('');
+      case 'char': return C(def.slot, '无');
+      case 'cg': return G('');
+      case 'text': return T('');
+      case 'bgm': return M('');
+    }
+    return null;
+  }
+  let trim = null;
+  $('#tracks').addEventListener('pointerdown', e=>{
+    const bar = e.target.closest('.trimbar'); if(!bar) return;
+    e.preventDefault(); e.stopPropagation();
+    const clip = bar.closest('.clip');
+    const lane = clip.closest('.trk-lane');
+    const guide = document.createElement('div');
+    guide.className = 'trim-guide';
+    lane.appendChild(guide);
+    clip.classList.add('trimming');
+    trim = {def: laneDefOf(lane), start: Number(clip.dataset.gi), end: Number(clip.dataset.end), lane, guide, pct: null};
+  });
+  window.addEventListener('pointermove', e=>{
+    if(!trim) return;
+    const rect = trim.lane.getBoundingClientRect();
+    trim.pct = clamp((e.clientX - rect.left)/rect.width, 0, 1);
+    trim.guide.style.left = (trim.pct*100).toFixed(2)+'%';
+  });
+  window.addEventListener('pointerup', ()=>{
+    if(!trim) return;
+    const {def, start, end, lane, guide, pct} = trim;
+    trim = null;
+    guide.remove();
+    const trimming = lane.querySelector('.clip.trimming');
+    if(trimming) trimming.classList.remove('trimming');
+    if(pct==null || !def || def.kind==='event' || !def.type) return;
+    const flat = sceneFlat(state.sel.s);
+    const total = flat.length;
+    const gi = Math.round(pct*total);
+    if(gi<=start){ toast('裁尾位置需在生效点之后（未修改）'); return; }
+    if(gi>=end){ toast(end<total ? '后方已被下一段覆盖；如需收紧，请先拖后一段的右缘' : '本幕结束前无需裁尾：状态将自然延续到下一幕'); return; }
+    const stop = stopCmdFor(def);
+    const f = flat[gi];
+    pushUndo();
+    project.scenes[state.sel.s].beats[f.b].cmds.splice(f.c, 0, stop);
+    state.sel = {s:state.sel.s, b:f.b, c:f.c};
+    state.multi.clear(); state.anchor = state.sel.c;
+    refreshAll();
+    toast(`裁尾完成：已在「${esc(project.scenes[state.sel.s].beats[f.b].title)}」指令 ${f.c+1} 插入「${STOP_NAME[def.type]}」，Ctrl+Z 可撤销`);
+  });
+  /* 素材快取 / 素材箱 → 轨道：最小拖拽（P1-3 三期子集） */
+  let binDrag = null;
+  const bindDragSrc = sel => {
+    const el = $(sel); if(!el) return;
+    el.addEventListener('dragstart', e=>{
+      const item = e.target.closest('[data-bin]'); if(!item) return;
+      binDrag = BIN[Number(item.dataset.bin)];
+      try{ e.dataTransfer.setData('text/plain','bin'); e.dataTransfer.effectAllowed='copy'; }catch(_){}
+    });
+    el.addEventListener('dragend', ()=>{ binDrag = null; $$('.trk-lane.drop-ok').forEach(l=>l.classList.remove('drop-ok')); });
+  };
+  bindDragSrc('#bin');
+  bindDragSrc('#qbin');
+  $('#qbin').addEventListener('click', e=>{
+    const item = e.target.closest('.qchip'); if(!item) return;
+    toast('拖动该素材到下方对应轨道（背景/立绘/CG/BGM）即可插入指令；在演出台左下素材箱点击可直接应用到选中指令');
+  });
+  $('#tracks').addEventListener('dragover', e=>{
+    const lane = e.target.closest('.trk-lane[data-track]');
+    if(lane && laneAccepts(laneDefOf(lane), binDrag)){ e.preventDefault(); lane.classList.add('drop-ok'); }
+  });
+  $('#tracks').addEventListener('dragleave', e=>{
+    const lane = e.target.closest('.trk-lane'); if(lane) lane.classList.remove('drop-ok');
+  });
+  $('#tracks').addEventListener('drop', e=>{
+    const lane = e.target.closest('.trk-lane[data-track]');
+    const def = lane ? laneDefOf(lane) : null;
+    if(!lane || !laneAccepts(def, binDrag)) return;
+    e.preventDefault();
+    const bin = binDrag; binDrag = null;
+    lane.classList.remove('drop-ok');
+    const clip = e.target.closest('.clip');
+    if(clip){
+      const [s,b,c] = clip.dataset.src.split(':').map(Number);
+      const cmd = project.scenes[s].beats[b].cmds[c];
+      const key = def.type==='char' ? 'role' : 'asset';
+      const value = def.type==='char' ? bin.role : bin.name;
+      if(cmd.args[key]===value) return;
+      pushUndo();
+      cmd.args[key] = value;
+      refreshAll();
+      toast(`已替换为「${esc(bin.name)}」，保留原有参数，可撤销`);
+      return;
+    }
+    const cmd = def.type==='char' ? C(def.slot, bin.role)
+      : def.type==='bg' ? B(bin.name)
+      : def.type==='cg' ? G(bin.name) : M(bin.name);
+    insertAfterPlayhead([cmd]);
+    toast(`已在播放头后插入「${esc(bin.name)}」，可撤销`);
+  });
 
   /* script */
   $('#scriptSearch').addEventListener('input', renderScript);
@@ -2527,6 +3041,14 @@ function bindEvents(){
     if(e.target.closest('[data-mroadmap]')) openRoadmap();
   });
   $('#mobileShell').addEventListener('click', e=>{
+    if(e.target.closest('[data-mobile-tracks]')){
+      state.mobileTracks = !state.mobileTracks;
+      renderMobile();
+      return;
+    }
+    const scene = e.target.closest('[data-track-scene]');
+    if(scene){ trackScene(Number(scene.dataset.trackScene)); return; }
+    if(e.target.closest('.tracks-demo')){ handleTrackClick(e); return; }
     const t = e.target.closest('[data-mt]');
     if(t){
       const a = t.dataset.mt;
@@ -2600,22 +3122,25 @@ async function demo(){
   switchView('stage');
   selectBeat(0, 0);
   selectCmd(3);
-  toast('演示 1/5 · 选中第 4 条指令：舞台停在执行后的状态');
+  toast('演示 1/6 · 选中第 4 条指令：舞台停在执行后的状态');
   await sleep(1600);
   selectCmd(2);
   play();
-  toast('演示 2/5 · 播放头沿指令推进；空格暂停、←/→ 按句跳');
+  toast('演示 2/6 · 播放头沿指令推进；空格暂停、←/→ 按句跳');
   await sleep(2400);
   pause();
   await sleep(600);
   switchView('board');
-  toast('演示 3/5 · 编排台：P1 故事板，可拖拽重排');
-  await sleep(1700);
+  toast('演示 3/6 · 编排台双层：上层故事板粗剪，下层状态轨道看覆盖区间');
+  await sleep(1900);
+  selectBeat(1, 1);
+  toast('演示 4/6 · 轨道台：点卡片 / 轨道即移动全局播放头，小监视器同步重放；拖色块右缘可裁尾');
+  await sleep(1900);
   switchView('script');
-  toast('演示 4/5 · 剧本台：批量改说话人与台词');
+  toast('演示 5/6 · 剧本台：批量改说话人与台词');
   await sleep(1700);
   switchView('deliver');
-  toast('演示 5/5 · 交付台：检查、导出、版本快照');
+  toast('演示 6/6 · 交付台：检查、导出、版本快照');
   await sleep(1700);
   openRoadmap('P0-1');
   toast('路线图与界面双向关联：点「定位」回到对应区域');
@@ -2625,7 +3150,7 @@ async function demo(){
 /* ---------- init ---------- */
 function init(){
   // stage metadata
-  const map = [['#view-board','P1'],['#view-script','P1'],['#view-deliver','P1'],['.bin','P1'],['.lanes-wrap','P1'],['#exportCard','P1']];
+  const map = [['#view-board','P1'],['#view-script','P1'],['#view-deliver','P1'],['.bin','P1'],['.lanes-wrap','P1'],['#tracksWrap','P1'],['#exportCard','P1']];
   map.forEach(([sel,st])=>{ const el=$(sel); if(el) el.dataset.stage=st; });
   $$('#worktabs .tab').forEach(tab=>{
     const chip = tab.querySelector('.stage-chip');
@@ -2645,8 +3170,8 @@ function init(){
   document.head.appendChild(s);
 
   state.sel.c = 2;
-  renderTree(); renderBin(); renderTransport(); renderStrip(); renderCmdList(); renderLanes(); renderInspector(); renderStage();
-  renderBoard(); renderScript(); renderDeliver(); renderRoadmap(); renderMobile();
+  renderTree(); renderBin(); renderTransport(); renderStrip(); renderCmdList(); renderInherit(); renderInspector(); renderStage();
+  renderBoard(); renderTracks(); renderMiniMon(); renderQBin(); renderScript(); renderDeliver(); renderRoadmap(); renderMobile();
   bindEvents();
   applyStageFilter();
   const initialDevice = window.innerWidth <= 900 ? 'mobile' : 'desktop';

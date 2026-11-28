@@ -51,6 +51,8 @@ class EditorBoardView extends StatefulWidget {
     required this.compact,
     this.resources,
     required this.onOpenBeat,
+    this.onPreviewBeat,
+    this.affectedBeats = const {},
     required this.onAddBeat,
     required this.onInsertBeatAfter,
     required this.onDuplicateBeats,
@@ -66,6 +68,8 @@ class EditorBoardView extends StatefulWidget {
   final bool compact;
   final EditorPreviewResources? resources;
   final void Function(int scene, int beat) onOpenBeat;
+  final void Function(int scene, int beat)? onPreviewBeat;
+  final Set<BeatRef> affectedBeats;
   final void Function(int scene) onAddBeat;
   final void Function(int scene, int beat) onInsertBeatAfter;
   final void Function(List<BeatRef> refs) onDuplicateBeats;
@@ -83,12 +87,13 @@ class _EditorBoardViewState extends State<EditorBoardView> {
   final Set<BeatRef> _selected = {};
   EditorProject? _visualProject;
   List<List<_BeatVisualSummary>> _visualSummaries = const [];
-  static String _normalizeSlot(String raw) => switch (raw.trim().toLowerCase()) {
-    'l' || 'left' => 'l',
-    'm' || 'middle' || 'center' => 'm',
-    'r' || 'right' => 'r',
-    _ => '',
-  };
+  static String _normalizeSlot(String raw) =>
+      switch (raw.trim().toLowerCase()) {
+        'l' || 'left' => 'l',
+        'm' || 'middle' || 'center' => 'm',
+        'r' || 'right' => 'r',
+        _ => '',
+      };
 
   static Set<String> _parseFocusSlots(String raw) {
     final value = raw.trim().toLowerCase();
@@ -181,13 +186,14 @@ class _EditorBoardViewState extends State<EditorBoardView> {
               }
             case 'blocker':
               blockerAlpha = command.args.containsKey('a')
-                  ? (double.tryParse(command.value('a')) ?? 1.0)
-                        .clamp(0.0, 1.0)
+                  ? (double.tryParse(command.value('a')) ?? 1.0).clamp(0.0, 1.0)
                   : 1.0;
               double channel(String key, double fallback) =>
                   command.args.containsKey(key)
-                  ? (double.tryParse(command.value(key)) ?? fallback)
-                        .clamp(0.0, 1.0)
+                  ? (double.tryParse(command.value(key)) ?? fallback).clamp(
+                      0.0,
+                      1.0,
+                    )
                   : fallback;
               blockerColor = Color.from(
                 alpha: 1.0,
@@ -549,10 +555,15 @@ class _EditorBoardViewState extends State<EditorBoardView> {
                   beatIndex: bi,
                   warnings: _warningsFor(si, bi),
                   active: si == widget.activeScene && bi == widget.activeBeat,
+                  affected: widget.affectedBeats.contains((
+                    scene: si,
+                    beat: bi,
+                  )),
                   selected: false,
                   compact: true,
-                  onTap: () => widget.onOpenBeat(si, bi),
-                  onDoubleTap: () => widget.onOpenBeat(si, bi),
+                  onTap: () =>
+                      (widget.onPreviewBeat ?? widget.onOpenBeat)(si, bi),
+                  onDoubleTap: null,
                   onToggleSelect: null,
                   onMenuAction: null,
                 ),
@@ -684,9 +695,8 @@ class _EditorBoardViewState extends State<EditorBoardView> {
                           ],
                       ];
                       return ScrollConfiguration(
-                        behavior: ScrollConfiguration.of(
-                          context,
-                        ).copyWith(scrollbars: false),
+                        behavior: ScrollConfiguration.of(context)
+                            .copyWith(scrollbars: false),
                         child: NotificationListener<ScrollNotification>(
                           onNotification: _onBoardScrollNotification,
                           child: CustomScrollView(
@@ -869,8 +879,12 @@ class _EditorBoardViewState extends State<EditorBoardView> {
         warnings: warnings,
         active: active,
         selected: selected,
+        affected: widget.affectedBeats.contains(ref),
         compact: false,
-        onTap: () => _toggleSelect(ref),
+        onTap: () {
+          _toggleSelect(ref);
+          widget.onPreviewBeat?.call(sceneIndex, beatIndex);
+        },
         onDoubleTap: () => widget.onOpenBeat(sceneIndex, beatIndex),
         onToggleSelect: () => _toggleSelect(ref),
         onMenuAction: (action) {
@@ -930,6 +944,7 @@ class _BeatCard extends StatelessWidget {
     required this.warnings,
     required this.active,
     required this.selected,
+    required this.affected,
     required this.compact,
     required this.onTap,
     required this.onDoubleTap,
@@ -945,9 +960,10 @@ class _BeatCard extends StatelessWidget {
   final int warnings;
   final bool active;
   final bool selected;
+  final bool affected;
   final bool compact;
   final VoidCallback onTap;
-  final VoidCallback onDoubleTap;
+  final VoidCallback? onDoubleTap;
   final VoidCallback? onToggleSelect;
   final void Function(String action)? onMenuAction;
 
@@ -975,13 +991,15 @@ class _BeatCard extends StatelessWidget {
               ? scheme.primary
               : active
               ? scheme.secondary
+              : affected
+              ? scheme.tertiary
               : scheme.outlineVariant,
-          width: selected || active ? 2 : 1,
+          width: selected || active || affected ? 2 : 1,
         ),
       ),
       child: InkWell(
         onTap: onTap,
-        onDoubleTap: compact ? null : onDoubleTap,
+        onDoubleTap: onDoubleTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -1054,9 +1072,7 @@ class _BeatCard extends StatelessWidget {
                       ),
                       child: Text(
                         visual.headline.isEmpty
-                            ? (sceneLabel.isEmpty
-                                  ? '空分镜'
-                                  : '场景：$sceneLabel')
+                            ? (sceneLabel.isEmpty ? '空分镜' : '场景：$sceneLabel')
                             : visual.headline,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

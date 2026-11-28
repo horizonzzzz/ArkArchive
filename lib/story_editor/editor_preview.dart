@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../story_player/data/asset_store.dart';
@@ -81,7 +82,7 @@ class PreparedStage {
 }
 
 /// 当前创作页独占；只读借用已有 PRTS 缓存，缺失资源临时读取。
-class EditorPreviewResources {
+class EditorPreviewResources extends ChangeNotifier {
   EditorPreviewResources(this.store);
   final AssetStore store;
   final _textures = <Uri, Future<ui.Image>>{};
@@ -100,6 +101,36 @@ class EditorPreviewResources {
   Future<List<String>>? _effects;
   Future<List<String>>? _cgImages;
   bool _closed = false;
+  Listenable get mediaAvailability => this;
+  final _missingTextures = <Uri>{};
+  final _missingEffects = <String>{};
+  final _missingAudio = <Uri>{};
+  MediaCatalog? _resolvedPrts;
+
+  bool mediaUnavailable(FieldType type, String key) {
+    final catalog = _resolvedPrts ?? _defaultCatalog;
+    switch (type) {
+      case FieldType.background:
+      case FieldType.cg:
+        final uri = catalog.image(key, cg: type == FieldType.cg);
+        return _missingTextures.contains(uri);
+      case FieldType.character:
+        final uri = catalog.character(key)?.body;
+        return uri == null
+            ? _resolvedPrts != null
+            : _missingTextures.contains(uri);
+      case FieldType.music:
+      case FieldType.sound:
+        final uri = catalog.audio(key);
+        return uri == null
+            ? !key.startsWith(r'$') || _resolvedPrts != null
+            : _missingAudio.contains(uri);
+      case FieldType.fx:
+        return _missingEffects.contains(key);
+      default:
+        return false;
+    }
+  }
 
   void _rememberThumbnail(
     ({String key, bool cg, bool isCharacter}) cacheKey,
@@ -311,6 +342,10 @@ class EditorPreviewResources {
     }
     if (!active() || _closed) throw StateError('预览已关闭');
     final catalog = EditorCatalog(base, project.assets);
+    if (base != null && !identical(_resolvedPrts, base)) {
+      _resolvedPrts = base;
+      notifyListeners();
+    }
     final local = {for (final a in project.assets.values) a.uri: a};
     Future<Uint8List> bytes(Uri u) async =>
         local[u]?.bytes ??
@@ -343,6 +378,9 @@ class EditorPreviewResources {
               () => bytes(entry.key),
             );
           } catch (_) {
+            if (!_closed && _missingTextures.add(entry.key)) {
+              notifyListeners();
+            }
             warnings.add(
               '${entry.value.join('、')}：无法加载图片 ${entry.key.pathSegments.last}',
             );
@@ -370,6 +408,9 @@ class EditorPreviewResources {
         }
         effects[name] = asset;
       } catch (_) {
+        if (!_closed && _missingEffects.add(key)) {
+          notifyListeners();
+        }
         warnings.add('${locations[c.line]}：无法加载特效 $key');
       }
     }
@@ -381,7 +422,16 @@ class EditorPreviewResources {
         : JustAudioOutput(
             catalog,
             store,
-            resolveSource: (u) => audioFiles.resolve(u, () => bytes(u)),
+            resolveSource: (u) => audioFiles.resolve(u, () async {
+              try {
+                return await bytes(u);
+              } catch (_) {
+                if (!_closed && _missingAudio.add(u)) {
+                  notifyListeners();
+                }
+                rethrow;
+              }
+            }),
             onWarning: (message) {
               if (active()) engine.warn(message);
             },
@@ -414,8 +464,10 @@ class EditorPreviewResources {
     return PreparedStage(engine, catalog, textures, audio, audioFiles);
   }
 
+  @override
   void dispose() {
     _closed = true;
+    super.dispose();
     _thumbnailValues.clear();
     _pendingThumbnails.clear();
     for (final pending in _textures.values) {

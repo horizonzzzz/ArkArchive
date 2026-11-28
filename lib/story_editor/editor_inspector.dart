@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../story_player/script.dart';
 import 'editor_preview.dart';
 import 'editor_project.dart';
+import 'editor_timeline_materials.dart';
 
 /// 检查器字段分组（P0-5：内容 / 布局 / 时间 / 高级，高级默认收起）。
 enum _FieldGroup { content, layout, timing, advanced }
@@ -70,6 +71,7 @@ class EditorInspector extends StatefulWidget {
     required this.onUpdateMany,
     required this.onReplaceSource,
     required this.onPickMedia,
+    this.onDropMedia,
     required this.onResetCommand,
     required this.onFocusTypingEnd,
   });
@@ -85,6 +87,8 @@ class EditorInspector extends StatefulWidget {
   onUpdateMany;
   final void Function(EditCommand next) onReplaceSource;
   final Future<void> Function(EditorField field) onPickMedia;
+  final void Function(EditorField field, TimelineMaterial material)?
+  onDropMedia;
   final VoidCallback onResetCommand;
   final void Function(String fieldKey) onFocusTypingEnd;
 
@@ -577,7 +581,7 @@ class _EditorInspectorState extends State<EditorInspector> {
       final asset = widget.project.assets[value];
       final isLocal = value.startsWith('local_');
       final displayName = value.isEmpty ? '未选择' : (asset?.name ?? value);
-      return Container(
+      final mediaField = Container(
         key: key,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
@@ -671,6 +675,18 @@ class _EditorInspectorState extends State<EditorInspector> {
                 icon: const Icon(Icons.close),
               ),
           ],
+        ),
+      );
+      if (widget.onDropMedia == null) return mediaField;
+      return DragTarget<TimelineMaterial>(
+        onWillAcceptWithDetails: (details) => details.data.type == field.type,
+        onAcceptWithDetails: (details) =>
+            widget.onDropMedia!(field, details.data),
+        builder: (context, candidates, rejected) => ColoredBox(
+          color: candidates.isEmpty
+              ? Colors.transparent
+              : Theme.of(context).colorScheme.primaryContainer,
+          child: mediaField,
         ),
       );
     }

@@ -205,7 +205,7 @@
     <div class="meta">
       <span class="chip">分析对象 feat/story-editer @ 43944e7</span>
       <span class="chip">范围 代码现状 + v0.2 设计文档 + 引擎能力</span>
-      <span class="chip">2026-11-26（已对齐代码边界与分期微调；一/二期落地状态见 §07）</span>
+      <span class="chip">2026-11-26 基线 · 2026-11-28 增补三期「轨道台」方向（§04 / §06 F2 / §07）</span>
       <span class="chip">产品 / 交互 / 功能路线</span>
     </div>
     <div class="hero-stats">
@@ -271,6 +271,10 @@
           <h4>结构可视化优先于新指令</h4>
           <p>故事板、状态泳道、分支图。引擎已支持 decision / warp / label / predicate，缺口在「看不见」，不是「做不到」。</p>
         </div>
+      </div>
+
+      <div class="callout">
+        <p><b>三期方向增补（2026-11-28）：</b>上表「不借轨道」针对的是 NLE 的并行时间轴。一/二期把四件事落地后，第三期以新的前提把「轨道」重新纳入：<b>不做视频剪辑的时间轴，做音轨合成器的 arrangement 视图</b>。明日脚本本质是状态槽机（背景 / 立绘三槽 / BGM / 音效 / 特效 / 遮罩 / 舞台文字各为一个槽），三期把编排台升级为<b>双层</b>——上层故事板卡片墙、下层状态轨道区，槽的持续生效区间成为可选中、可裁尾、可拖放素材的一等对象；两层共用一根全局播放头，作用域默认当前幕。手势分级、语义区分与验收见 <a href="#features">§06 F2</a>，排期修订见 <a href="#roadmap">§07</a>。</p>
       </div>
 
       <div class="callout">
@@ -488,8 +492,8 @@
         <table>
           <thead><tr><th style="width:15%">工作区</th><th style="width:26%">主任务</th><th style="width:34%">主界面</th><th>关键交互</th></tr></thead>
           <tbody>
-            <tr><td><b>编排台</b><br><span class="small">Board</span></td><td>粗剪：看全貌、排顺序、删冗余、标待办</td><td>左侧结构树 + 故事板卡片墙（按幕分组、可缩放）</td><td>拖拽重排、框选批量、卡片缩略图、标记与过滤、双击进入演出台</td></tr>
-            <tr><td><b>演出台</b><br><span class="small">Stage</span></td><td>精修：调画面、调位置、调节奏、看状态</td><td>监视器 + 传输条 + 指令序列 + 检查器 + 状态泳道</td><td>播放头 scrub、选中即预览、舞台直编与吸附、指令拖拽、批量检查器</td></tr>
+            <tr><td><b>编排台</b><br><span class="small">Board</span></td><td>粗剪与状态：看全貌、排顺序、删冗余，并俯瞰槽位状态的生效区间</td><td>双层：上层故事板卡片墙（按幕分组、可缩放）＋ 下层状态轨道区（默认当前幕，含对白刻度轨）</td><td>拖拽重排、框选批量、标记与过滤；轨道：点击区间定位来源、拖右缘裁尾、素材拖入轨道、影响范围高亮、双击进入演出台</td></tr>
+            <tr><td><b>演出台</b><br><span class="small">Stage</span></td><td>精修：调画面、调位置、调节奏、看状态</td><td>监视器 + 传输条 + 指令序列 + 检查器 + 继承徽标行</td><td>播放头 scrub、选中即预览、舞台直编与吸附、指令拖拽、批量检查器</td></tr>
             <tr><td><b>剧本台</b><br><span class="small">Script</span></td><td>批量文本：改台词、换说话人、查替换、导入导出</td><td>对白表格（幕/分镜/说话人/台词/表情/状态）</td><td>行内编辑、筛选、批量替换、CSV/台本导出、双击跳回演出台</td></tr>
             <tr><td><b>交付台</b><br><span class="small">Deliver</span></td><td>收尾：检查、预览全片、导出、留版本</td><td>检查清单 + 全片预览 + 导出选项 + 版本快照</td><td>问题定位跳转、导出视频/交互包/脚本、封面与元数据、导出前自动快照</td></tr>
           </tbody>
@@ -532,7 +536,7 @@
               </div>
             </div>
             <div class="pane">
-              <b>分镜内指令 · 状态泳道</b>
+              <b>分镜内指令 · 继承徽标行（入台状态）</b>
               <div class="mini" style="margin-top:5px"></div>
               <div class="mini" style="margin-top:5px"></div>
               <div class="mini" style="margin-top:5px"></div>
@@ -553,7 +557,7 @@
           </div>
         </div>
       </div>
-      <p class="small">关键变化：监视器常驻且带传输条；分镜序列横向可缩放；泳道与指令同屏；素材从模态变为常驻；检查器与问题常驻右侧。</p>
+      <p class="small">关键变化：监视器常驻且带传输条；分镜序列横向可缩放；素材从模态变为常驻；检查器与问题常驻右侧。<b>三期修订（2026-11-28）：</b>泳道从演出台移入编排台（卡片墙 + 轨道区双层），演出台以「继承徽标行」承担入台状态提示；双层完整形态见配套原型。</p>
 
       <h3>4.2 移动端形态（做减法，不强求双端四区对等）</h3>
       <p>手机端不应把桌面三栏压成长列表，也不应把桌面「四工作区切换条」直接叠在「底部应用主导航 + 16:9 监视器」之间（390px 竖屏上固定区会占去过半高度，挤压指令列表）。建议移动端做能力收口，聚焦「监视器 + 传输条 + 指令列表 + 底部属性抽屉」：</p>
@@ -829,10 +833,16 @@
         </div>
       </div>
 
-      <h3>F2 状态泳道：把「状态累积」画出来</h3>
-      <p>这是本产品区别于普通剪辑软件、也最容易被用户误解的机制：<b>一条背景指令会一直生效，直到被覆盖</b>。当前没有任何视图表达这件事，导致「我只改了第 2 幕的背景，为什么第 3 幕也变了」。</p>
+      <h3>F2 轨道台：从只读泳道到可编辑的「音轨合成器」（三期核心）</h3>
+      <p>这是本产品区别于普通剪辑软件、也最容易被用户误解的机制：<b>一条背景指令会一直生效，直到被覆盖</b>。三期把它的可视化从「只读泳道」升级为「可编辑的轨道」，产品定位在 2026-11-28 修正为：<b>比起视频剪辑软件，这个编辑器更接近音轨合成器</b>。明日脚本本质是一台「状态槽机」——背景、每个 slot 的立绘（l/m/r）、BGM、音效（按 channel）、特效（按 layer）、遮罩、舞台文字各是一个<b>槽</b>；指令 = 在某个停顿点更新某个槽的值并持续生效；停顿点（对白/选项/等待）本身构成 x 轴刻度。由此得到与 DAW 的两级同构：</p>
+      <ul>
+        <li><b>分镜内 = Tracker 的 pattern 编辑器：</b>行 = 停顿点、每格一条指令——监视器 + 指令列表 + 检查器已在一/二期建成。</li>
+        <li><b>跨分镜 = DAW 的 arrangement 视图：</b>clip = 某个槽的持续生效区间——三期新增的轨道区。</li>
+      </ul>
+      <p>两级共用同一根播放头。不能借的 DAW 特性维持不变：并行独立混音、轨道自由叠加、包络曲线——引擎是「每槽一个当前值」，轨道只是这一事实的可视化（见 §3.2 与 §9.2）。不变式只有一条：<b>区间是派生的，存储永远是指令序列</b>；所有轨道手势都必须编译为合法指令后落盘。</p>
 
       <div class="lanes">
+        <div class="lane"><div class="name">对白</div><div class="track"><div class="clip" style="left:2%; width:10%; background:#3b82f6"></div><div class="clip" style="left:12%; width:8%; background:#ef4444"></div><div class="clip" style="left:20%; width:7%; background:#10b981"></div><div class="clip" style="left:52%; width:9%; background:#3b82f6"></div><div class="clip" style="left:61%; width:6%; background:#ef4444"></div><div class="clip" style="left:76%; width:8%; background:#10b981"></div><div class="playhead" style="left:56%"></div></div></div>
         <div class="lane"><div class="name">背景</div><div class="track"><div class="clip bg" style="left:2%; width:38%"></div><div class="clip bg" style="left:40%; width:26%"></div><div class="clip bg" style="left:68%; width:30%"></div><div class="playhead" style="left:56%"></div></div></div>
         <div class="lane"><div class="name">立绘 L</div><div class="track"><div class="clip ch" style="left:22%; width:30%"></div><div class="clip ch" style="left:54%; width:44%"></div><div class="playhead" style="left:56%"></div></div></div>
         <div class="lane"><div class="name">立绘 M</div><div class="track"><div class="clip ch" style="left:10%; width:18%"></div><div class="playhead" style="left:56%"></div></div></div>
@@ -848,25 +858,66 @@
           <span><i style="background:#f59e0b"></i>文字</span>
           <span><i style="background:#06b6d4"></i>音频</span>
           <span><i style="background:#ef4444"></i>特效</span>
-          <span>白色竖线 = 当前播放头</span>
+          <span>对白 = 说话人色带刻度轨</span>
+          <span>白色竖线 = 当前播放头（贯穿卡片墙与轨道）</span>
         </div>
       </div>
 
       <div class="grid2">
         <div class="panel">
-          <h4>交互</h4>
+          <h4>编排台双层与作用域（界面决策）</h4>
           <ul>
-            <li>横轴是分镜序列，不是秒；每个色块表示「从某条指令生效，到被覆盖」。</li>
-            <li>点击色块跳到来源指令；hover 显示素材名、参数、开始/结束位置。</li>
-            <li>过滤：只看背景、只看某角色、只看音频；支持「只看当前分镜」。</li>
-            <li>缺失素材/警告用斜纹或红色描边标出，点击直接修复。</li>
+            <li><b>位置：</b>宽屏编排台上层为故事板、下层为状态轨道。卡片、区间与刻度共用播放头。窄屏在「分镜」页切换分镜卡片与「可视化轨道」，点卡片可直接回演出台。</li>
+            <li><b>作用域默认当前幕</b>（性能前提）：避免长作品的横向滚动与区间重算；跨幕延续用<b>斜纹继承区</b>表达（标注继承值），作品级视图待性能验证后评估。</li>
+            <li><b>轨道头实时值摘要：</b>槽位名 + 播放头处当前值（背景名、立绘「角色 · 差分」、BGM 曲名），随播放头刷新。区间从当前幕指令与入幕状态派生。</li>
+            <li><b>对白轨是刻度轨：</b>对白不是区间、不做区间操作；带<b>说话人色带</b>，用于读节奏与双人交替密度。</li>
+            <li><b>小监视器联动：</b>按作品全局指令位置重放，复用播放器引擎。选中区间后，播放头停在点击位置，检查器显示来源指令参数。</li>
+            <li><b>演出台让位：</b>原「分镜内泳道」撤销（分镜内画泳道既稀疏又占纵向空间），改为「继承徽标行」——进入本分镜时台上已有内容的紧凑提示，点击跳来源指令。</li>
           </ul>
         </div>
         <div class="panel">
-          <h4>配套能力：影响范围与固化</h4>
-          <p>选中一条指令，泳道高亮它影响到的后续区间，并提示「影响 6 个分镜」。提供<b>「在此固化状态」</b>：把当前舞台状态编译成一组显式指令插入，切断对前序的依赖——类似剪辑软件的嵌套序列/渲染并替换，是长作品防连锁修改的关键。</p>
+          <h4>支持到什么程度：四级分层</h4>
+          <ul>
+            <li><b>L0 派生视图（零写入）：</b>区间色块、hover 显示素材与参数、点击定位来源指令、影响范围高亮（「影响 6 个分镜」）、缺失素材斜纹；支持按类型 / 角色过滤。</li>
+            <li><b>L1 区间操作：</b>选中区间可调来源指令。素材拖到空轨道，在播放头后插入指令；拖到同类区间或媒体字段，更换引用并保留既有参数。拖右缘向左裁尾，在松手点生成退场指令。「在此插入状态更新」从播放头处拆出后半段以便单独编辑。立绘差分、移动及音频停止可通过相应标记选中。</li>
+            <li><b>L2 补洞语义（三期不做首发）：</b>整段拖移持续区间——移动来源指令会让原位置「露出」更早的状态，必须先「在此固化」或走「移动 + 自动补洞」确认 + 指令 diff 预览；待 L1 使用数据说话。</li>
+            <li><b>L3 明确不做：</b>跨停顿点包络 / 关键帧曲线（用 F5 转场宏生成 2–4 条离散指令替代）、轨道独立混合、任意图层与自由变换。</li>
+          </ul>
         </div>
       </div>
+
+      <div class="callout warn">
+        <p><b>语义区分（最易误解点）：</b>选中一段背景区间的中段改 y 坐标，存在两种合法语义——<b>改来源指令</b>（整段生效）与<b>在播放头插入状态更新指令</b>（前半不动、从此处生效；官方「背景滚动」演出正是后者的写法）。UI 必须显式区分：clip 本体操作（素材、入场过渡）默认改来源；「持续期间想中途变」走显式「在此处插入状态更新」，并在轨道上表现为 clip 分段。这是 DAW「clip 参数 vs automation」的对应物，但我们用两条指令表达，而不是包络。</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:16%">轨道（槽位）</th><th style="width:30%">区间含义</th><th>区间上可调参数（映射 editorFields 真实字段）</th></tr></thead>
+          <tbody>
+            <tr><td><b>背景 / CG</b></td><td><code>background</code> / <code>image</code> 生效区间</td><td>素材（拖放替换）、x / y、画面适配、淡入淡出、等待演出完成</td></tr>
+            <tr><td><b>立绘 L / M / R</b></td><td><code>charslot</code> 同槽生效区间，clip 内差分 / 移动标记</td><td>立绘或差分、posfrom / posto、过渡时长；旧版指令另有入场方向与独立坐标</td></tr>
+            <tr><td><b>BGM</b></td><td><code>playmusic</code> → <code>stopmusic</code> 区间</td><td>曲目、前奏、音量、交叉淡化；停止的淡出时长</td></tr>
+            <tr><td><b>音效（按 channel）</b></td><td><code>playsound</code> 循环区间</td><td>音效、音量、循环；<code>stopsound</code> 的淡出</td></tr>
+            <tr><td><b>持续特效（按 layer）</b></td><td><code>bgeffect</code> 区间</td><td>特效名、图层、x / y、三轴旋转、镜像、渐变与时长</td></tr>
+            <tr><td><b>遮罩</b></td><td><code>blocker</code> 区间</td><td>R / G / B / A、淡入淡出</td></tr>
+            <tr><td><b>舞台文字</b></td><td><code>subtitle</code> 区间</td><td>文本、x / y / 宽度 / 字号 / 对齐</td></tr>
+            <tr><td><b>对白</b></td><td>刻度（非区间）</td><td>说话人色带、字数估宽；正文编辑仍在指令列表 / 剧本台</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small">裁尾 → 退场指令对照：<b>背景 / CG</b> 空 image（黑场）；<b>立绘</b> 空 name（退场）；<b>BGM</b> <code>stopmusic(fade)</code>；<b>音效</b> <code>stopsound</code>；<b>持续特效</b> name 留空 + layer；<b>遮罩</b> a=0；<b>舞台文字</b> 文本留空——每一条都是引擎已有指令，裁尾手势永远编译为合法脚本。</p>
+
+      <div class="grid2">
+        <div class="panel">
+          <h4>配套能力：影响范围与固化</h4>
+          <p>选中一条指令（或区间），轨道高亮它影响到的后续区间并提示「影响 6 个分镜」。提供<b>「在此固化状态」</b>：把当前舞台状态编译成一组显式指令插入，切断对前序的依赖——类似剪辑软件的嵌套序列/渲染并替换，是长作品防连锁修改的关键，也是 L2 整段拖移的前置。</p>
+        </div>
+        <div class="panel">
+          <h4>高价值场景：官方剧情派生</h4>
+          <p><code>fromScript</code> 导入官方脚本后，轨道直接把原作演出结构显影——背景何时换、立绘差分何时切、BGM 何时停。改编者第一次能「读」官方演出的骨架，这是轨道台对改编场景的独特价值，也应作为三期验收的代表性任务。</p>
+        </div>
+      </div>
+      <p class="small"><b>三期验收：</b>40 分镜的组件测试覆盖真实预览、背景拖入、影响范围、裁尾与撤销，一次最终回归记录的预览更新时间为 270 ms。官方派生 0-1 的测试核对了背景、BGM 的切换与停止位置。最终静态分析通过，全量测试 490 项通过、3 项跳过、0 项失败。</p>
 
       <h3>F3 分支与路径状态：引擎已会，只差一张图</h3>
       <p>引擎已注册 <code>decision</code>、<code>predicate</code>、<code>label</code>、<code>warp</code>、<code>skipnode</code>、<code>theater</code>；编辑器的可视指令表里却没有它们，只能改源码。需注意：当前 <code>StoryEngine</code> 仅支持 <code>decision</code> 产出选择值（<code>_selectedValue</code>）与 <code>predicate(references=...)</code> 过滤，<b>不存在通用脚本变量系统</b>。</p>
@@ -908,6 +959,8 @@
           </ul>
         </div>
       </div>
+
+      <p class="small"><b>三期已交付：</b>背景、CG、立绘和 BGM 可从编排台素材区拖到对应空轨道，在播放头后插入指令。拖到同类区间或检查器媒体字段会替换引用，并保留坐标、过渡等原有参数。全作品替换与缺失修复仍待后续迭代。</p>
 
       <h3>F5 预设与宏：把重复演出变成资产</h3>
       <p>改编与连载创作里，大量演出是重复的：立绘淡入、黑场转场、BGM 切换、情绪特写。当前只能复制分镜再改，效率低且容易漏改。</p>
@@ -964,7 +1017,7 @@
           <tbody>
             <tr><td><b>第一期：演出台体验闭环</b></td><td>选中指令即预览执行后的状态，并保留分镜末态入口；将试播从阻断编辑的模态改为编辑上下文内可用的预览，先提供播放/暂停、上一句/下一句等核心控制；<b>伴生前置：改对白/文本不触发舞台全量重建，拖动滑杆/舞台期间不写盘（防闪屏与卡顿）</b>；同时纳入校验问题定位、列表排序、窄屏拖动与保存状态反馈等低成本修复，并保留现网「我的作品」与「作品素材管理」弹窗。</td><td>不要求首发完成四工作区、复杂布局自定义、完整状态泳道或逐帧时间轴。</td></tr>
             <tr><td><b>第二期：批量编辑与结构浏览</b></td><td>桌面端多选、复制粘贴与键盘操作；剧本台（对白表格，配合官方剧情派生改词场景）与编排台（故事板重排，含分镜缩略图缓存）；结构树、搜索与标记；检查器高频控件；移动端维持轻量化（仅同步演出台能力与分镜切换，不上桌面式剧本表格）。</td><td>各能力可拆成多个小版本，不必一次铺齐所有原型页面；常驻素材箱可按反馈渐进拆出。</td></tr>
-            <tr><td><b>第三期：状态透明、安全与轻交付</b></td><td>草稿结构/素材分层保存与版本快照/历史；状态泳道与影响范围（「在此固化状态」）；分支只读图（路径高亮与 Predicate 状态）；轻交付（台本/SRT、检查与署名清单，视 Web 使用量评估只读分享包）。</td><td>跨平台 MP4 录制/离屏成片、跨作品全局素材库与通用脚本变量系统不作为前置条件；先验证需求与平台成本。</td></tr>
+            <tr><td><b>第三期：轨道台与素材直入</b>（已交付）</td><td>桌面编排台显示故事板与当前幕状态轨道，窄屏切换分镜卡片与轨道。提供全局播放头、小监视器、入镜继承徽标、区间来源与影响范围、素材缺失与筛选。支持素材拖放、裁尾、插入状态更新和固化，详见 §06 F2。</td><td>整段拖移、跨停顿点包络与关键帧、分层保存与快照、分支图、Web 只读包、MP4 导出与跨作品素材库留待后续。</td></tr>
           </tbody>
         </table>
       </div>
@@ -1054,6 +1107,22 @@
       <p class="small"><b>审查闭环：</b>二期验收后经两轮独立 review：Must 无缺陷；三处 Should 均核实并修复——故事板框选批量补齐（鼠标空白处拖矩形、Ctrl 追加、点空白清除、取消恢复原选择，触摸与触控笔不启用），P1-1 性能与拖拽验收补实测证据（40 分镜首屏墙钟多轮实测 107–257ms，远低于 2 秒线；同幕/跨幕重排的数据、位置与撤销均有断言），取消框选清空原选择已修复（框选开始即保存原选择、取消时恢复）；Nice 项（SRT 零时长/重叠边界）补测试覆盖（空文本跳过、每条时长恒为正且时间轴不重叠）。另修复两个先于本期的基线测试失败（<code>engine_test</code> / <code>fx_test</code> 在 testWidgets 内 addTearDown 清理引擎晚于 pending timer 校验，改为测试体内 dispose），全量回归 473 通过 · 2 跳过 · 0 失败。</p>
       <p class="small"><b>二期明确未纳入 / 留待后续迭代：</b>舞台拖拽框选多对象（同时移动多个舞台元素）与检查器音量独立试听按钮未在本轮最小完整闭环展开；常驻素材箱（P1-3）、D1 面板拖拽改宽与布局自定义，以及第三期能力（P1-2 状态泳道与固化状态、P1-5 分层保存与自动快照、P2-1 分支图、P2-2 Web 只读包/MP4、P2-4 跨作品素材库）留待后续批次。本轮实机构建仅覆盖 Web Release，Windows / Android / iOS 原生端真机包待后续补测。</p>
 
+      <h3>第三期方向修订（2026-11-28 brainstorm）</h3>
+      <div class="callout">
+        <p><b>定位修正：</b>编辑器的对标物从视频剪辑软件收敛为<b>音轨合成器</b>——分镜内已是 Tracker 式 pattern（监视器 + 指令列表），三期补上跨分镜的 arrangement（状态轨道）。不引入任何新数据模型：区间<b>派生自</b>指令序列，所有轨道手势<b>编译为合法指令</b>后落盘；完整设计见 §06 F2，交互原型已同步更新（编排台双层可体验）。</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:22%">议题</th><th>结论</th></tr></thead>
+          <tbody>
+            <tr><td>轨道作用域</td><td><b>默认当前幕</b>，控制渲染与区间重算成本，避免长作品横向滚动；跨幕以「继承斜纹区」表达，作品级视图待性能验证后再评估。</td></tr>
+            <tr><td>轨道头当前值</td><td><b>实时常驻</b>：槽位名 + 播放头处当前值（背景名、立绘「角色 · 差分」、BGM 曲名），随播放头刷新。</td></tr>
+            <tr><td>对白轨形态</td><td><b>刻度轨 + 说话人色带</b>：对白不是区间；色带支撑「节奏阅读」（一眼看出双人交替密度），不做区间操作。</td></tr>
+            <tr><td>范围交换</td><td><b>素材箱拖拽最小版前移</b>（轨道效率闭环依赖它），<b>分层保存后移</b>（二期签名缓存已缓解大头；观察轨道操作对写盘频率的影响再回升优先级）。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
       <h3>P0 · 体验基建与性能止血（约 2–3 周，低风险）</h3>
       <div class="prio p0">
         <div class="num">P0-1</div>
@@ -1101,14 +1170,14 @@
       </div>
       <div class="prio p1">
         <div class="num">P1-2</div>
-        <h4>状态泳道 + 影响范围 + 固化状态</h4>
-        <p>六类泳道、生效区间、点击跳转、影响高亮；「在此固化」把当前状态编译为显式指令。落点：新增 <code>editor_lanes.dart</code>，静态扫描 commands。</p>
-        <p class="small">验收：选中背景指令能看到它覆盖的分镜范围；固化后删除前序指令，后续画面不变。</p>
+        <h4>轨道台：编排台双层 + 区间编辑（三期核心）</h4>
+        <p><b>三期已交付。</b>编排台在宽屏显示卡片墙与当前幕状态轨道，窄屏切换卡片和轨道。区间与刻度共用播放头和小监视器，支持来源参数、继承、影响范围、缺失标记、筛选，以及替换、裁尾、插入状态更新和固化。演出台提供入镜继承徽标。实现位于 <code>editor_timeline.dart</code>、<code>editor_timeline_view.dart</code> 与 <code>story_editor_page.dart</code>。</p>
+        <p class="small">验收：选中背景指令能看到它覆盖的区间与影响分镜数；裁尾一次手势生成可撤销的退场指令；派生官方剧情后能在轨道上读出原作演出骨架（背景何时换、差分何时切、BGM 何时停）；当前幕约 40 分镜规模下轨道渲染与播放头跳动无可感卡顿。</p>
       </div>
       <div class="prio p1">
         <div class="num">P1-3</div>
         <h4>素材箱 + 拖拽 + 替换引用</h4>
-        <p>常驻左栏、最近/收藏/未使用、拖到舞台或字段、全作品替换、缺失修复、体积预算（承接并升级原「作品素材管理」弹窗）。落点：拆分 <code>EditorMaterialPicker</code>，新增 <code>editor_bin.dart</code>。</p>
+        <p><b>三期已交付拖拽子集。</b>编排台素材区由 <code>editor_timeline_materials.dart</code> 提供，支持背景、CG、立绘和 BGM。拖到空轨道可插入指令，拖到同类区间或检查器媒体字段可替换引用。最近使用、收藏、全作品替换与体积预算留待后续迭代。</p>
         <p class="small">验收：连续替换 5 个背景不需要重复打开对话框；替换后位置与淡入淡出保留。</p>
       </div>
       <div class="prio p1">
@@ -1120,7 +1189,7 @@
       <div class="prio p1">
         <div class="num">P1-5</div>
         <h4>分层保存 + 自动快照 + 撤销历史面板</h4>
-        <p>结构 JSON 与素材包分层落盘（消除重素材写盘阻塞）；每 5 分钟/导出前快照，保留 10 个；历史操作列表可跳转；异常退出恢复提示。落点：<code>editor_platform_io.dart</code> 增加分层存储、快照目录与轮转。</p>
+        <p>结构 JSON 与素材包分层落盘（消除重素材写盘阻塞）；每 5 分钟/导出前快照，保留 10 个；历史操作列表可跳转；异常退出恢复提示。落点：<code>editor_platform_io.dart</code> 增加分层存储、快照目录与轮转。<b>三期后移观察：</b>二期分镜签名缩略图缓存已缓解重建与读取压力，暂不作为三期前置；若轨道拖拽 / 裁尾操作推高写盘频率，则优先级回升。</p>
         <p class="small">验收：重素材作品自动保存不阻塞输入；误删分镜后能从快照恢复；历史面板能定位到「移动立绘」那一步。</p>
       </div>
       <div class="prio p1">
@@ -1213,9 +1282,10 @@
           <h4>产品边界</h4>
           <ul>
             <li>逐帧 NLE、多轨关键帧曲线、视频剪辑与调色</li>
+            <li>跨停顿点的包络 / 关键帧曲线（持续变化的参数用 F5 预设宏生成离散指令表达）</li>
             <li>任意图层排序、立绘/背景自由缩放与自由变形（引擎不支持的，不提供控件）</li>
             <li>通用脚本变量赋值系统（保留 <code>decision</code> + <code>predicate</code> 引擎模型）</li>
-            <li>移动端竖屏强铺桌面式四工作区与大型对白表格</li>
+            <li>移动端竖屏照搬桌面多栏和大型对白表格。分镜卡片和轨道使用切换视图。</li>
             <li>云端协作、账号体系、在线素材市场</li>
             <li>竖屏成片（舞台固定 16:9；竖屏只是编辑形态）</li>
             <li>自动生成整段剧情、自动发布</li>
@@ -1249,11 +1319,11 @@
             <tr><td>窄屏拖动与轻量化</td><td><code>story_editor_page.dart</code>（<code>_transportBar(compact:)</code>、<code>_openMobileInspectorSheet</code>）；<code>editor_board.dart</code>（已落地）</td><td>窄屏拖动、双行紧凑传输条、底部属性抽屉、轻分镜切换</td></tr>
             <tr><td>作品排序 / 导入去重</td><td><code>story_editor_page.dart</code>（<code>_projects</code>、工具栏菜单，已落地）</td><td>最新作品在前；导入收敛至「我的作品」</td></tr>
             <tr><td>校验定位</td><td><code>editor_project.dart</code>（<code>EditorIssue</code>、<code>validateIssues</code>，已落地）</td><td>带幕/分镜/指令位置的结构化问题对象与「前往」直达</td></tr>
-            <tr><td>素材箱 / 拖拽</td><td><code>editor_materials.dart</code>（<code>EditorMaterialPicker</code>）；待新增 <code>editor_bin.dart</code></td><td>拆出可复用素材网格与拖拽源（留待后续）</td></tr>
+            <tr><td>素材区 / 拖拽</td><td><code>editor_timeline_materials.dart</code>、<code>editor_timeline_view.dart</code>、<code>editor_inspector.dart</code></td><td>素材拖到空轨道插入指令，拖到同类区间或媒体字段替换引用</td></tr>
             <tr><td>故事板（编排台）</td><td>新增 <code>editor_board.dart</code>（已落地）</td><td>桌面卡片墙 + 视觉签名缩略图缓存 + 跨幕拖拽 + 移动端轻切换</td></tr>
-            <tr><td>状态泳道</td><td>新增 <code>editor_lanes.dart</code>；静态扫描 <code>scenes/beats/commands</code></td><td>只读区间 → 点击跳转 → 固化</td></tr>
+            <tr><td>轨道台（三期已交付）</td><td><code>editor_timeline.dart</code>、<code>editor_timeline_view.dart</code>、<code>story_editor_page.dart</code></td><td>派生状态区间、全局播放头、窄屏轨道切换、来源定位、影响范围、裁尾 / 替换 / 插入状态更新 / 固化</td></tr>
             <tr><td>分支图</td><td>新增 <code>editor_branch_graph.dart</code>；解析 <code>decision/warp/label/predicate</code></td><td>只读图优先，可视化编辑后置</td></tr>
-            <tr><td>分层保存 / 快照</td><td><code>editor_platform_io.dart</code>（<code>save</code>、<code>_root</code>）</td><td>P0 拖动/输入期写盘节流；P1 结构/素材分离与快照轮转</td></tr>
+            <tr><td>分层保存 / 快照</td><td><code>editor_platform_io.dart</code>（<code>save</code>、<code>_root</code>）</td><td>P0 拖动/输入期写盘节流；P1 结构/素材分离与快照轮转（三期后移观察）</td></tr>
             <tr><td>轻量交付 / 视频探索</td><td><code>story_player.dart</code>（<code>stopPoints</code>、<code>onPlayProject</code>）；新增 <code>editor_render.dart</code>（P2）</td><td>P1 先出台本/SRT 与正式播放器直放；Web 只读包与 MP4 后置评估</td></tr>
           </tbody>
         </table>
@@ -1269,6 +1339,7 @@
             <tr><td>Final Cut Pro</td><td>磁性时间轴、角色分轨、compound clip</td><td>分镜序列自动吸附；泳道按类型分轨；指令组折叠/预设</td></tr>
             <tr><td>CapCut / 剪映</td><td>素材面板、模板、自动字幕、移动端布局</td><td>素材箱；作品模板；台本/字幕导出；手机端三页签</td></tr>
             <tr><td>Blender VSE</td><td>通道、预览、快捷键驱动</td><td>状态泳道；命令面板；键盘全流程</td></tr>
+            <tr><td>Renoise / FL Studio / Ableton Live</td><td>Tracker pattern 与 arrangement 双层、轨道头当前值、clip 与 automation 分离</td><td>编排台双层（pattern = 分镜内指令序列、arrangement = 跨分镜状态轨道）；轨道头实时值摘要；「改来源指令 vs 在播放头插入更新」的显式区分</td></tr>
             <tr><td>Ren'Py</td><td>脚本与可视化双视图、lint 检查</td><td>剧本台；校验清单；源码兜底</td></tr>
             <tr><td>Twine / Articy / Yarn Spinner</td><td>分支节点图、分支状态、预览路径</td><td>分支图；Predicate 路径状态；调试路径高亮</td></tr>
           </tbody>
@@ -1279,12 +1350,13 @@
       <p>v0.2 解决的是「初版实现够不够用」：对话框溢出、摘要、保存警示、缩略图、拖动把手、作品查看地、官方派生、分层保存等 18 项，属于<b>可用性修复</b>。本报告假设这些修复大部分已落地（当前分支确实如此），讨论的是<b>产品形态与效率上限</b>：工作区、时间语义、选择集、结构可视化、交付。两者不冲突，前者是后者的地基。</p>
 
       <div class="callout">
-        <p><b>建议的下一步：</b>先做 P0-1 与 P0-2 的可点原型（不改数据模型），用 3 个真实分镜验证「选中即预览」是否降低调参成本；同时埋点记录「选中→看到画面」「换背景→试看」的步数与耗时。数据通过后，再投入故事板与泳道——这两块是产品形态的分水岭，值得一次做对。</p>
+        <p><b>三期已完成。</b>后续根据实际编辑中遇到的问题评估整段拖移（L2）和分层保存。跨停顿点的连续变化仍用离散指令表达。</p>
       </div>
 
       <footer>
         <p>分析基于 <code>feat/story-editer</code> 分支提交 <code>43944e7</code> 的代码与 <code>docs/story-editor.md</code>、<code>docs/prototype/剧情编辑器产品设计.html</code>、<code>docs/prototype/剧情编辑器优化说明-v0.2.md</code>。</p>
-        <p>文中「现状」均可在代码中定位；「推断」类指标已单独标注，需实现前埋点校准。未包含未提交改动与其它分支能力。</p>
+        <p>既有现状说明以该提交为基线。三期交付内容另按当前工作区实现与测试记录核对，维护参考见 <a href="../story-editor.md">剧情编辑器维护文档</a>。</p>
+        <p>修订记录（2026-11-28）先增补三期轨道台设计，交付后同步实际交互、模块路径和验收结果。</p>
       </footer>
     </section>
 

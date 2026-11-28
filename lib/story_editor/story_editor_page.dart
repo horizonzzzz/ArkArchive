@@ -18,6 +18,9 @@ import 'editor_project.dart';
 import 'editor_script.dart';
 import 'editor_stage.dart';
 import 'editor_structure.dart';
+import 'editor_timeline.dart';
+import 'editor_timeline_materials.dart';
+import 'editor_timeline_view.dart';
 
 enum _PreviewMode { beat, fromBeat, full }
 
@@ -149,6 +152,8 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
   int _speed = 1;
   _EditorWorkspace _workspace = _EditorWorkspace.stage;
   final _stageKey = GlobalKey();
+  TrackAddress? _timelineSource;
+  bool _compactTimeline = false;
 
   void _selectWorkspace(_EditorWorkspace target) {
     _scriptKey.currentState?.commitPendingEdits();
@@ -179,9 +184,14 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     return _validationCache = current.validateIssues();
   }
 
+  void _refreshTimelineAvailability() {
+    if (_workspace == _EditorWorkspace.board && mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    _resources.mediaAvailability.addListener(_refreshTimelineAvailability);
     unawaited(_load());
   }
 
@@ -255,6 +265,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
 
   void _restore(_Selection value) {
     _project = value.$1;
+    _timelineSource = null;
     _scene = value.$2;
     _beat = value.$3;
     _command = value.$4;
@@ -285,6 +296,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     final targetCmd = selected ?? _command;
     setState(() {
       _project = next;
+      _timelineSource = null;
       _scene = targetScene;
       _beat = targetBeat;
       _command = targetCmd;
@@ -712,6 +724,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
         ..addAll(clampedCmd >= 0 ? [clampedCmd] : const []);
       _selectionAnchor = clampedCmd >= 0 ? clampedCmd : null;
       _playing = false;
+      _timelineSource = null;
       _typing = null;
       _formVersion++;
       if (workspace != null) _workspace = workspace;
@@ -796,6 +809,224 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
     return _withScene(
       targetScene.copyWith(beats: [...targetScene.beats]..[bi] = next),
       si,
+    );
+  }
+
+  void _seekTimeline(TrackAddress cursor, {TrackAddress? source}) {
+    _navigateTo(cursor.scene, cursor.beat, commandIndex: cursor.command);
+    _timelineSource = source;
+  }
+
+  void _openTimelineAddress(TrackAddress address) => _navigateTo(
+    address.scene,
+    address.beat,
+    commandIndex: address.command,
+    workspace: _EditorWorkspace.stage,
+  );
+
+  StoryBeat _timelineBeat(TrackAddress address) =>
+      project.scenes[address.scene].beats[address.beat];
+
+  void _insertTimelineCommands(
+    TrackAddress address,
+    List<EditCommand> commands, [
+    EditorAsset? asset,
+  ]) {
+    if (commands.isEmpty) return;
+    final target = _timelineBeat(address);
+    final list = [...target.commands]..insertAll(address.command, commands);
+    var next = _withBeat(
+      target.copyWith(commands: list),
+      sceneIndex: address.scene,
+      beatIndex: address.beat,
+    );
+    if (asset != null) {
+      next = next.copyWith(assets: {...next.assets, asset.key: asset});
+    }
+    _change(
+      next,
+      sceneIndex: address.scene,
+      beatIndex: address.beat,
+      selected: address.command + commands.length - 1,
+    );
+  }
+
+  void _trimTimeline(
+    TrackAddress address,
+    EditCommand clear,
+    List<TrackAddress> reentries,
+  ) {
+    final scene = project.scenes[address.scene];
+    final changed = <int, List<EditCommand>>{};
+    List<EditCommand> at(int beat) =>
+        changed.putIfAbsent(beat, () => [...scene.beats[beat].commands]);
+    // 同段内带素材的差分指令会重新上场。去掉素材，保留其余字段及全局聚焦。
+    for (final reentry in reentries) {
+      final commands = at(reentry.beat);
+      commands[reentry.command] = commands[reentry.command].withArgs({
+        'name': '',
+      });
+    }
+    at(address.beat).insert(address.command, clear);
+    final scenes = [...project.scenes];
+    scenes[address.scene] = scene.copyWith(
+      beats: [
+        for (final (index, beat) in scene.beats.indexed)
+          changed[index] == null
+              ? beat
+              : beat.copyWith(commands: changed[index]),
+      ],
+    );
+    _change(
+      project.copyWith(scenes: scenes),
+      sceneIndex: address.scene,
+      beatIndex: address.beat,
+      selected: address.command,
+    );
+    setState(() => _timelineSource = address);
+  }
+
+  void _editTimelineSource(
+    TrackAddress address,
+    EditCommand updated, {
+    String? typing,
+    EditorAsset? asset,
+  }) {
+    final target = _timelineBeat(address);
+    final list = [...target.commands]..[address.command] = updated;
+    var next = _withBeat(
+      target.copyWith(commands: list),
+      sceneIndex: address.scene,
+      beatIndex: address.beat,
+    );
+    if (asset != null) {
+      next = next.copyWith(assets: {...next.assets, asset.key: asset});
+    }
+    _change(next, typing: typing);
+    _timelineSource = address;
+  }
+
+  void _replaceTimelineMedia(
+    TrackAddress address,
+    String field,
+    TimelineMaterial material,
+  ) {
+    final current = _timelineBeat(address).commands[address.command];
+    if (current.raw != null) return;
+    _editTimelineSource(
+      address,
+      current.withArgs({field: material.key}),
+      asset: material.asset,
+    );
+  }
+
+  bool _timelineMissing(TrackValue value, TrackKind kind) {
+    final key = value.label;
+    if (!key.startsWith('local_')) {
+      final type =
+          kind.media ??
+          switch (kind) {
+            TrackKind.sound => FieldType.sound,
+            TrackKind.effect => FieldType.fx,
+            _ => null,
+          };
+      return type != null && _resources.mediaUnavailable(type, key);
+    }
+    final asset = project.assets[key];
+    return asset == null ||
+        asset.isImage != (kind != TrackKind.music && kind != TrackKind.sound);
+  }
+
+  Widget _buildTimelineInspector(TrackAddress address) {
+    final target = _timelineBeat(address);
+    final current = target.commands[address.command];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('修改来源会影响整段', style: Theme.of(context).textTheme.labelMedium),
+        Text('${project.scenes[address.scene].title} / ${target.title}'),
+        EditorInspector(
+          key: ValueKey(address),
+          project: project,
+          commands: target.commands,
+          activeIndex: address.command,
+          selectedIndices: {address.command},
+          formVersion: _formVersion,
+          onUpdateCommand: (values, {String? typing}) => _editTimelineSource(
+            address,
+            current.withArgs(values),
+            typing: typing,
+          ),
+          onUpdateMany: (_, values) =>
+              _editTimelineSource(address, current.withArgs(values)),
+          onReplaceSource: (updated) =>
+              _editTimelineSource(address, updated, typing: 'source'),
+          onPickMedia: (field) async {
+            final original = project;
+            final result = await showDialog<(String, EditorAsset?)>(
+              context: context,
+              builder: (_) => EditorMaterialPicker(
+                field: field,
+                current: current.value(field.key),
+                resources: _resources,
+                assets: original.assets,
+                storage: widget.storage,
+              ),
+            );
+            if (!mounted ||
+                !identical(original, project) ||
+                _timelineSource != address ||
+                result == null) {
+              return;
+            }
+            _replaceTimelineMedia(
+              address,
+              field.key,
+              TimelineMaterial(field.type, result.$1, result.$2),
+            );
+          },
+          onDropMedia: (field, material) =>
+              _replaceTimelineMedia(address, field.key, material),
+          onFocusTypingEnd: (fieldKey) {
+            if (_typing == fieldKey) _typing = null;
+          },
+          onResetCommand: () {
+            final definition = editorFields[current.tag];
+            if (current.raw != null || definition == null) return;
+            _editTimelineSource(
+              address,
+              EditCommand(current.tag, {
+                for (final field in definition.$2)
+                  if (field.initial.isNotEmpty) field.key: field.initial,
+              }),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _timelineInheritance() {
+    final state = EditorTimeline.of(project, _scene).stateBeforeBeat(_beat);
+    if (state.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 36,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        children: [
+          for (final entry in state.entries)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: ActionChip(
+                visualDensity: VisualDensity.compact,
+                tooltip: '跳到继承来源：${entry.value.label}',
+                label: Text('入镜继承 · ${trackSlotLabel(entry.key)}'),
+                onPressed: () => _openTimelineAddress(entry.value.source),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -2339,19 +2570,35 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
 
       Widget centerContent;
       if (_workspace == _EditorWorkspace.board) {
-        centerContent = EditorBoardView(
+        final timeline = EditorTimeline.of(project, _scene);
+        final playhead = timeline.columnOf(_beat, _command);
+        final source = _timelineSource;
+        final affected = source == null
+            ? <BeatRef>{}
+            : {
+                for (
+                  var sceneIndex = source.scene;
+                  sceneIndex < project.scenes.length;
+                  sceneIndex++
+                )
+                  for (final beatIndex in EditorTimeline.of(
+                    project,
+                    sceneIndex,
+                  ).affectedBeats(source))
+                    (scene: sceneIndex, beat: beatIndex),
+              };
+        final compact = !wide && !landscape;
+        final board = EditorBoardView(
           project: project,
           activeScene: _scene,
           activeBeat: _beat,
           issues: issues,
           compact: !wide && !landscape,
           resources: _resources,
-          onOpenBeat: (si, bi) => _navigateTo(
-            si,
-            bi,
-            commandIndex: -1,
-            workspace: _EditorWorkspace.stage,
-          ),
+          affectedBeats: affected,
+          onPreviewBeat: compact ? null : (si, bi) => _navigateTo(si, bi),
+          onOpenBeat: (si, bi) =>
+              _navigateTo(si, bi, workspace: _EditorWorkspace.stage),
           onAddBeat: _addBeatToScene,
           onInsertBeatAfter: (si, bi) => _beatActionAt(si, bi, 'add'),
           onDuplicateBeats: _duplicateBeats,
@@ -2359,6 +2606,68 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           onMoveBeat: _moveBeatTo,
           onMarkBeat: _markBeat,
         );
+        final lanes = EditorTimelineView(
+          timeline: timeline,
+          project: project,
+          playhead: playhead,
+          source: source,
+          affectedCount: affected.length,
+          missing: _timelineMissing,
+          monitor: IgnorePointer(child: stage),
+          materials: TimelineMaterialBox(
+            key: ValueKey(project.id),
+            project: project,
+            resources: _resources,
+            storage: widget.storage,
+          ),
+          inspector: source == null
+              ? const SizedBox.shrink()
+              : ListView(
+                  padding: const EdgeInsets.all(8),
+                  children: [_buildTimelineInspector(source)],
+                ),
+          onSeek: (address) => _seekTimeline(address),
+          onSelectSource: (cursor, source) =>
+              _seekTimeline(cursor, source: source),
+          onOpen: _openTimelineAddress,
+          onInsert: _insertTimelineCommands,
+          onSplit: (address, command) {
+            _insertTimelineCommands(address, [command]);
+            setState(() => _timelineSource = address);
+          },
+          onTrim: _trimTimeline,
+          onReplace: _replaceTimelineMedia,
+          onFreeze: () => _insertTimelineCommands(
+            timeline.insertAfter(playhead),
+            timeline.freeze(playhead),
+          ),
+        );
+        centerContent = compact || size.maxHeight < 350
+            ? Column(
+                children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      icon: Icon(
+                        _compactTimeline
+                            ? Icons.view_module_outlined
+                            : Icons.view_timeline_outlined,
+                      ),
+                      label: Text(_compactTimeline ? '分镜卡片' : '可视化轨道'),
+                      onPressed: () =>
+                          setState(() => _compactTimeline = !_compactTimeline),
+                    ),
+                  ),
+                  Expanded(child: _compactTimeline ? lanes : board),
+                ],
+              )
+            : Column(
+                children: [
+                  Expanded(flex: 3, child: board),
+                  const Divider(height: 1),
+                  Expanded(flex: 2, child: lanes),
+                ],
+              );
       } else if (_workspace == _EditorWorkspace.script) {
         centerContent = EditorScriptView(
           key: _scriptKey,
@@ -2391,6 +2700,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
                     ),
                   ),
                   transport,
+                  _timelineInheritance(),
                   const Divider(height: 1),
                   Expanded(flex: 4, child: _commands(inlineInspector: false)),
                 ],
@@ -2414,6 +2724,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
                 children: [
                   Expanded(child: Center(child: stage)),
                   transport,
+                  _timelineInheritance(),
                   _outline(vertical: false, showScene: false),
                 ],
               ),
@@ -2438,6 +2749,7 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
               child: stage,
             ),
             transport,
+            _timelineInheritance(),
             _outline(vertical: false, showScene: false),
             const Divider(height: 1),
             _commandHeader(),
@@ -2453,15 +2765,15 @@ class _StoryEditorPageState extends State<StoryEditorPage> {
           ],
         );
       }
-      final workspaceContent = _workspace == _EditorWorkspace.stage
-          ? centerContent
-          : Stack(
+      final workspaceContent = _workspace == _EditorWorkspace.script
+          ? Stack(
               fit: StackFit.expand,
               children: [
                 centerContent,
                 Offstage(offstage: true, child: stage),
               ],
-            );
+            )
+          : centerContent;
 
       return Column(
         children: [

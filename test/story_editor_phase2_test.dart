@@ -15,6 +15,10 @@ import 'package:arknights_story_player/story_editor/editor_project.dart';
 import 'package:arknights_story_player/story_editor/story_editor_page.dart';
 import 'package:arknights_story_player/story_player/data/asset_store.dart';
 
+import 'package:arknights_story_player/story_editor/editor_timeline.dart';
+import 'package:arknights_story_player/story_editor/editor_timeline_view.dart';
+import 'package:arknights_story_player/story_player/ui/story_stage.dart';
+
 import 'story_export_test.dart' show MemoryCache;
 
 class _MemoryStorage extends EditorStorage {
@@ -150,6 +154,185 @@ Future<_MemoryStorage> _pumpEditor(
 }
 
 void main() {
+  testWidgets('编排台 40 分镜共享播放头、拖放背景和裁尾撤销', (tester) async {
+    final asset = EditorAsset.create(
+      '轨道测试.png',
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=',
+      ),
+      width: 1,
+      height: 1,
+    );
+    final project = EditorProject.create('第三期轨道测试').copyWith(
+      assets: {asset.key: asset},
+      scenes: [
+        EditorScene('测试幕', [
+          for (var i = 0; i < 40; i++)
+            StoryBeat('测试分镜 ${i + 1}', [
+              EditCommand('subtitle', {
+                'text': '画面 $i',
+                'x': '200',
+                'y': '400',
+              }),
+              EditCommand('dialogue', {'name': '角色 $i', 'text': '台词 $i'}),
+            ]),
+        ]),
+      ],
+    );
+    final storage = await _pumpEditor(tester, project);
+    await tester.tap(find.text('编排台'));
+    await tester.pumpAndSettle();
+    final timeline = find.byType(EditorTimelineView);
+    final monitor = find.descendant(
+      of: timeline,
+      matching: find.byType(StoryStage),
+    );
+    expect(
+      tester.widget<StoryStage>(monitor).engine.state.subtitle?.text,
+      '画面 0',
+    );
+    final watch = Stopwatch()..start();
+    await tester.tap(
+      find.descendant(of: timeline, matching: find.text('角色 2')),
+    );
+    await tester.pumpAndSettle();
+    // 单击先等待双击识别结束，再经过舞台预览的防抖。
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(milliseconds: 110));
+    await tester.pumpAndSettle();
+    debugPrint('40 分镜轨道定位并渲染舞台 ${watch.elapsedMilliseconds} ms');
+    expect(
+      tester.widget<StoryStage>(monitor).engine.state.subtitle?.text,
+      '画面 2',
+    );
+    expect(storage.contentWrites, 0);
+
+    final background = (kind: TrackKind.background, id: '');
+    final trayItem = find.byKey(
+      ValueKey(('timeline-material', FieldType.background, asset.key)),
+    );
+    final lane = find.byKey(ValueKey(('timeline-drop', background)));
+    final laneRect = tester.getRect(lane);
+    final dropPoint = Offset(laneRect.left + 180, laneRect.center.dy);
+    final drag = await tester.startGesture(tester.getCenter(trayItem));
+    await tester.pump(const Duration(milliseconds: 250));
+    await drag.moveTo(dropPoint);
+    await tester.pump();
+    await drag.up();
+    await tester.pump(const Duration(milliseconds: 600));
+    // 图片解码依赖宿主线程，加载指示器持续调度帧。
+    for (var i = 0; i < 20 && monitor.evaluate().isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 15)),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    final saved = storage.projects[project.id]!;
+    expect(
+      saved.scenes.single.beats[2].commands.last.value('image'),
+      asset.key,
+    );
+    expect(storage.contentWrites, 1);
+
+    final subtitle = (kind: TrackKind.subtitle, id: '');
+    final trim = find.byKey(ValueKey(('timeline-trim', subtitle, 4)));
+    await tester.ensureVisible(trim);
+    await tester.pump();
+    expect(trim.hitTestable(), findsOneWidget);
+    final trimDrag = await tester.startGesture(tester.getCenter(trim));
+    await trimDrag.moveBy(const Offset(-26, 0));
+    await tester.pump();
+    await trimDrag.moveBy(const Offset(-12, 0));
+    await tester.pump();
+    await trimDrag.up();
+    await tester.pump();
+    final trimmed = tester.widget<EditorTimelineView>(timeline).project;
+    expect(trimmed.scenes.single.beats[2].commands.map((c) => c.tag), [
+      'subtitle',
+      'dialogue',
+      'subtitle',
+      'background',
+    ]);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      storage.projects[project.id]!.scenes.single.beats[2].commands[2].value(
+        'text',
+      ),
+      '',
+    );
+    await tester.tap(find.byTooltip('撤销'));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      storage.projects[project.id]!.scenes.single.beats[2].commands[1].value(
+        'text',
+      ),
+      '台词 2',
+    );
+    await tester.ensureVisible(lane);
+    await tester.pump();
+    await tester.tapAt(
+      Offset(tester.getRect(lane).left + 38 * 7.5, tester.getCenter(lane).dy),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('影响 38 个分镜'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('窄屏可进入轨道、分割区间并回到故事板', (tester) async {
+    final project = EditorProject.create('窄屏轨道').copyWith(
+      scenes: const [
+        EditorScene('第一幕', [
+          StoryBeat('第一镜', [
+            EditCommand('subtitle', {'text': '跨镜文字'}),
+            EditCommand('dialogue', {'name': '角色', 'text': '对话'}),
+          ]),
+          StoryBeat('第二镜'),
+        ]),
+      ],
+    );
+    await _pumpEditor(tester, project, size: const Size(390, 844));
+    await tester.tap(find.text('分镜'));
+    await tester.pumpAndSettle();
+    final timeline = find.byType(EditorTimelineView);
+    expect(timeline, findsNothing);
+    await tester.tap(find.text('可视化轨道'));
+    await tester.pumpAndSettle();
+    expect(timeline, findsOneWidget);
+    final slot = (kind: TrackKind.subtitle, id: '');
+    final lane = find.byKey(ValueKey(('timeline-lane', slot)));
+    await tester.ensureVisible(lane);
+    final rect = tester.getRect(lane);
+    await tester.tapAt(Offset(rect.left + 19, rect.center.dy));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(milliseconds: 110));
+    expect(find.text('修改来源会影响整段'), findsOneWidget);
+
+    final split = find.byTooltip('在播放头后插入状态更新（分割区间）');
+    await tester.scrollUntilVisible(
+      split,
+      90,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('timeline-toolbar')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(split);
+    await tester.pump();
+    final view = tester.widget<EditorTimelineView>(timeline);
+    expect(view.timeline.tracks[slot]!.map((span) => span.start), [0, 1]);
+    expect(view.source, (scene: 0, beat: 0, command: 1));
+    expect(
+      view.project.scenes.single.beats.first.commands[1].value('text'),
+      '跨镜文字',
+    );
+
+    await tester.tap(find.text('分镜卡片'));
+    await tester.pumpAndSettle();
+    expect(timeline, findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   group('第二期数据模型、标记、估时与台本导出', () {
     test('EditorMarker / EditorPosition 序列化向后兼容并可无损还原', () {
       final project = _phase2Project().copyWith(
@@ -872,7 +1055,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
       await tester.pumpAndSettle();
 
       Finder cardImages(int beat) => find.descendant(
